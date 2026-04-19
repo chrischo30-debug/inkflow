@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Gallery | Tattoo Artist Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@400;500;600;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#005381",
+                        "secondary": "#944841",
+                        "on-primary-container": "#ffaca3",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fcf9f8",
+                        "inverse-on-surface": "#f3f0ef",
+                        "on-surface-variant": "#59413e",
+                        "primary": "#780009",
+                        "outline-variant": "#e1bfbb",
+                        "background": "#fcf9f8",
+                        "error": "#ba1a1a",
+                        "on-secondary-fixed": "#3d0606",
+                        "tertiary-fixed-dim": "#94ccff",
+                        "on-primary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dcd9d9",
+                        "on-tertiary-container": "#8dc6fb",
+                        "inverse-surface": "#313030",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-highest": "#e5e2e1",
+                        "secondary-container": "#ff9f96",
+                        "surface-container": "#f0eded",
+                        "on-tertiary-fixed": "#001d32",
+                        "on-surface": "#1c1b1b",
+                        "on-tertiary-fixed-variant": "#004a74",
+                        "surface-container-low": "#f6f3f2",
+                        "on-background": "#1c1b1b",
+                        "tertiary-fixed": "#cde5ff",
+                        "on-primary-fixed": "#410002",
+                        "surface-variant": "#e5e2e1",
+                        "inverse-primary": "#ffb4ac",
+                        "on-secondary-container": "#79332e",
+                        "secondary-fixed": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "outline": "#8d706d",
+                        "surface-bright": "#fcf9f8",
+                        "primary-fixed-dim": "#ffb4ac",
+                        "on-secondary-fixed-variant": "#76312c",
+                        "surface-tint": "#b12c28",
+                        "tertiary": "#003b5e",
+                        "on-primary-fixed-variant": "#8f1014",
+                        "secondary-fixed-dim": "#ffb4ac",
+                        "primary-container": "#9b1b1b",
+                        "surface-container-high": "#eae7e7",
+                        "error-container": "#ffdad6",
+                        "primary-fixed": "#ffdad6",
+                        "on-error-container": "#93000a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Epilogue"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Manrope', sans-serif; }
+        h1, h2, h3 { font-family: 'Epilogue', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Shell -->
+<aside class="hidden md:flex flex-col py-8 gap-y-2 h-screen w-64 fixed left-0 top-0 bg-[#f6f3f2] dark:bg-[#2a2827] z-50">
+<div class="px-8 mb-10 flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">ink_highlighter</span>
+</div>
+<div>
+<p class="font-headline font-bold text-lg leading-tight">Studio Alpha</p>
+<p class="text-xs text-on-surface-variant opacity-70">Resident Artist</p>
+</div>
+</div>
+<nav class="flex flex-col gap-y-1">
+<a class="flex items-center gap-4 py-3 bg-white dark:bg-[#1c1b1b] text-[#780009] dark:text-[#9b1b1b] rounded-l-full ml-4 shadow-sm font-medium text-sm" href="#">
+<span class="ml-4 material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-4 py-3 text-[#1c1b1b]/70 dark:text-[#fcf9f8]/70 px-8 hover:bg-[#eae7e7] dark:hover:bg-[#363433] rounded-l-full ml-4 transition-all duration-200 font-medium text-sm" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Schedule</span>
+</a>
+<a class="flex items-center gap-4 py-3 text-[#1c1b1b]/70 dark:text-[#fcf9f8]/70 px-8 hover:bg-[#eae7e7] dark:hover:bg-[#363433] rounded-l-full ml-4 transition-all duration-200 font-medium text-sm" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Clients</span>
+</a>
+<a class="flex items-center gap-4 py-3 text-[#1c1b1b]/70 dark:text-[#fcf9f8]/70 px-8 hover:bg-[#eae7e7] dark:hover:bg-[#363433] rounded-l-full ml-4 transition-all duration-200 font-medium text-sm" href="#">
+<span class="material-symbols-outlined">edit_calendar</span>
+<span>Bookings</span>
+</a>
+</nav>
+<div class="mt-auto px-6">
+<button class="w-full py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded-xl font-headline font-bold text-sm tracking-wide shadow-lg active:scale-95 transition-transform">
+                New Entry
+            </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-64 min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-[#fcf9f8]/80 dark:bg-[#1c1b1b]/80 backdrop-blur-xl docked full-width top-0 sticky z-40 flex justify-between items-center w-full px-8 py-4">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold font-['Epilogue'] text-[#1c1b1b] dark:text-[#fcf9f8]">The Gallery</span>
+<div class="hidden lg:flex items-center bg-surface-container-low rounded-full px-4 py-1.5 gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-64 placeholder:text-on-surface-variant/50" placeholder="Search appointments..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors active:scale-90">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors active:scale-90">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden ml-2 border-2 border-primary/10">
+<img alt="Artist profile" class="w-full h-full object-cover" data-alt="portrait of a professional tattoo artist with ink on arms and focused gaze in a dimly lit studio setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFTOf3crN3IJBisLFTZ2YXpK0dpC_gGArpWGh8hDpmFfzo7jPpXnvwo9GSRUi0LpHQYmHY7671P-7oGGVBguGVVzMjXWtR_9vM6v-7_6Sbl2Taz15YhegXcLVci-pXlz-jbakSmXbK507RE2_umckuLh72zfU44g8NS0vVenglskLrjxdEQfTT5YtUmb7M9dg9s-B9WPzkeWjehu97uUb35k-kuauGxN9-w3jJNw_gRLY4pr-FWkdwrWgnkHbOdWt6w0bWjc5OArU-"/>
+</div>
+</div>
+</header>
+<!-- Dashboard Body -->
+<div class="px-8 py-10 max-w-7xl mx-auto">
+<!-- Hero Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+<div class="md:col-span-2 bg-surface-container-lowest rounded-xl p-8 flex flex-col justify-between relative overflow-hidden group">
+<div class="relative z-10">
+<p class="text-on-surface-variant font-medium mb-1">Total Weekly Revenue</p>
+<h2 class="text-4xl font-headline font-extrabold text-on-surface tracking-tight">$12,450.00</h2>
+<div class="mt-4 flex items-center gap-2 text-primary font-bold text-sm">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>+14.2% from last week</span>
+</div>
+</div>
+<!-- Abstract Background Decorative Element -->
+<div class="absolute -right-10 -bottom-10 w-64 h-64 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors duration-500"></div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-8 flex flex-col justify-center border-b-2 border-primary/20">
+<p class="text-on-surface-variant font-medium mb-1">Bookings Completed</p>
+<h2 class="text-4xl font-headline font-extrabold text-on-surface tracking-tight">28</h2>
+<p class="text-xs text-on-surface-variant/60 mt-2">Target: 35 per week</p>
+<div class="w-full bg-surface-container-high h-1 rounded-full mt-4 overflow-hidden">
+<div class="bg-primary h-full w-[80%]"></div>
+</div>
+</div>
+</div>
+<!-- Bento Layout Content -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Schedule Column (Left/Main) -->
+<div class="lg:col-span-8 space-y-6">
+<div class="flex justify-between items-end mb-4 px-2">
+<div>
+<h3 class="text-2xl font-headline font-bold">Today's Schedule</h3>
+<p class="text-on-surface-variant/70 text-sm">Thursday, October 24th</p>
+</div>
+<button class="text-primary font-bold text-sm hover:underline">View Calendar</button>
+</div>
+<!-- Appointment Cards -->
+<div class="space-y-4">
+<!-- Active Appointment -->
+<div class="group bg-surface-container-lowest rounded-xl p-6 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 flex gap-6 items-center">
+<div class="flex-shrink-0 w-24 text-center border-r border-outline-variant/30 pr-6">
+<p class="text-xl font-headline font-extrabold text-primary">10:00</p>
+<p class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/50">AM</p>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="text-lg font-bold">Marcus Thorne</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="px-3 py-0.5 bg-secondary-container text-on-secondary-container text-[10px] font-bold rounded-full uppercase tracking-tighter">Large Piece</span>
+<span class="text-sm text-on-surface-variant">Black &amp; Grey Realism</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface hover:bg-primary hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-surface-container-high hidden md:block">
+<img alt="Sketch preview" class="w-full h-full object-cover" data-alt="close-up of a detailed black and grey realistic lion tattoo design on paper with graphite pencils nearby" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXQm0mQH_jqXNl3DI5knr45OpJ2Dw5CPtbIuGKjBl-AHg_4ReAAoN0WLfiW3oZiudIqXBFy4Zi8bdsvXkT1WXLBHK7VK65zF6ZD7aw8-HjMmiuxAE47Jzs9K1e1X8ebOIZfDMmy2bO389y5QdLkok81u3pCWfliQIViaWmVJLzX1LVVWFRec__YxaJI0TND6TLYfF-_oKGM6PNGM2BnNXLTuwxTjxc6md5axxnSD9Er8m9LMfzwkB0zrpcNvFN9hVyi537lLVJCnO5"/>
+</div>
+</div>
+<!-- Appointment 2 -->
+<div class="group bg-surface-container-low/50 rounded-xl p-6 transition-all duration-300 hover:bg-surface-container-lowest flex gap-6 items-center">
+<div class="flex-shrink-0 w-24 text-center border-r border-outline-variant/30 pr-6">
+<p class="text-xl font-headline font-extrabold text-on-surface">02:30</p>
+<p class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/50">PM</p>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="text-lg font-bold">Elena Rodriguez</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="px-3 py-0.5 bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold rounded-full uppercase tracking-tighter">Touch Up</span>
+<span class="text-sm text-on-surface-variant">Traditional Floral</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant/30">more_vert</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-surface-container-high hidden md:block">
+<img alt="Sketch preview" class="w-full h-full object-cover opacity-60" data-alt="vibrant traditional style rose tattoo sketch with bold black outlines and deep red petals on parchment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3dVqylND0p71qtB1dx22iTOasaidyl5Au4sw2DG83FV06RjHmfPI2nnxjer-V7KABMlrr0nPVVV0RW6tuitOIaWepduzNKw65OaTjYtfAqXEpb911tMHKmcnXbMUG3ukzX_oxaHZCHZ6XcDbZm_sRq3uPNzKeeaLp9WcEcMWiftWzfbjj4VwkC0DmcMI0ROySe5fnuSwYA83V7gvGrGJRYl8_gDi2gvGrzqN5JSDatQNEXUevfUCzRZERBuPOb60MNOPsTdOdqaW7"/>
+</div>
+</div>
+<!-- Appointment 3 -->
+<div class="group bg-surface-container-low/50 rounded-xl p-6 transition-all duration-300 hover:bg-surface-container-lowest flex gap-6 items-center opacity-70">
+<div class="flex-shrink-0 w-24 text-center border-r border-outline-variant/30 pr-6">
+<p class="text-xl font-headline font-extrabold text-on-surface">05:00</p>
+<p class="text-xs font-bold uppercase tracking-widest text-on-surface-variant/50">PM</p>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="text-lg font-bold">Julian Vane</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="px-3 py-0.5 bg-surface-container-highest text-on-surface-variant text-[10px] font-bold rounded-full uppercase tracking-tighter">Consultation</span>
+<span class="text-sm text-on-surface-variant">Sleeve Planning</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant/30">more_vert</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center hidden md:flex">
+<span class="material-symbols-outlined text-on-surface-variant">chat_bubble</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Portfolio & Quick Actions (Right/Secondary) -->
+<div class="lg:col-span-4 space-y-8">
+<div class="bg-inverse-surface text-inverse-on-surface rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+<div class="relative z-10">
+<h3 class="text-xl font-headline font-bold mb-4">Portfolio Pulse</h3>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<span class="text-sm opacity-70">New Followers</span>
+<span class="font-bold">+124</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-sm opacity-70">Inquiries today</span>
+<span class="font-bold">12</span>
+</div>
+</div>
+<button class="mt-8 w-full py-3 bg-white text-on-surface rounded-xl font-bold text-sm tracking-tight active:scale-95 transition-transform">
+                                Update Portfolio
+                            </button>
+</div>
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+</div>
+<!-- Gallery Preview Card -->
+<div class="bg-surface-container-low rounded-2xl p-4 overflow-hidden">
+<div class="flex items-center justify-between px-2 mb-4">
+<h3 class="font-bold text-sm">Recent Uploads</h3>
+<span class="material-symbols-outlined text-on-surface-variant">arrow_forward</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="aspect-square rounded-lg overflow-hidden relative group">
+<img alt="Tattoo work" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" data-alt="macro photo of a fresh tattoo of a geometric mandala on a forearm with sharp black lines and soft skin texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAeWVTRu3ph3GT40jacnTmzTRZ9J8zwN7mfwvY9f_iJk5sM2VJWPwa8qF20mYdkXQgd0I0CLJDzHBubCARzvGHilF5NHMzzv50W2RdUDEupImFaCb865TS-Al-zwKg29avEMfxYEOjs1BGy_sZBfScxGXFz4gpNqJ20rd7BKZh8lROzuQS-8LqvWvm1Oe3YrxUui08yjcDFMjsfdNkBOaPgs8iDwVDKrFbnKULt5TeOOcGPqDjV7e3IoUBwdZlB-3YPOkem4wb1CJO"/>
+</div>
+<div class="aspect-[4/5] rounded-lg overflow-hidden relative group row-span-2">
+<img alt="Tattoo work" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" data-alt="artistic full back tattoo showing a detailed Japanese dragon in movement with grey shading and subtle red accents" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5SX4RGGKUZIJ230wf7V6uignUZu5xMiDLXERrrLElQChVwMV5Rk79d40IUIQZmySFitgWbdk3aU9vnLsRPyXoO6MjuRAEqmcBCUOPvp2-Bn92XtLlGSjsrvkntVU27yACDLu9neBHXYXQMF_qJPCoO2Le5ITh9Jzh3jta4FFF0yuWjGm3PSxJnIY1S1FrX88j4C3zZ5T8UlsrfXlwWDAEaetkpoqUatxiv9_S9lu6RlT1QNm9h4L5Z6-OQh3qpzphC59kVvzGJ0Dq"/>
+</div>
+<div class="aspect-square rounded-lg overflow-hidden relative group">
+<img alt="Tattoo work" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" data-alt="close-up of delicate fine line botanical tattoo of wildflowers on a wrist with soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBeiGEIng4BPlosPoh1VwrEHImjjXmyWPcXjuc69JQiHdiqAu89jjHKcIQdFctSEtwQMTuzzDgusn29lgojIrjPKKOT2TiYuJEqyQj-ypcKfadJ5JQaj2VNanL13T3n0js6ZAXbPqJOeY_YoPfBLfN2pLnV49ESqDmy1pQ_lH6zMey4j3rhpAsMF1JiZC75Owm6D-E31yrr5Om_iv7qH0AwtS02wu02uKamUml4fvOO5loVMHwOHV0X9M2q9DyN8xDqb5JDt44zIO0c"/>
+</div>
+</div>
+</div>
+<!-- Client Spotlight -->
+<div class="p-6 border-l-4 border-primary bg-surface-container-lowest rounded-r-xl">
+<p class="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-2">Priority Inquiry</p>
+<h4 class="font-headline font-bold text-lg leading-tight">Sarah Jenkins</h4>
+<p class="text-sm text-on-surface-variant mt-2 line-clamp-2 italic">"Looking to start a traditional Japanese sleeve. I loved your recent work with the waves..."</p>
+<div class="mt-4 flex gap-4">
+<button class="text-xs font-bold text-on-surface underline">Reply Now</button>
+<button class="text-xs font-bold text-on-surface-variant/50">Dismiss</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile Navigation Shell -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-[#fcf9f8]/90 backdrop-blur-xl z-50 flex justify-around items-center py-4 px-6 border-t border-outline-variant/10">
+<button class="flex flex-col items-center gap-1 text-[#780009] active:scale-90 transition-transform">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-[10px] font-bold">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#1c1b1b]/60 active:scale-90 transition-transform">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="text-[10px] font-bold">Calendar</span>
+</button>
+<div class="relative -top-8">
+<button class="w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+<button class="flex flex-col items-center gap-1 text-[#1c1b1b]/60 active:scale-90 transition-transform">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-bold">Clients</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#1c1b1b]/60 active:scale-90 transition-transform">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-bold">Settings</span>
+</button>
+</nav>
+</body></html>

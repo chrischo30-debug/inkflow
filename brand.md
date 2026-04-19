@@ -1,7 +1,7 @@
 # brand.md
 
 ## App Name
-InkFlow
+FlashBook
 
 ## Personality
 Professional, clean, fast. Feels like a tool built for serious creatives — not a generic SaaS.

@@ -8,7 +8,7 @@
 - [ ] Onboarding flow: connect Google Calendar, set availability, configure first form
 
 ### Inquiry Form Builder
-- [ ] Artist gets a unique public form URL (e.g. inkflow.app/book/[artist-slug])
+- [ ] Artist gets a unique public form URL (e.g. flashbook.app/book/[artist-slug])
 - [ ] Form fields: name, email, phone, tattoo description, size, placement, reference images, budget
 - [ ] Artist can toggle fields on/off and mark required
 - [ ] Form submissions saved to DB and trigger pipeline entry

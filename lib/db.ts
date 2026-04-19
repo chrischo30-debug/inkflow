@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Booking, BookingState } from './types';
+import type { Booking, BookingState } from './types';
 
 // Example wrapper
 export async function getBookingsByArtist(artistId: string): Promise<Booking[]> {
@@ -20,3 +20,15 @@ export async function updateBookingState(bookingId: string, newState: BookingSta
     
   if (error) throw error;
 }
+
+export async function createBooking(payload: Omit<Booking, 'id' | 'created_at' | 'updated_at'>) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .insert([payload])
+    .select('id')
+    .single();
+    
+  if (error) throw error;
+  return data.id;
+}
+

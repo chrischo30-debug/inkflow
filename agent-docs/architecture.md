@@ -1,7 +1,7 @@
 # architecture.md
 
 ## System Overview
-InkFlow is a multi-tenant SaaS app. Each tattoo artist is a tenant with their own data,
+FlashBook is a multi-tenant SaaS app. Each tattoo artist is a tenant with their own data,
 booking form URL, pipeline, calendar, and settings. Artists never see each other's data.
 Row Level Security in Supabase enforces this at the database level.
 
@@ -36,7 +36,7 @@ Row Level Security in Supabase enforces this at the database level.
 - OAuth tokens stored encrypted in Supabase (server-side only)
 - On booking confirmed: write event to Google Calendar via app/api/calendar/
 - On calendar view load: read upcoming events from Google Calendar
-- In-app calendar shows both InkFlow bookings and pulled Google Calendar events
+- In-app calendar shows both FlashBook bookings and pulled Google Calendar events
 
 ## Patterns to Follow
 - All DB access: go through lib/db.ts — never call Supabase client directly in components

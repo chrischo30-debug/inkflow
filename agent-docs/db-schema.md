@@ -1,78 +1,102 @@
-# db-schema.md
+# Database Schema
 
-## Tables
+_Last updated: 2026-04-19_
 
-### artists
-The main user/tenant table. One row per tattoo artist account.
-| column              | type        | notes                                      |
-|---------------------|-------------|--------------------------------------------|
-| id                  | uuid PK     | Supabase auth user ID                      |
-| email               | text        | login email                                |
-| name                | text        | display name                               |
-| slug                | text unique | used in public booking URL /book/[slug]    |
-| studio_name         | text        | optional                                   |
-| bio                 | text        | optional, shown on booking form            |
-| deposit_amount      | numeric     | default deposit they charge                |
-| payment_links       | jsonb       | { stripe: url, venmo: url, cashapp: url }  |
-| google_calendar_id  | text        | connected Google Calendar ID               |
-| google_tokens       | jsonb       | encrypted OAuth tokens — server only       |
-| created_at          | timestamptz |                                            |
+---
 
-### bookings
-One row per client inquiry/booking. The core pipeline record.
-| column              | type        | notes                                                              |
-|---------------------|-------------|--------------------------------------------------------------------|
-| id                  | uuid PK     |                                                                    |
-| artist_id           | uuid FK     | → artists.id (RLS enforced)                                        |
-| state               | text        | inquiry, reviewed, deposit_sent, deposit_paid, confirmed, completed|
-| client_name         | text        |                                                                    |
-| client_email        | text        |                                                                    |
-| client_phone        | text        | optional                                                           |
-| tattoo_description  | text        |                                                                    |
-| placement           | text        |                                                                    |
-| size                | text        |                                                                    |
-| budget              | text        | optional                                                           |
-| reference_images    | text[]      | array of Supabase Storage URLs                                     |
-| appointment_at      | timestamptz | set when state → confirmed                                         |
-| google_event_id     | text        | Google Calendar event ID after sync                                |
-| notes               | text        | artist's private notes                                             |
-| created_at          | timestamptz |                                                                    |
-| updated_at          | timestamptz |                                                                    |
+## `artists`
+Extends `auth.users`. One row per artist.
 
-### email_templates
-Artist-editable email templates for each pipeline state transition.
-| column        | type    | notes                                              |
-|---------------|---------|----------------------------------------------------|
-| id            | uuid PK |                                                    |
-| artist_id     | uuid FK | → artists.id                                       |
-| trigger_state | text    | the state that fires this email (e.g. "reviewed")  |
-| subject       | text    |                                                    |
-| body          | text    | supports {client_name}, {artist_name} variables    |
-| auto_send     | boolean | true = fires automatically on state change         |
-| created_at    | timestamptz |                                                |
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | References `auth.users(id)` |
+| `name` | text | Artist display name |
+| `email` | text unique | |
+| `slug` | text unique | Public booking URL segment |
+| `studio_name` | text | Optional |
+| `deposit_policy` | jsonb | See shape below |
+| `payment_links` | jsonb | `{ "Stripe": "url", "Venmo": "url" }` |
+| `style_tags` | text[] | |
+| `calendar_sync_enabled` | boolean | |
+| `google_refresh_token` | text | Encrypted server-side only |
+| `auto_process_inquiries` | boolean | Skip manual review step |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | Auto-updated by trigger |
 
-### availability
-Artist's available time blocks for scheduling.
-| column      | type        | notes                          |
-|-------------|-------------|--------------------------------|
-| id          | uuid PK     |                                |
-| artist_id   | uuid FK     | → artists.id                   |
-| day_of_week | int         | 0=Sun, 1=Mon ... 6=Sat         |
-| start_time  | time        |                                |
-| end_time    | time        |                                |
-| is_active   | boolean     |                                |
+### `deposit_policy` shape (JSONB)
+```json
+// Fixed dollar amount
+{ "type": "fixed", "amount": 100 }
 
-## Relationships
-- artists ← bookings (one artist, many bookings)
-- artists ← email_templates (one artist, many templates — one per trigger_state)
-- artists ← availability (one artist, many time blocks)
+// Percentage of quoted price
+{ "type": "percentage", "value": 25 }
 
-## Row Level Security
-All tables have RLS enabled. Policy: artist can only SELECT/INSERT/UPDATE/DELETE
-rows where artist_id = auth.uid(). The bookings table allows unauthenticated INSERT
-(for public inquiry form submissions) but no unauthenticated SELECT.
+// Freeform custom policy text
+{ "type": "custom", "note": "Varies by size and placement" }
+```
 
-## Changing the Schema
-Always write a migration file (supabase/migrations/). Never alter tables directly
-in the Supabase dashboard without a corresponding migration file in the repo.
-Show the migration plan before running it.
+---
+
+## `bookings`
+Each row is one client inquiry or booking.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `artist_id` | uuid FK | → `artists.id` |
+| `client_name` | text | |
+| `client_email` | text | |
+| `client_phone` | text | Optional |
+| `description` | text | Tattoo idea description |
+| `size` | text | Optional |
+| `placement` | text | Optional |
+| `budget` | numeric(10,2) | Optional |
+| `reference_urls` | text[] | |
+| `state` | booking_state enum | See below |
+| `payment_link_sent` | text | Link sent to this specific client |
+| `deposit_amount` | numeric(10,2) | Actual amount collected |
+| `appointment_date` | timestamptz | |
+| `last_email_sent_at` | timestamptz | |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | |
+
+**Enum: `booking_state`**  
+`inquiry` → `reviewed` → `deposit_sent` → `deposit_paid` → `confirmed` → `completed` | `cancelled`
+
+---
+
+## `email_templates`
+Per-artist email templates for each pipeline state.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `artist_id` | uuid FK | → `artists.id` |
+| `state` | booking_state enum | One template per state |
+| `subject` | text | |
+| `body` | text | |
+| `auto_send` | boolean | Fire automatically on state change |
+
+Unique constraint: `(artist_id, state)`
+
+---
+
+## `form_fields`
+Controls which fields are shown on the artist's public booking form.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `artist_id` | uuid FK | → `artists.id` |
+| `field_key` | text | e.g. `"phone"`, `"budget"`, `"reference_images"` |
+| `enabled` | boolean | |
+| `required` | boolean | |
+| `sort_order` | int | |
+
+Unique constraint: `(artist_id, field_key)`
+
+---
+
+## RLS Summary
+All tables have Row Level Security enabled.  
+Artists can only read and write their own rows (`id = auth.uid()` or `artist_id = auth.uid()`).
