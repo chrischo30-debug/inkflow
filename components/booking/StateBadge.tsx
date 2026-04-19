@@ -8,6 +8,7 @@ const stateConfig: Record<BookingState, { label: string; colorClass: string }> =
   deposit_paid: { label: "Deposit Paid", colorClass: "bg-primary-container/20 text-primary-container border-primary-container/30" },
   confirmed:    { label: "Confirmed",    colorClass: "bg-primary/10 text-primary border-primary/20" },
   completed:    { label: "Completed",    colorClass: "bg-surface-container-highest text-on-surface-variant border-outline-variant/30" },
+  cancelled:    { label: "Cancelled",    colorClass: "bg-destructive/10 text-destructive border-destructive/20" },
 };
 
 export function StateBadge({ state }: { state: BookingState }) {

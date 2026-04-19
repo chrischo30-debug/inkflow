@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
@@ -152,7 +152,7 @@ export function InquiryForm({
   const inquirySchema = buildInquirySchema(formFields);
 
   const form = useForm<InquiryFormValues>({
-    resolver: zodResolver(inquirySchema),
+    resolver: zodResolver(inquirySchema) as Resolver<InquiryFormValues>,
     defaultValues: {
       client_name: "",
       client_email: "",
