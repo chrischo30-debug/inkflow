@@ -31,7 +31,7 @@ export default async function FormBuilderPreviewPage({
   const [{ data: artist }, { data: rawFields }, { data: rawCustomFields }] = await Promise.all([
     supabase
       .from("artists")
-      .select("id, name, form_header, form_subtext, form_button_text")
+      .select("*")
       .eq("id", user.id)
       .single(),
     supabase
@@ -73,18 +73,20 @@ export default async function FormBuilderPreviewPage({
         artistId={artist.id}
         formFields={normalizeFormFields(rawFields ?? [])}
         customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
-        formHeader={(settings.form_header as string) || artist.form_header || `Book with ${artistName}`}
-        formSubtext={(settings.form_subtext as string) || artist.form_subtext || ""}
-        buttonText={artist.form_button_text || "Submit Inquiry"}
-        layout={(settings.booking_layout as "centered" | "banner" | "minimal") || "centered"}
-        font={(settings.booking_font as "sans" | "serif" | "mono") || "sans"}
-        textColor={(settings.booking_text_color as "dark" | "light") || undefined}
-        bgColor={(settings.booking_bg_color as string) || "#ffffff"}
-        bgImageUrl={(settings.booking_bg_image_url as string | null) || null}
-        logoUrl={(settings.logo_url as string | null) || null}
-        websiteUrl={(settings.website_url as string) || ""}
-        socialLinks={Array.isArray(settings.social_links) ? settings.social_links : []}
-        showSocialOnBooking={(settings.show_social_on_booking as boolean) || false}
+        formHeader={(settings.form_header as string) ?? artist.form_header ?? `Book with ${artistName}`}
+        formSubtext={(settings.form_subtext as string) ?? artist.form_subtext ?? ""}
+        buttonText={(settings.form_button_text as string) ?? artist.form_button_text ?? "Submit Inquiry"}
+        layout={(settings.booking_layout as "centered" | "banner" | "minimal") ?? artist.booking_layout ?? "centered"}
+        font={(settings.booking_font as "sans" | "serif" | "mono") ?? artist.booking_font ?? "sans"}
+        fontScale={(settings.booking_font_scale as "small" | "base" | "large") ?? artist.booking_font_scale ?? "base"}
+        textColor={(settings.booking_text_color as string) ?? artist.booking_text_color ?? undefined}
+        buttonColor={(settings.booking_button_color as string) ?? artist.booking_button_color ?? undefined}
+        bgColor={(settings.booking_bg_color as string) ?? artist.booking_bg_color ?? "#ffffff"}
+        bgImageUrl={(settings.booking_bg_image_url as string | null) ?? artist.booking_bg_image_url ?? null}
+        logoUrl={(settings.logo_url as string | null) ?? artist.logo_url ?? null}
+        websiteUrl={(settings.website_url as string) ?? artist.website_url ?? ""}
+        socialLinks={Array.isArray(settings.social_links) ? settings.social_links : (Array.isArray(artist.social_links) ? artist.social_links : [])}
+        showSocialOnBooking={(settings.show_social_on_booking as boolean) ?? artist.show_social_on_booking ?? false}
       />
     </div>
   );

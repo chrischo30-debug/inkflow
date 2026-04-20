@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BaseFieldInputType,
@@ -60,18 +60,21 @@ const baseRef = (key: FormFieldKey) => `base:${key}`;
 const customRef = (key: string) => `custom:${key}`;
 type ItemRef = string;
 
+
 export function FormBuilderSettings({
   initialFields,
   initialCustomFields,
   initialFormHeader,
   initialFormSubtext,
   initialFormButtonText,
+  onPreviewReady,
 }: {
   initialFields: FormFieldConfig[];
   initialCustomFields: CustomFormFieldConfig[];
   initialFormHeader: string;
   initialFormSubtext: string;
   initialFormButtonText: string;
+  onPreviewReady?: (open: () => void) => void;
 }) {
   const [fields, setFields] = useState<FormFieldConfig[]>(
     initialFields.length ? initialFields : DEFAULT_FORM_FIELDS
@@ -85,6 +88,13 @@ export function FormBuilderSettings({
   const [isSaving, setIsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [draggingRef, setDraggingRef] = useState<ItemRef | null>(null);
+  const openPreviewRef = useRef<() => void>(() => {});
+  const openPreview = () => {
+    const state = { form_header: formHeader, form_subtext: formSubtext, form_button_text: formButtonText };
+    window.open(`/form-builder/preview?s=${btoa(JSON.stringify(state))}`, "_blank");
+  };
+  openPreviewRef.current = openPreview;
+  useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
   const [showAddComposer, setShowAddComposer] = useState(false);
   const [expandedBaseKey, setExpandedBaseKey] = useState<FormFieldKey | null>(null);
   const [expandedCustomKey, setExpandedCustomKey] = useState<string | null>(null);
@@ -779,7 +789,7 @@ export function FormBuilderSettings({
             setMessage("");
           }}
           variant="outline"
-          className="mb-6 w-full bg-transparent border-destructive text-destructive hover:bg-destructive/10"
+          className="mb-6 w-full h-auto py-4 bg-transparent border-primary text-primary hover:bg-primary/10"
         >
           Add Custom Field
         </Button>
@@ -907,7 +917,7 @@ export function FormBuilderSettings({
         type="button"
         onClick={save}
         disabled={isSaving}
-        className="mt-5 w-full py-6 text-base font-medium rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
+        className="mt-5 w-full h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
       >
         {isSaving ? "Saving..." : justSaved ? "Saved" : "Save Form Builder"}
       </Button>

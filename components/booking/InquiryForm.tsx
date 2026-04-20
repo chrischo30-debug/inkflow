@@ -312,8 +312,8 @@ export function InquiryForm({
         min-h-[80px] rounded-md border border-dashed cursor-pointer
         transition-colors duration-150 select-none
         ${uploading
-          ? 'border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)]'
-          : 'border-[var(--border)] bg-[var(--surface-container-low)] text-[var(--on-surface-variant)] hover:border-[var(--primary)]/50 hover:text-[var(--primary)]'
+          ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
+          : 'border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)] hover:bg-[var(--primary)]/10'
         }
       `}
     >
@@ -363,9 +363,9 @@ export function InquiryForm({
   // Divider between upload and link textarea
   const OrDivider = () => (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-px bg-[var(--border)]" />
-      <span className="text-[10px] uppercase tracking-widest text-[var(--outline)] font-medium px-1">or also paste links</span>
-      <div className="flex-1 h-px bg-[var(--border)]" />
+      <div className="flex-1 h-px bg-[var(--primary)]/20" />
+      <span className="text-[10px] uppercase tracking-widest text-[var(--primary)] font-medium px-1">or also paste links</span>
+      <div className="flex-1 h-px bg-[var(--primary)]/20" />
     </div>
   );
 
@@ -615,7 +615,7 @@ export function InquiryForm({
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {orderedFields.map((item) => {
             if (item.kind === "base") {
               return <div key={`base-${item.key}`}>{renderBaseField(item.key)}</div>;
@@ -747,7 +747,7 @@ export function InquiryForm({
           })}
         </div>
 
-        <Button type="submit" className="w-full font-semibold py-6 text-base" disabled={isPending}>
+        <Button type="submit" className="w-full h-auto font-semibold py-3.5 text-base" disabled={isPending}>
           {isPending ? "Submitting..." : buttonText}
         </Button>
       </form>

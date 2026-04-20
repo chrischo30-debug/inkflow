@@ -71,7 +71,7 @@ export default async function SignUpPage({
               />
             </div>
             
-            <Button type="submit" className="w-full mt-4 py-6 text-base font-medium rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity">
+            <Button type="submit" className="w-full mt-4 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity">
               Continue
             </Button>
 

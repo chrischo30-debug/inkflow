@@ -272,7 +272,7 @@ export default async function OnboardingPage({
             <div className="flex justify-end pt-2">
               <Button
                 type="submit"
-                className="px-10 py-6 text-base font-medium rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
+                className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
               >
                 Complete Setup
               </Button>

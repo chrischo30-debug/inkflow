@@ -1,12 +1,49 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, Upload, X, Plus, Eye } from "lucide-react";
+import { Check, Upload, X, Plus } from "lucide-react";
+
+function ColorInput({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  const [text, setText] = useState(value);
+
+  // Keep text in sync when value changes from outside (e.g. preset swatches)
+  if (text !== value && document.activeElement?.getAttribute("data-color-hex") !== "true") {
+    setText(value);
+  }
+
+  const commit = (raw: string) => {
+    const hex = raw.startsWith("#") ? raw : `#${raw}`;
+    if (/^#[0-9a-fA-F]{6}$/.test(hex)) onChange(hex);
+  };
+
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer">
+      <input
+        type="color"
+        value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
+        onChange={(e) => { onChange(e.target.value); setText(e.target.value); }}
+        className="w-7 h-7 rounded cursor-pointer border border-outline-variant/30 p-0.5"
+      />
+      <input
+        data-color-hex="true"
+        type="text"
+        value={text}
+        maxLength={7}
+        onChange={(e) => { setText(e.target.value); commit(e.target.value); }}
+        onBlur={(e) => { const v = e.target.value.startsWith("#") ? e.target.value : `#${e.target.value}`; if (/^#[0-9a-fA-F]{6}$/.test(v)) { onChange(v); setText(v); } else { setText(value); } }}
+        className="w-20 rounded border border-outline-variant/40 bg-surface px-2 py-1 text-xs font-mono text-on-surface focus:outline-none focus:border-primary"
+        placeholder="#000000"
+        spellCheck={false}
+      />
+    </label>
+  );
+}
 
 type Platform = "instagram" | "tiktok" | "twitter" | "facebook" | "website";
 type Layout = "centered" | "banner" | "minimal";
 type Font = "sans" | "serif" | "mono";
+type FontScale = "small" | "base" | "large";
 
 interface SocialLink { platform: Platform; url: string; }
 
@@ -15,11 +52,13 @@ export interface BookingPageConfig {
   booking_bg_image_url: string | null;
   booking_layout: Layout;
   booking_font: Font;
-  booking_text_color: "dark" | "light";
+  booking_text_color: string;
+  booking_button_color?: string;
   logo_url: string | null;
   website_url: string;
   social_links: SocialLink[];
   show_social_on_booking: boolean;
+  booking_font_scale?: FontScale;
 }
 
 function autoTextColor(hex: string): "dark" | "light" {
@@ -40,14 +79,20 @@ const PLATFORMS: { id: Platform; label: string }[] = [
 
 const LAYOUTS: { id: Layout; label: string; desc: string }[] = [
   { id: "centered", label: "Centered", desc: "Card centered on background" },
-  { id: "banner",   label: "Banner",   desc: "Color band at top, form below" },
+  { id: "banner",   label: "Split",    desc: "Info on left, form on right" },
   { id: "minimal",  label: "Minimal",  desc: "Clean, no card, left-aligned" },
 ];
 
 const FONTS: { id: Font; label: string; sample: string; style: React.CSSProperties }[] = [
-  { id: "sans",  label: "Modern",  sample: "Book a tattoo", style: {} },
-  { id: "serif", label: "Elegant", sample: "Book a tattoo", style: { fontFamily: "var(--font-booking-serif)" } },
-  { id: "mono",  label: "Edgy",    sample: "Book a tattoo", style: { fontFamily: "var(--font-booking-mono)" } },
+  { id: "sans",  label: "Sans-Serif",  sample: "Book a tattoo", style: {} },
+  { id: "serif", label: "Serif", sample: "Book a tattoo", style: { fontFamily: "var(--font-booking-serif)" } },
+  { id: "mono",  label: "Monospace",    sample: "Book a tattoo", style: { fontFamily: "var(--font-booking-mono)" } },
+];
+
+const FONT_SCALES: { id: FontScale; label: string; desc: string }[] = [
+  { id: "small", label: "Small", desc: "Compact form" },
+  { id: "base", label: "Medium", desc: "Default size" },
+  { id: "large", label: "Large", desc: "High legibility" },
 ];
 
 const BG_PRESETS = ["#ffffff", "#fdf8f2", "#f5f5f5", "#f0f4f0", "#f0f5ff", "#fff0f3"];
@@ -81,13 +126,15 @@ const LayoutPreview = ({ id }: { id: Layout }) => {
   );
 };
 
-export function BookingPageSettings({ initial }: { initial: BookingPageConfig }) {
+export function BookingPageSettings({ initial, onPreviewReady }: { initial: BookingPageConfig; onPreviewReady?: (open: () => void) => void }) {
   const [bgColor, setBgColor]       = useState(initial.booking_bg_color || "#ffffff");
   const [bgImageUrl, setBgImageUrl] = useState(initial.booking_bg_image_url || null);
   const [layout, setLayout]         = useState<Layout>(initial.booking_layout || "centered");
   const [font, setFont]             = useState<Font>(initial.booking_font || "sans");
-  const [textColor, setTextColor]   = useState<"dark" | "light">(initial.booking_text_color || autoTextColor(initial.booking_bg_color || "#ffffff"));
+  const [fontScale, setFontScale]   = useState<FontScale>(initial.booking_font_scale || "base");
+  const [textColor, setTextColor]   = useState<string>(initial.booking_text_color || autoTextColor(initial.booking_bg_color || "#ffffff"));
   const [textColorLocked, setTextColorLocked] = useState(!!initial.booking_text_color);
+  const [buttonColor, setButtonColor] = useState<string>(initial.booking_button_color || "#1a1c22");
   const [logoUrl, setLogoUrl]       = useState(initial.logo_url || null);
   const [websiteUrl, setWebsiteUrl] = useState(initial.website_url || "");
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(initial.social_links || []);
@@ -99,6 +146,7 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
   const [uploadingBg, setUploadingBg]       = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef   = useRef<HTMLInputElement>(null);
+  const openPreviewRef = useRef<() => void>(() => {});
 
   const uploadFile = async (file: File, endpoint: string) => {
     const fd = new FormData();
@@ -151,7 +199,9 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
       booking_bg_image_url: bgImageUrl,
       booking_layout: layout,
       booking_font: font,
+      booking_font_scale: fontScale,
       booking_text_color: textColor,
+      booking_button_color: buttonColor,
       logo_url: logoUrl,
       website_url: websiteUrl,
       social_links: socialLinks,
@@ -160,6 +210,9 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
     const encoded = btoa(JSON.stringify(state));
     window.open(`/form-builder/preview?s=${encoded}`, "_blank");
   };
+
+  openPreviewRef.current = openPreview;
+  useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
 
   const save = async () => {
     setSaving(true);
@@ -174,7 +227,9 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
         booking_bg_image_url: bgImageUrl || null,
         booking_layout: layout,
         booking_font: font,
+        booking_font_scale: fontScale,
         booking_text_color: textColor,
+        booking_button_color: buttonColor,
         logo_url: logoUrl || null,
         website_url: websiteUrl,
         social_links: validLinks,
@@ -278,98 +333,133 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
         </div>
       </section>
 
-      {/* Text Color */}
+      {/* Font Scale */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Text Color</h4>
-        <div className="flex items-center gap-3">
-          {(["dark", "light"] as const).map((opt) => {
-            const isAuto = !textColorLocked && autoTextColor(bgColor) === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => { setTextColor(opt); setTextColorLocked(true); }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all ${
-                  textColor === opt
-                    ? "border-primary/60 bg-primary/5 text-on-surface"
-                    : "border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/50"
-                }`}
-              >
-                <span
-                  className="w-4 h-4 rounded-full border border-outline-variant/30 shrink-0"
-                  style={{ backgroundColor: opt === "dark" ? "#111" : "#fff" }}
-                />
-                {opt === "dark" ? "Dark" : "Light"}
-                {isAuto && <span className="text-[10px] text-on-surface-variant font-normal">auto</span>}
-              </button>
-            );
-          })}
-          {textColorLocked && (
+        <h4 className="text-sm font-semibold text-on-surface">Base Text Size</h4>
+        <div className="grid grid-cols-3 gap-3">
+          {FONT_SCALES.map((s) => (
             <button
+              key={s.id}
               type="button"
-              onClick={() => { setTextColorLocked(false); setTextColor(autoTextColor(bgColor)); }}
-              className="text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+              onClick={() => setFontScale(s.id)}
+              className={`flex flex-col gap-1 p-3 rounded-xl border-2 text-left transition-all ${
+                fontScale === s.id
+                  ? "border-primary/60 bg-primary/5"
+                  : "border-outline-variant/20 hover:border-outline-variant/50"
+              }`}
             >
-              Reset to auto
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-on-surface font-semibold ${s.id === 'small' ? 'text-sm' : s.id === 'large' ? 'text-lg' : 'text-base'}`}>Ag</span>
+              </div>
+              <p className="text-xs font-semibold text-on-surface">{s.label}</p>
+              <p className="text-[11px] text-on-surface-variant leading-tight">{s.desc}</p>
             </button>
-          )}
+          ))}
         </div>
       </section>
 
-      {/* Background */}
+      {/* Colors */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Background</h4>
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {BG_PRESETS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => { setBgColor(color); setBgImageUrl(null); if (!textColorLocked) setTextColor(autoTextColor(color)); }}
-                className={`w-7 h-7 rounded-full border-2 transition-all ${
-                  bgColor === color && !bgImageUrl ? "border-on-surface scale-110" : "border-outline-variant/30 hover:border-outline-variant"
-                }`}
-                style={{ backgroundColor: color }}
-                title={color}
-              />
-            ))}
-            <label className="flex items-center gap-1.5 text-xs text-on-surface-variant cursor-pointer">
-              <input
-                type="color"
+        <h4 className="text-sm font-semibold text-on-surface">Colors</h4>
+        <div className="rounded-xl border border-outline-variant/20 divide-y divide-outline-variant/20 overflow-hidden">
+
+          {/* Background */}
+          <div className="flex items-center gap-4 px-4 py-3">
+            <span className="text-xs font-semibold text-on-surface-variant w-16 shrink-0">Background</span>
+            <div className="flex items-center gap-2 flex-wrap flex-1">
+              {BG_PRESETS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => { setBgColor(color); setBgImageUrl(null); if (!textColorLocked) setTextColor(autoTextColor(color)); }}
+                  className={`w-6 h-6 rounded-full border-2 transition-all shrink-0 ${
+                    bgColor === color && !bgImageUrl ? "border-on-surface scale-110" : "border-outline-variant/30 hover:border-outline-variant"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+              <ColorInput
                 value={bgColor}
-                onChange={(e) => { setBgColor(e.target.value); setBgImageUrl(null); if (!textColorLocked) setTextColor(autoTextColor(e.target.value)); }}
-                className="w-7 h-7 rounded cursor-pointer border border-outline-variant/30"
+                onChange={(hex) => { setBgColor(hex); setBgImageUrl(null); if (!textColorLocked) setTextColor(autoTextColor(hex)); }}
               />
-              Custom
-            </label>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {bgImageUrl && (
+                <div className="relative group">
+                  <img src={bgImageUrl} alt="Background" className="h-8 w-12 object-cover rounded border border-outline-variant/30" />
+                  <button type="button" onClick={() => setBgImageUrl(null)}
+                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-surface border border-outline-variant/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X className="w-2.5 h-2.5 text-on-surface-variant" />
+                  </button>
+                </div>
+              )}
+              <input ref={bgInputRef} type="file" accept="image/*" className="sr-only" onChange={handleBgUpload} />
+              <button type="button" onClick={() => bgInputRef.current?.click()} disabled={uploadingBg}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-outline-variant/40 text-xs text-on-surface-variant hover:border-outline-variant hover:text-on-surface transition-colors">
+                <Upload className="w-3 h-3" />
+                {uploadingBg ? "Uploading…" : bgImageUrl ? "Replace" : "Image"}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {bgImageUrl ? (
-              <div className="relative group">
-                <img src={bgImageUrl} alt="Background" className="h-12 w-20 object-cover rounded border border-outline-variant/30" />
-                <button
-                  type="button"
-                  onClick={() => setBgImageUrl(null)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-surface border border-outline-variant/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3 text-on-surface-variant" />
-                </button>
-              </div>
-            ) : null}
-            <input ref={bgInputRef} type="file" accept="image/*" className="sr-only" onChange={handleBgUpload} />
-            <button
-              type="button"
-              onClick={() => bgInputRef.current?.click()}
-              disabled={uploadingBg}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-outline-variant/40 text-sm text-on-surface-variant hover:border-outline-variant hover:text-on-surface transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              {uploadingBg ? "Uploading…" : bgImageUrl ? "Replace image" : "Use image instead"}
-            </button>
-            {bgImageUrl && <span className="text-xs text-on-surface-variant">Image overrides color</span>}
+          {/* Text */}
+          <div className="flex items-center gap-4 px-4 py-3">
+            <span className="text-xs font-semibold text-on-surface-variant w-16 shrink-0">Text</span>
+            <div className="flex items-center gap-2 flex-1">
+              {["#111111", "#ffffff"].map((color) => {
+                const isSelected = textColor === color || textColor === (color === "#111111" ? "dark" : "light");
+                return (
+                  <button key={color} type="button"
+                    onClick={() => { setTextColor(color); setTextColorLocked(true); }}
+                    className={`w-6 h-6 rounded-full border-2 transition-all shrink-0 ${
+                      isSelected ? "border-on-surface scale-110" : "border-outline-variant/30 hover:border-outline-variant"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    title={color === "#111111" ? "Dark" : "Light"}
+                  />
+                );
+              })}
+              <ColorInput
+                value={textColor === "dark" ? "#111111" : textColor === "light" ? "#ffffff" : textColor}
+                onChange={(hex) => { setTextColor(hex); setTextColorLocked(true); }}
+              />
+            </div>
+            {textColorLocked && (
+              <button type="button"
+                onClick={() => { setTextColorLocked(false); setTextColor(autoTextColor(bgColor)); }}
+                className="text-xs text-on-surface-variant hover:text-on-surface transition-colors shrink-0">
+                Auto
+              </button>
+            )}
           </div>
+
+          {/* Accent */}
+          <div className="flex items-center gap-4 px-4 py-3">
+            <span className="text-xs font-semibold text-on-surface-variant w-16 shrink-0">Accent</span>
+            <div className="flex items-center gap-2 flex-1">
+              {["#1a1c22", "#9b1b1b"].map((color) => (
+                <button key={color} type="button"
+                  onClick={() => setButtonColor(color)}
+                  className={`w-6 h-6 rounded-full border-2 transition-all shrink-0 ${
+                    buttonColor === color ? "border-on-surface scale-110" : "border-outline-variant/30 hover:border-outline-variant"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+              <ColorInput value={buttonColor} onChange={setButtonColor} />
+            </div>
+            {buttonColor !== "#1a1c22" && (
+              <button type="button" onClick={() => setButtonColor("#1a1c22")}
+                className="text-xs text-on-surface-variant hover:text-on-surface transition-colors shrink-0">
+                Reset
+              </button>
+            )}
+          </div>
+
         </div>
+        <p className="text-xs text-on-surface-variant">Accent color applies to buttons, borders, and interactive elements.</p>
       </section>
 
       {/* Links */}
@@ -443,20 +533,12 @@ export function BookingPageSettings({ initial }: { initial: BookingPageConfig })
         </div>
       )}
 
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={openPreview}
-          className="flex items-center gap-2 px-5 py-4 rounded-2xl border border-outline-variant text-sm font-medium text-on-surface-variant hover:text-on-surface hover:border-on-surface/40 transition-colors"
-        >
-          <Eye className="w-4 h-4" />
-          Preview
-        </button>
+      <div className="pt-6">
         <Button
           type="button"
           onClick={save}
           disabled={saving}
-          className="flex-1 py-6 text-base font-medium rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
+          className="w-full h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
         >
           {saving ? "Saving…" : "Save Booking Page"}
         </Button>

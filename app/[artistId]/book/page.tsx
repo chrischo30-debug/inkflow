@@ -17,7 +17,7 @@ export default async function BookPage({
   const admin = createAdminClient();
   const { data: artist } = await admin
     .from("artists")
-    .select("id, name, slug, form_header, form_subtext, form_button_text, booking_bg_color, booking_bg_image_url, booking_layout, booking_font, booking_text_color, logo_url, website_url, social_links, show_social_on_booking")
+    .select("*")
     .eq("slug", artistSlug)
     .single();
 
@@ -48,7 +48,9 @@ export default async function BookPage({
       buttonText={artist.form_button_text || "Submit Inquiry"}
       layout={(artist.booking_layout as "centered" | "banner" | "minimal") || "centered"}
       font={(artist.booking_font as "sans" | "serif" | "mono") || "sans"}
-      textColor={(artist.booking_text_color as "dark" | "light") || undefined}
+      fontScale={(artist.booking_font_scale as "small" | "base" | "large") || "base"}
+      textColor={(artist.booking_text_color as string) || undefined}
+      buttonColor={(artist.booking_button_color as string) || undefined}
       bgColor={artist.booking_bg_color || "#ffffff"}
       bgImageUrl={artist.booking_bg_image_url || null}
       logoUrl={artist.logo_url || null}
