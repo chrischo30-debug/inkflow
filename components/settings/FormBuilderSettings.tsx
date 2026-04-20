@@ -67,6 +67,8 @@ export function FormBuilderSettings({
   initialFormHeader,
   initialFormSubtext,
   initialFormButtonText,
+  initialConfirmationMessage,
+  initialSuccessRedirectUrl,
   onPreviewReady,
 }: {
   initialFields: FormFieldConfig[];
@@ -74,6 +76,8 @@ export function FormBuilderSettings({
   initialFormHeader: string;
   initialFormSubtext: string;
   initialFormButtonText: string;
+  initialConfirmationMessage: string;
+  initialSuccessRedirectUrl: string;
   onPreviewReady?: (open: () => void) => void;
 }) {
   const [fields, setFields] = useState<FormFieldConfig[]>(
@@ -83,6 +87,9 @@ export function FormBuilderSettings({
   const [formHeader, setFormHeader] = useState(initialFormHeader);
   const [formSubtext, setFormSubtext] = useState(initialFormSubtext);
   const [formButtonText, setFormButtonText] = useState(initialFormButtonText);
+  const [confirmationMessage, setConfirmationMessage] = useState(initialConfirmationMessage);
+  const [successRedirectUrl, setSuccessRedirectUrl] = useState(initialSuccessRedirectUrl);
+  const [afterSubmit, setAfterSubmit] = useState<"message" | "redirect">(initialSuccessRedirectUrl ? "redirect" : "message");
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -90,7 +97,7 @@ export function FormBuilderSettings({
   const [draggingRef, setDraggingRef] = useState<ItemRef | null>(null);
   const openPreviewRef = useRef<() => void>(() => {});
   const openPreview = () => {
-    const state = { form_header: formHeader, form_subtext: formSubtext, form_button_text: formButtonText };
+    const state = { form_header: formHeader, form_subtext: formSubtext, form_button_text: formButtonText, form_confirmation_message: confirmationMessage, form_success_redirect_url: successRedirectUrl };
     window.open(`/form-builder/preview?s=${btoa(JSON.stringify(state))}`, "_blank");
   };
   openPreviewRef.current = openPreview;
@@ -382,6 +389,8 @@ export function FormBuilderSettings({
         form_header: formHeader.trim() || null,
         form_subtext: formSubtext.trim() || null,
         form_button_text: formButtonText.trim() || null,
+        form_confirmation_message: confirmationMessage.trim() || null,
+        form_success_redirect_url: afterSubmit === "redirect" ? (successRedirectUrl.trim() || null) : null,
       }),
     });
     if (!appearanceRes.ok) {
@@ -761,6 +770,41 @@ export function FormBuilderSettings({
             placeholder="Submit Inquiry"
           />
         </label>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-on-surface">After Submission</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAfterSubmit("message")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "message" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}
+            >
+              Show message
+            </button>
+            <button
+              type="button"
+              onClick={() => setAfterSubmit("redirect")}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "redirect" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}
+            >
+              Redirect to URL
+            </button>
+          </div>
+          {afterSubmit === "message" ? (
+            <textarea
+              className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 min-h-[64px] resize-y text-sm"
+              value={confirmationMessage}
+              onChange={(e) => setConfirmationMessage(e.target.value)}
+              placeholder="Thanks for reaching out! I'll review your request and get back to you shortly."
+            />
+          ) : (
+            <input
+              className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 text-sm"
+              value={successRedirectUrl}
+              onChange={(e) => setSuccessRedirectUrl(e.target.value)}
+              placeholder="https://yourwebsite.com/thank-you"
+              type="url"
+            />
+          )}
+        </div>
       </div>
 
       <div className="space-y-3 mb-6">

@@ -22,7 +22,7 @@ export default async function PaymentLinksPage() {
   const paymentLinks = (artist?.payment_links ?? {}) as Record<string, string>;
 
   return (
-    <div className="dashboard flex h-screen w-full bg-surface overflow-hidden">
+    <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">

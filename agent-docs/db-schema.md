@@ -20,6 +20,19 @@ Extends `auth.users`. One row per artist.
 | `calendar_sync_enabled` | boolean | |
 | `google_refresh_token` | text | Encrypted server-side only |
 | `auto_process_inquiries` | boolean | Skip manual review step |
+| `booking_bg_color` | text | Background color hex code |
+| `booking_bg_image_url` | text | Optional background image |
+| `booking_layout` | text | "centered" \| "banner" \| "minimal" |
+| `booking_font` | text | "sans" \| "serif" \| "mono" |
+| `booking_text_color` | text | Hex code for text |
+| `booking_font_scale` | text | "small" \| "base" \| "large" |
+| `booking_button_color` | text | Hex code for buttons/accents |
+| `logo_url` | text | Optional brand logo |
+| `website_url` | text | |
+| `social_links` | jsonb | Array of {platform, url} |
+| `show_social_on_booking` | boolean | |
+| `form_confirmation_message` | text | Custom message shown after submission |
+| `form_success_redirect_url` | text | If set, redirect here instead of showing message |
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | Auto-updated by trigger |
 

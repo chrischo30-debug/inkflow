@@ -27,7 +27,7 @@ export default async function FormBuilderPage() {
 
   const { data: artist } = await supabase
     .from("artists")
-    .select("slug, form_header, form_subtext, form_button_text")
+    .select("slug, form_header, form_subtext, form_button_text, form_confirmation_message, form_success_redirect_url")
     .eq("id", user.id)
     .single();
 
@@ -44,6 +44,8 @@ export default async function FormBuilderPage() {
         initialFormHeader={artist?.form_header ?? ""}
         initialFormSubtext={artist?.form_subtext ?? ""}
         initialFormButtonText={artist?.form_button_text ?? ""}
+        initialConfirmationMessage={artist?.form_confirmation_message ?? ""}
+        initialSuccessRedirectUrl={artist?.form_success_redirect_url ?? ""}
       />
     </div>
   );

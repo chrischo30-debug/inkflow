@@ -16,9 +16,11 @@ interface Props {
   initialFormHeader: string;
   initialFormSubtext: string;
   initialFormButtonText: string;
+  initialConfirmationMessage: string;
+  initialSuccessRedirectUrl: string;
 }
 
-export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields, initialFormHeader, initialFormSubtext, initialFormButtonText }: Props) {
+export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields, initialFormHeader, initialFormSubtext, initialFormButtonText, initialConfirmationMessage, initialSuccessRedirectUrl }: Props) {
   const [previewFn, setPreviewFn] = useState<(() => void) | null>(null);
 
   return (
@@ -50,6 +52,8 @@ export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields
             initialFormHeader={initialFormHeader}
             initialFormSubtext={initialFormSubtext}
             initialFormButtonText={initialFormButtonText}
+            initialConfirmationMessage={initialConfirmationMessage}
+            initialSuccessRedirectUrl={initialSuccessRedirectUrl}
             onPreviewReady={(fn) => setPreviewFn(() => fn)}
           />
         </section>

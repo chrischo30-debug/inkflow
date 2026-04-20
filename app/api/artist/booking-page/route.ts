@@ -3,8 +3,9 @@ import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
 const socialLinkSchema = z.object({
-  platform: z.enum(["instagram", "tiktok", "twitter", "facebook", "website"]),
+  platform: z.enum(["instagram", "tiktok", "twitter", "facebook", "website", "other"]),
   url: z.string().url(),
+  label: z.string().optional(),
 });
 
 const schema = z.object({

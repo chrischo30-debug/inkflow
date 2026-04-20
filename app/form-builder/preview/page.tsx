@@ -87,6 +87,8 @@ export default async function FormBuilderPreviewPage({
         websiteUrl={(settings.website_url as string) ?? artist.website_url ?? ""}
         socialLinks={Array.isArray(settings.social_links) ? settings.social_links : (Array.isArray(artist.social_links) ? artist.social_links : [])}
         showSocialOnBooking={(settings.show_social_on_booking as boolean) ?? artist.show_social_on_booking ?? false}
+        confirmationMessage={(settings.form_confirmation_message as string) ?? artist.form_confirmation_message ?? undefined}
+        successRedirectUrl={undefined}
       />
     </div>
   );

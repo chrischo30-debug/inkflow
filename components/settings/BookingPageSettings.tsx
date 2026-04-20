@@ -40,12 +40,12 @@ function ColorInput({ value, onChange }: { value: string; onChange: (hex: string
   );
 }
 
-type Platform = "instagram" | "tiktok" | "twitter" | "facebook" | "website";
+type Platform = "instagram" | "tiktok" | "twitter" | "facebook" | "other";
 type Layout = "centered" | "banner" | "minimal";
 type Font = "sans" | "serif" | "mono";
 type FontScale = "small" | "base" | "large";
 
-interface SocialLink { platform: Platform; url: string; }
+interface SocialLink { platform: Platform; url: string; label?: string; }
 
 export interface BookingPageConfig {
   booking_bg_color: string;
@@ -74,13 +74,13 @@ const PLATFORMS: { id: Platform; label: string }[] = [
   { id: "tiktok",    label: "TikTok" },
   { id: "twitter",   label: "Twitter / X" },
   { id: "facebook",  label: "Facebook" },
-  { id: "website",   label: "Website" },
+  { id: "other",     label: "Other" },
 ];
 
 const LAYOUTS: { id: Layout; label: string; desc: string }[] = [
+  { id: "minimal",  label: "Minimal",  desc: "Clean, no card, left-aligned" },
   { id: "centered", label: "Centered", desc: "Card centered on background" },
   { id: "banner",   label: "Split",    desc: "Info on left, form on right" },
-  { id: "minimal",  label: "Minimal",  desc: "Clean, no card, left-aligned" },
 ];
 
 const FONTS: { id: Font; label: string; sample: string; style: React.CSSProperties }[] = [
@@ -129,7 +129,7 @@ const LayoutPreview = ({ id }: { id: Layout }) => {
 export function BookingPageSettings({ initial, onPreviewReady }: { initial: BookingPageConfig; onPreviewReady?: (open: () => void) => void }) {
   const [bgColor, setBgColor]       = useState(initial.booking_bg_color || "#ffffff");
   const [bgImageUrl, setBgImageUrl] = useState(initial.booking_bg_image_url || null);
-  const [layout, setLayout]         = useState<Layout>(initial.booking_layout || "centered");
+  const [layout, setLayout]         = useState<Layout>(initial.booking_layout || "minimal");
   const [font, setFont]             = useState<Font>(initial.booking_font || "sans");
   const [fontScale, setFontScale]   = useState<FontScale>(initial.booking_font_scale || "base");
   const [textColor, setTextColor]   = useState<string>(initial.booking_text_color || autoTextColor(initial.booking_bg_color || "#ffffff"));
@@ -218,7 +218,11 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
     setSaving(true);
     setSaveStatus("idle");
     setSaveError("");
-    const validLinks = socialLinks.filter((l) => l.url.startsWith("http"));
+    const ensureHttp = (url: string) =>
+      url && !url.match(/^https?:\/\//) ? `https://${url}` : url;
+    const validLinks = socialLinks
+      .filter((l) => l.url.trim())
+      .map((l) => ({ ...l, url: ensureHttp(l.url.trim()) }));
     const res = await fetch("/api/artist/booking-page", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -231,7 +235,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
         booking_text_color: textColor,
         booking_button_color: buttonColor,
         logo_url: logoUrl || null,
-        website_url: websiteUrl,
+        website_url: ensureHttp(websiteUrl.trim()),
         social_links: validLinks,
         show_social_on_booking: showSocial,
       }),
@@ -480,26 +484,36 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
         <div className="space-y-2">
           <p className="text-xs font-medium text-on-surface-variant">Social Links</p>
           {socialLinks.map((link, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <select
-                value={link.platform}
-                onChange={(e) => updateSocialLink(i, { platform: e.target.value as Platform })}
-                className="rounded-lg border border-outline-variant/40 bg-surface px-2 py-2 text-sm text-on-surface"
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-              <input
-                className="flex-1 rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm"
-                value={link.url}
-                onChange={(e) => updateSocialLink(i, { url: e.target.value })}
-                placeholder="https://..."
-                type="url"
-              />
-              <button type="button" onClick={() => removeSocialLink(i)} className="p-1.5 rounded text-on-surface-variant hover:text-destructive transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+            <div key={i} className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <select
+                  value={link.platform}
+                  onChange={(e) => updateSocialLink(i, { platform: e.target.value as Platform, label: "" })}
+                  className="rounded-lg border border-outline-variant/40 bg-surface px-2 py-2 text-sm text-on-surface"
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+                <input
+                  className="flex-1 rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm"
+                  value={link.url}
+                  onChange={(e) => updateSocialLink(i, { url: e.target.value })}
+                  placeholder="https://..."
+                  type="url"
+                />
+                <button type="button" onClick={() => removeSocialLink(i)} className="p-1.5 rounded text-on-surface-variant hover:text-destructive transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {link.platform === "other" && (
+                <input
+                  className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm"
+                  value={link.label ?? ""}
+                  onChange={(e) => updateSocialLink(i, { label: e.target.value })}
+                  placeholder="Button label (e.g. My Website)"
+                />
+              )}
             </div>
           ))}
           <button

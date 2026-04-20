@@ -57,6 +57,8 @@ export default async function BookPage({
       websiteUrl={artist.website_url || ""}
       socialLinks={Array.isArray(artist.social_links) ? artist.social_links : []}
       showSocialOnBooking={artist.show_social_on_booking ?? false}
+      confirmationMessage={artist.form_confirmation_message || undefined}
+      successRedirectUrl={artist.form_success_redirect_url || undefined}
     />
   );
 }

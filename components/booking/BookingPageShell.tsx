@@ -4,7 +4,7 @@ import { FormFieldConfig, CustomFormFieldConfig } from "@/lib/form-fields";
 type Layout = "centered" | "banner" | "minimal";
 type Font   = "sans" | "serif" | "mono";
 
-interface SocialLink { platform: string; url: string; }
+interface SocialLink { platform: string; url: string; label?: string; }
 
 interface Props {
   artistId: string;
@@ -24,6 +24,8 @@ interface Props {
   socialLinks: SocialLink[];
   showSocialOnBooking: boolean;
   fontScale?: "small" | "base" | "large";
+  confirmationMessage?: string;
+  successRedirectUrl?: string;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -77,12 +79,12 @@ function SocialLinks({ websiteUrl, socialLinks, fgColor, justify = "start" }: {
   if (all.length === 0) return null;
   return (
     <div className={`flex flex-wrap gap-2 ${justify === "center" ? "justify-center" : ""}`}>
-      {all.map((l) => (
-        <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
+      {all.map((l, i) => (
+        <a key={l.url + i} href={l.url} target="_blank" rel="noopener noreferrer"
            style={{ color: fgColor, borderColor: fgColor }}
            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full border text-sm font-medium opacity-90 hover:opacity-100 transition-opacity">
-          <PlatformIcon platform={l.platform} />
-          {PLATFORM_LABELS[l.platform] ?? l.platform}
+          {l.platform !== "other" && <PlatformIcon platform={l.platform} />}
+          {l.platform === "other" ? (l.label || "Link") : (PLATFORM_LABELS[l.platform] ?? l.platform)}
         </a>
       ))}
     </div>
@@ -93,7 +95,8 @@ export function BookingPageShell({
   artistId, formFields, customFormFields,
   formHeader, formSubtext, buttonText,
   layout, font, bgColor, bgImageUrl, textColor, buttonColor,
-  logoUrl, websiteUrl, socialLinks, showSocialOnBooking, fontScale = "base"
+  logoUrl, websiteUrl, socialLinks, showSocialOnBooking, fontScale = "base",
+  confirmationMessage, successRedirectUrl
 }: Props) {
   const bgStyle = bgImageUrl
     ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -129,9 +132,17 @@ export function BookingPageShell({
     font === "serif" ? { fontFamily: "var(--font-booking-serif)" } :
     font === "mono"  ? { fontFamily: "var(--font-booking-mono)" }  : {};
 
-  const fontScaleClass = 
-    fontScale === "small" ? "text-sm" :
-    fontScale === "large" ? "text-lg" : "text-base";
+  const wrapperFontSize =
+    fontScale === "small" ? "0.9375rem" :
+    fontScale === "large" ? "1.25rem" : "1.0625rem";
+
+  const headingClass =
+    fontScale === "small" ? "text-3xl md:text-4xl" :
+    fontScale === "large" ? "text-5xl md:text-6xl" : "text-4xl md:text-5xl";
+
+  const subtextClass =
+    fontScale === "small" ? "text-base" :
+    fontScale === "large" ? "text-xl" : "text-lg";
 
   const btnColor = buttonColor || "#1a1c22";
 
@@ -143,14 +154,14 @@ export function BookingPageShell({
           --color-ring: ${btnColor};
           --primary: ${btnColor};
           --color-primary: ${btnColor};
-          font-size: 1rem;
+          font-size: ${wrapperFontSize};
         }
         .booking-ui-wrapper label {
-          font-size: 1rem;
+          font-size: inherit;
           font-weight: 700;
         }
         .booking-ui-wrapper input, .booking-ui-wrapper textarea, .booking-ui-wrapper select {
-          font-size: 1.0625rem;
+          font-size: inherit;
           font-weight: 500;
           background-color: #ffffff !important;
           color: #111111 !important;
@@ -171,6 +182,8 @@ export function BookingPageShell({
           formFields={formFields}
           customFormFields={customFormFields}
           buttonText={buttonText}
+          confirmationMessage={confirmationMessage}
+          successRedirectUrl={successRedirectUrl}
         />
       </div>
     </>
@@ -179,14 +192,14 @@ export function BookingPageShell({
   if (layout === "banner") {
     // Split layout: info on left, form on right, single background throughout
     return (
-      <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle, color: fgColor }} className={`px-6 py-14 ${fontScaleClass}`}>
+      <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle, color: fgColor }} className="px-6 py-14">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-start gap-12 md:gap-16">
           <div className="md:sticky md:top-14 md:w-2/5 flex flex-col gap-4">
             {logoUrl && (
               <img src={logoUrl} alt="Logo" className="h-14 w-auto object-contain self-start" />
             )}
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-tight">{formHeader}</h1>
-            <p style={{ color: fgMuted }} className="text-lg [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold" dangerouslySetInnerHTML={{ __html: formSubtext }} />
+            <h1 className={`${headingClass} font-bold tracking-tight leading-tight`}>{formHeader}</h1>
+            <p style={{ color: fgMuted }} className={`${subtextClass} [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold`} dangerouslySetInnerHTML={{ __html: formSubtext }} />
             {showSocialOnBooking && (
               <div className="mt-2">
                 <SocialLinks websiteUrl={websiteUrl} socialLinks={socialLinks} fgColor={fgColor} />
@@ -203,13 +216,13 @@ export function BookingPageShell({
 
   if (layout === "minimal") {
     return (
-      <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle, color: fgColor }} className={`px-6 py-14 ${fontScaleClass}`}>
+      <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle, color: fgColor }} className="px-6 py-14">
         <div className="max-w-3xl mx-auto">
           {logoUrl && (
             <img src={logoUrl} alt="Logo" className="h-16 w-auto md:h-20 object-contain mb-8" />
           )}
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">{formHeader}</h1>
-          <p style={{ color: fgMuted }} className="mb-4 text-lg [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold" dangerouslySetInnerHTML={{ __html: formSubtext }} />
+          <h1 className={`${headingClass} font-bold tracking-tight mb-2`}>{formHeader}</h1>
+          <p style={{ color: fgMuted }} className={`mb-4 ${subtextClass} [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold`} dangerouslySetInnerHTML={{ __html: formSubtext }} />
           {showSocialOnBooking && (
             <div className="mb-6">
               <SocialLinks websiteUrl={websiteUrl} socialLinks={socialLinks} fgColor={fgColor} />
@@ -226,14 +239,14 @@ export function BookingPageShell({
 
   // Default: centered
   return (
-    <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle }} className={`py-16 px-4 md:px-8 ${fontScaleClass}`}>
+    <main style={{ minHeight: "100vh", ...bgStyle, ...fontStyle }} className="py-16 px-4 md:px-8">
       <div className="max-w-2xl mx-auto">
         <div className="mb-10 text-center" style={{ color: fgColor }}>
           {logoUrl && (
             <img src={logoUrl} alt="Logo" className="h-16 w-auto md:h-24 object-contain mx-auto mb-6" />
           )}
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">{formHeader}</h1>
-          <p style={{ color: fgMuted }} className="text-lg [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold" dangerouslySetInnerHTML={{ __html: formSubtext }} />
+          <h1 className={`${headingClass} font-bold tracking-tight mb-2`}>{formHeader}</h1>
+          <p style={{ color: fgMuted }} className={`${subtextClass} [&_a]:underline [&_a]:opacity-90 [&_strong]:font-bold [&_b]:font-bold`} dangerouslySetInnerHTML={{ __html: formSubtext }} />
           {showSocialOnBooking && (
             <div className="mt-4">
               <SocialLinks websiteUrl={websiteUrl} socialLinks={socialLinks} fgColor={fgColor} justify="center" />

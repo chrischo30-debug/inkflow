@@ -6,6 +6,8 @@ const schema = z.object({
   form_header: z.string().max(200).optional(),
   form_subtext: z.string().max(500).optional(),
   form_button_text: z.string().max(100).optional(),
+  form_confirmation_message: z.string().max(500).optional(),
+  form_success_redirect_url: z.string().url().or(z.literal("")).optional(),
 });
 
 export async function PUT(req: Request) {
@@ -23,6 +25,8 @@ export async function PUT(req: Request) {
         form_header: parsed.form_header ?? null,
         form_subtext: parsed.form_subtext ?? null,
         form_button_text: parsed.form_button_text ?? null,
+        form_confirmation_message: parsed.form_confirmation_message ?? null,
+        form_success_redirect_url: parsed.form_success_redirect_url ?? null,
       })
       .eq("id", user.id);
 

@@ -55,3 +55,4 @@
 - [ ] Client portal (client can see their own booking status)
 - [ ] Deposit automation (auto-mark paid via Stripe webhook)
 - [ ] Custom domain for booking form
+- [ ] Instagram DM integration (receive inquiries via DM, reply from pipeline)

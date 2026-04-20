@@ -49,7 +49,7 @@ function makeFieldSchema(required: boolean, key: FormFieldKey, cfg?: FormFieldCo
     return z
       .string()
       .optional()
-      .refine((value) => !value || !Number.isNaN(Number(value)), "Budget must be a number")
+      .refine((value) => !value || (/^\d+$/.test(value.trim()) && Number(value) >= 0), "Budget must be a whole dollar amount")
       .refine((value) => !required || Boolean(value && value.trim()), "Budget is required");
   }
   if (key === "reference_images" && cfg?.input_type === "file_or_link") {
@@ -129,15 +129,19 @@ export function InquiryForm({
   formFields,
   customFormFields,
   buttonText = "Submit Inquiry",
+  confirmationMessage,
+  successRedirectUrl,
 }: {
   artistId: string;
   formFields: FormFieldConfig[];
   customFormFields: CustomFormFieldConfig[];
   buttonText?: string;
+  confirmationMessage?: string;
+  successRedirectUrl?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsgs, setErrorMsgs] = useState<string[]>([]);
   const [customAnswers, setCustomAnswers] = useState<Record<string, CustomAnswerValue>>({});
   const [referenceUploads, setReferenceUploads] = useState<string[]>([]);
   const [customUploads, setCustomUploads] = useState<Record<string, string[]>>({});
@@ -200,7 +204,7 @@ export function InquiryForm({
         setReferenceUploads((prev) => mergeUniqueUrls(prev, uploadedUrls));
       }
     } catch (error: unknown) {
-      setErrorMsg(error instanceof Error ? error.message : "Failed to upload files.");
+      setErrorMsgs([error instanceof Error ? error.message : "Failed to upload files."]);
     } finally {
       if (customKey) {
         setUploadingCustomField((prev) => (prev === customKey ? null : prev));
@@ -211,14 +215,14 @@ export function InquiryForm({
   };
 
   async function onSubmit(data: InquiryFormValues) {
-    setErrorMsg("");
+    setErrorMsgs([]);
     const manualReferenceUrls = parseUrlList(data.reference_urls || "");
     const allReferenceUrls = mergeUniqueUrls(manualReferenceUrls, referenceUploads);
-    if (isRequired("reference_images") && allReferenceUrls.length === 0) {
-      setErrorMsg("Reference Images is required.");
-      return;
-    }
 
+    const validationErrors: string[] = [];
+    if (isRequired("reference_images") && allReferenceUrls.length === 0) {
+      validationErrors.push("Reference Images is required.");
+    }
     for (const field of enabledCustomFields) {
       const value = customAnswers[field.field_key];
       const customFileLinks =
@@ -237,12 +241,14 @@ export function InquiryForm({
               : typeof value === "number"
                 ? !Number.isNaN(value)
                 : Boolean(String(value ?? "").trim());
-        if (!hasValue) {
-          setErrorMsg(`${field.label} is required.`);
-          return;
-        }
+        if (!hasValue) validationErrors.push(`${field.label} is required.`);
       }
     }
+    if (validationErrors.length > 0) {
+      setErrorMsgs(validationErrors);
+      return;
+    }
+
     startTransition(async () => {
       try {
         const customPayload: Record<string, CustomAnswerValue> = { ...customAnswers };
@@ -277,9 +283,13 @@ export function InquiryForm({
           throw new Error(body.error || "Failed to submit inquiry");
         }
 
-        setIsSuccess(true);
+        if (successRedirectUrl) {
+          window.location.href = successRedirectUrl;
+        } else {
+          setIsSuccess(true);
+        }
       } catch (err: unknown) {
-        setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
+        setErrorMsgs([err instanceof Error ? err.message : "An unexpected error occurred."]);
       }
     });
   }
@@ -287,9 +297,9 @@ export function InquiryForm({
   if (isSuccess) {
     return (
       <div className="p-8 text-center space-y-4 border border-border rounded-md bg-card">
-        <h3 className="text-xl font-heading font-semibold text-primary">Inquiry Sent!</h3>
+        <h3 className="text-xl font-heading font-semibold text-primary">Submission Confirmed</h3>
         <p className="text-muted-foreground text-sm">
-          Thank you for reaching out. The artist will review your request and get back to you shortly.
+          {confirmationMessage || "Thanks for reaching out! I'll review your request and get back to you shortly."}
         </p>
       </div>
     );
@@ -364,7 +374,7 @@ export function InquiryForm({
   const OrDivider = () => (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-px bg-[var(--primary)]/20" />
-      <span className="text-[10px] uppercase tracking-widest text-[var(--primary)] font-medium px-1">or also paste links</span>
+      <span className="text-[10px] uppercase tracking-widest text-[var(--primary)] font-medium px-1">paste links or upload images above</span>
       <div className="flex-1 h-px bg-[var(--primary)]/20" />
     </div>
   );
@@ -408,7 +418,12 @@ export function InquiryForm({
         );
       }
       if (inputType === "number") {
-        return <Input type="number" min="0" step="1" placeholder={placeholder || "0"} {...field} />;
+        return (
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium pointer-events-none" style={{ color: "#111111" }}>$</span>
+            <Input type="number" min="0" step="1" placeholder={placeholder || "0"} className="pl-7" {...field} />
+          </div>
+        );
       }
       if (inputType === "date") {
         return <Input type="date" {...field} />;
@@ -609,9 +624,11 @@ export function InquiryForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {errorMsg && (
-          <div className="p-3 text-sm font-medium text-destructive-foreground bg-destructive/90 rounded-md">
-            {errorMsg}
+        {errorMsgs.length > 0 && (
+          <div className="p-3 text-sm font-medium text-destructive-foreground bg-destructive/90 rounded-md space-y-1">
+            {errorMsgs.map((msg, i) => (
+              <p key={i}>{msg}</p>
+            ))}
           </div>
         )}
 
