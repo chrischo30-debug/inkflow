@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Epilogue, Manrope } from "next/font/google";
+import { Epilogue, Manrope, Cormorant_Garamond, Space_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 
 const epilogue = Epilogue({
@@ -16,18 +17,35 @@ const manrope = Manrope({
   display: "swap",
 });
 
+const cormorant = Cormorant_Garamond({
+  variable: "--font-booking-serif",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+const spaceMono = Space_Mono({
+  variable: "--font-booking-mono",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "FlashBook",
   description: "A booking management app designed for tattoo artists for faster, simpler appointments",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const accentTheme = cookieStore.get("accent_theme")?.value ?? "crimson";
+
   return (
-    <html lang="en" className={`${epilogue.variable} ${manrope.variable} antialiased`}>
+    <html lang="en" data-theme={accentTheme} className={`${epilogue.variable} ${manrope.variable} ${cormorant.variable} ${spaceMono.variable} antialiased`}>
       <body className="min-h-screen flex flex-col">{children}</body>
     </html>
   );

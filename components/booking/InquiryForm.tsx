@@ -128,10 +128,12 @@ export function InquiryForm({
   artistId,
   formFields,
   customFormFields,
+  buttonText = "Submit Inquiry",
 }: {
   artistId: string;
   formFields: FormFieldConfig[];
   customFormFields: CustomFormFieldConfig[];
+  buttonText?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
@@ -292,6 +294,80 @@ export function InquiryForm({
       </div>
     );
   }
+
+  // Shared upload zone — styled to match light dashboard theme
+  const UploadZone = ({
+    uploading,
+    onFiles,
+    id,
+  }: {
+    uploading: boolean;
+    onFiles: (files: FileList | null) => void;
+    id: string;
+  }) => (
+    <label
+      htmlFor={id}
+      className={`
+        flex flex-col items-center justify-center gap-2 w-full
+        min-h-[80px] rounded-md border border-dashed cursor-pointer
+        transition-colors duration-150 select-none
+        ${uploading
+          ? 'border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)]'
+          : 'border-[var(--border)] bg-[var(--surface-container-low)] text-[var(--on-surface-variant)] hover:border-[var(--primary)]/50 hover:text-[var(--primary)]'
+        }
+      `}
+    >
+      <input
+        id={id}
+        type="file"
+        multiple
+        accept="image/*"
+        className="sr-only"
+        disabled={uploading}
+        onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = ''; }}
+      />
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+      </svg>
+      <span className="text-xs">
+        {uploading ? 'Uploading…' : 'Click to upload images'}
+      </span>
+    </label>
+  );
+
+  // Uploaded URLs list — light theme
+  const UploadedList = ({ urls, onRemove }: { urls: string[]; onRemove: (url: string) => void }) =>
+    urls.length === 0 ? null : (
+      <ul className="mt-2 space-y-1">
+        {urls.map((url) => (
+          <li key={url} className="flex items-center gap-2 text-xs text-[var(--on-surface-variant)] bg-[var(--surface-container)] rounded px-2 py-1.5">
+            <svg className="w-3 h-3 shrink-0 text-[var(--primary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+            </svg>
+            <a href={url} target="_blank" rel="noreferrer" className="truncate hover:text-[var(--primary)] hover:underline transition-colors">
+              {url.split('/').pop()}
+            </a>
+            <button
+              type="button"
+              onClick={() => onRemove(url)}
+              className="ml-auto shrink-0 text-[var(--outline)] hover:text-[var(--error)] transition-colors"
+              aria-label="Remove"
+            >
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+
+  // Divider between upload and link textarea
+  const OrDivider = () => (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-px bg-[var(--border)]" />
+      <span className="text-[10px] uppercase tracking-widest text-[var(--outline)] font-medium px-1">or also paste links</span>
+      <div className="flex-1 h-px bg-[var(--border)]" />
+    </div>
+  );
 
   const renderBaseField = (key: FormFieldKey) => {
     const cfg = baseFieldMap.get(key);
@@ -496,49 +572,25 @@ export function InquiryForm({
                 <FormControl>
                   {inputType === "file_or_link" ? (
                     <div className="space-y-3">
+                      <UploadZone
+                        id="reference_images_upload"
+                        uploading={uploadingReference}
+                        onFiles={(files) => uploadReferenceFiles(files)}
+                      />
+                      <UploadedList
+                        urls={referenceUploads}
+                        onRemove={(url) => setReferenceUploads(prev => prev.filter(u => u !== url))}
+                      />
+                      <OrDivider />
                       <Textarea
-                        placeholder={placeholder || "Paste image links, one per line"}
-                        className="min-h-[100px] resize-y"
+                        placeholder={placeholder || "https://example.com/ref1.jpg\nhttps://example.com/ref2.jpg"}
+                        className="min-h-[72px] resize-y text-xs"
                         value={field.value ?? ""}
                         onChange={field.onChange}
                         onBlur={field.onBlur}
                         name={field.name}
                         ref={field.ref as (instance: HTMLTextAreaElement | null) => void}
                       />
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-on-surface">
-                          Upload reference files
-                          <Input
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            className="mt-1"
-                            onChange={(e) => {
-                              uploadReferenceFiles(e.target.files);
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        {uploadingReference && (
-                          <p className="text-xs text-on-surface-variant">Uploading files...</p>
-                        )}
-                        {referenceUploads.length > 0 && (
-                          <ul className="space-y-1">
-                            {referenceUploads.map((url) => (
-                              <li key={url}>
-                                <a
-                                  href={url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-sm text-primary underline break-all"
-                                >
-                                  {url}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
                     </div>
                   ) : (
                     renderControl(field)
@@ -665,46 +717,29 @@ export function InquiryForm({
 
                 {field.type === "file_or_link" && (
                   <div className="space-y-3">
+                    <UploadZone
+                      id={`upload_${field.field_key}`}
+                      uploading={uploadingCustomField === field.field_key}
+                      onFiles={(files) => uploadReferenceFiles(files, field.field_key)}
+                    />
+                    <UploadedList
+                      urls={customUploads[field.field_key] ?? []}
+                      onRemove={(url) =>
+                        setCustomUploads(prev => ({
+                          ...prev,
+                          [field.field_key]: (prev[field.field_key] ?? []).filter(u => u !== url),
+                        }))
+                      }
+                    />
+                    <OrDivider />
                     <Textarea
-                      value={String(customAnswers[field.field_key] ?? "")}
-                      placeholder={field.placeholder || "Paste links, one per line"}
-                      className="min-h-[100px] resize-y"
+                      value={String(customAnswers[field.field_key] ?? '')}
+                      placeholder={field.placeholder || 'https://example.com/image.jpg'}
+                      className="min-h-[72px] resize-y text-xs"
                       onChange={(e) =>
                         setCustomAnswers((prev) => ({ ...prev, [field.field_key]: e.target.value }))
                       }
                     />
-                    <label className="text-sm font-medium text-on-surface">
-                      Upload files
-                      <Input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        className="mt-1"
-                        onChange={(e) => {
-                          uploadReferenceFiles(e.target.files, field.field_key);
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    {uploadingCustomField === field.field_key && (
-                      <p className="text-xs text-on-surface-variant">Uploading files...</p>
-                    )}
-                    {(customUploads[field.field_key] ?? []).length > 0 && (
-                      <ul className="space-y-1">
-                        {(customUploads[field.field_key] ?? []).map((url) => (
-                          <li key={`${field.field_key}-${url}`}>
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-sm text-primary underline break-all"
-                            >
-                              {url}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                   </div>
                 )}
               </div>
@@ -712,8 +747,8 @@ export function InquiryForm({
           })}
         </div>
 
-        <Button type="submit" className="w-full font-semibold" disabled={isPending}>
-          {isPending ? "Submitting..." : "Submit Inquiry"}
+        <Button type="submit" className="w-full font-semibold py-6 text-base" disabled={isPending}>
+          {isPending ? "Submitting..." : buttonText}
         </Button>
       </form>
     </Form>

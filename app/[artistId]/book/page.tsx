@@ -1,4 +1,4 @@
-import { InquiryForm } from "@/components/booking/InquiryForm";
+import { BookingPageShell } from "@/components/booking/BookingPageShell";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCustomFormFields, normalizeFormFields } from "@/lib/form-fields";
@@ -12,50 +12,49 @@ export default async function BookPage({
   params: Promise<{ artistId: string }>;
 }) {
   const { artistId: artistSlug } = await params;
-
-  if (!artistSlug) {
-    notFound();
-  }
+  if (!artistSlug) notFound();
 
   const admin = createAdminClient();
   const { data: artist } = await admin
     .from("artists")
-    .select("id, name, slug")
+    .select("id, name, slug, form_header, form_subtext, form_button_text, booking_bg_color, booking_bg_image_url, booking_layout, booking_font, booking_text_color, logo_url, website_url, social_links, show_social_on_booking")
     .eq("slug", artistSlug)
     .single();
 
-  if (!artist) {
-    notFound();
-  }
+  if (!artist) notFound();
 
   const artistName = artist.name;
-  const { data: rawFields } = await admin
-    .from("form_fields")
-    .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
-    .eq("artist_id", artist.id)
-    .order("sort_order", { ascending: true });
-  const formFields = normalizeFormFields(rawFields ?? []);
-  const { data: rawCustomFields } = await admin
-    .from("custom_form_fields")
-    .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
-    .eq("artist_id", artist.id)
-    .order("sort_order", { ascending: true });
-  const customFormFields = normalizeCustomFormFields(rawCustomFields ?? []);
+
+  const [{ data: rawFields }, { data: rawCustomFields }] = await Promise.all([
+    admin
+      .from("form_fields")
+      .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
+      .eq("artist_id", artist.id)
+      .order("sort_order", { ascending: true }),
+    admin
+      .from("custom_form_fields")
+      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
+      .eq("artist_id", artist.id)
+      .order("sort_order", { ascending: true }),
+  ]);
 
   return (
-    <main className="min-h-screen py-16 px-4 md:px-8 max-w-3xl mx-auto">
-      <div className="mb-12 text-center">
-        <h1 className="text-4xl font-heading font-bold tracking-tight mb-3">
-          Book with {artistName}
-        </h1>
-        <p className="text-muted-foreground">
-          Fill out the form below to request an appointment. {artistName} will review your idea and get back to you.
-        </p>
-      </div>
-
-      <div className="bg-card border border-border rounded-md p-6 md:p-8 shadow-sm">
-        <InquiryForm artistId={artist.id} formFields={formFields} customFormFields={customFormFields} />
-      </div>
-    </main>
+    <BookingPageShell
+      artistId={artist.id}
+      formFields={normalizeFormFields(rawFields ?? [])}
+      customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
+      formHeader={artist.form_header || `Book with ${artistName}`}
+      formSubtext={artist.form_subtext || `Fill out the form below to request an appointment. ${artistName} will review your idea and get back to you.`}
+      buttonText={artist.form_button_text || "Submit Inquiry"}
+      layout={(artist.booking_layout as "centered" | "banner" | "minimal") || "centered"}
+      font={(artist.booking_font as "sans" | "serif" | "mono") || "sans"}
+      textColor={(artist.booking_text_color as "dark" | "light") || undefined}
+      bgColor={artist.booking_bg_color || "#ffffff"}
+      bgImageUrl={artist.booking_bg_image_url || null}
+      logoUrl={artist.logo_url || null}
+      websiteUrl={artist.website_url || ""}
+      socialLinks={Array.isArray(artist.social_links) ? artist.social_links : []}
+      showSocialOnBooking={artist.show_social_on_booking ?? false}
+    />
   );
 }

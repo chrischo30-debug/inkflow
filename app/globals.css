@@ -124,6 +124,69 @@
   --chart-5: #ffb4ac;
 }
 
+/* Blue accent theme — scoped to dashboard only */
+html[data-theme="blue"] .dashboard {
+  --background: #f7f8fc;
+  --surface: #f7f8fc;
+  --surface-bright: #f7f8fc;
+  --surface-dim: #d8dce8;
+  --surface-container: #edf0f7;
+  --surface-container-low: #f2f4fa;
+  --surface-container-lowest: #ffffff;
+  --surface-container-high: #e6eaf3;
+  --surface-container-highest: #dfe3ee;
+  --surface-variant: #dfe3ee;
+  --on-surface: #1a1c22;
+  --surface-tint: #1a5294;
+  --on-surface-variant: #3b526e;
+  --outline: #5b7a9c;
+  --outline-variant: #bbd1e8;
+
+  --primary: #1a5294;
+  --primary-container: #2568bc;
+  --on-primary: #ffffff;
+  --on-primary-container: #b8d4f8;
+
+  --secondary: #3a6fa4;
+  --secondary-container: #8fc0f0;
+  --on-secondary: #ffffff;
+  --on-secondary-container: #18375a;
+
+  --border: #bbd1e8;
+  --ring: #2568bc;
+  --muted-foreground: #3b526e;
+
+  /* Tailwind v4 --color-* aliases */
+  --color-primary: #1a5294;
+  --color-primary-container: #2568bc;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #b8d4f8;
+  --color-secondary: #3a6fa4;
+  --color-secondary-container: #8fc0f0;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #18375a;
+  --color-outline: #5b7a9c;
+  --color-outline-variant: #bbd1e8;
+  --color-border: #bbd1e8;
+  --color-ring: #2568bc;
+  --color-muted-foreground: #3b526e;
+  --color-surface-tint: #1a5294;
+  --color-on-surface-variant: #3b526e;
+  --color-surface: #f7f8fc;
+  --color-surface-dim: #d8dce8;
+  --color-surface-container: #edf0f7;
+  --color-surface-container-low: #f2f4fa;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #e6eaf3;
+  --color-surface-container-highest: #dfe3ee;
+  --color-surface-variant: #dfe3ee;
+  --color-on-surface: #1a1c22;
+}
+
+/* Booking page font overrides */
+[data-booking-font="serif"] { font-family: var(--font-booking-serif), Georgia, serif; }
+[data-booking-font="mono"] { font-family: var(--font-booking-mono), monospace; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

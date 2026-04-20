@@ -1,9 +1,10 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Settings2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { FormBuilderSettings } from "@/components/settings/FormBuilderSettings";
 import { normalizeCustomFormFields, normalizeFormFields } from "@/lib/form-fields";
+import Link from "next/link";
 
 export default async function FormBuilderPage() {
   const supabase = await createClient();
@@ -28,7 +29,7 @@ export default async function FormBuilderPage() {
 
   const { data: artist } = await supabase
     .from("artists")
-    .select("slug")
+    .select("slug, form_header, form_subtext, form_button_text")
     .eq("id", user.id)
     .single();
 
@@ -36,27 +37,42 @@ export default async function FormBuilderPage() {
   const customFields = normalizeCustomFormFields(customData ?? []);
 
   return (
-    <div className="flex h-screen w-full bg-surface overflow-hidden">
+    <div className="dashboard flex h-screen w-full bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <h1 className="text-xl font-heading font-semibold text-on-surface">Form Builder</h1>
-          {artist?.slug && (
-            <a
-              href={`/${artist.slug}/book`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono font-medium border border-[#1F1F1F] text-[#6B6B6B] hover:text-[#E8FF47] hover:border-[#E8FF47]/40 transition-colors duration-150"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/form-builder/settings"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono font-medium border border-outline-variant text-outline hover:text-on-surface hover:border-on-surface/40 transition-colors duration-150"
             >
-              <ExternalLink className="w-3 h-3" />
-              View Live Form
-            </a>
-          )}
+              <Settings2 className="w-3 h-3" />
+              Page Settings
+            </Link>
+            {artist?.slug && (
+              <a
+                href={`/${artist.slug}/book`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono font-medium border border-outline-variant text-outline hover:text-on-surface hover:border-on-surface/40 transition-colors duration-150"
+              >
+                <ExternalLink className="w-3 h-3" />
+                View Live Form
+              </a>
+            )}
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           <section>
-            <FormBuilderSettings initialFields={fields} initialCustomFields={customFields} />
+            <FormBuilderSettings
+            initialFields={fields}
+            initialCustomFields={customFields}
+            initialFormHeader={artist?.form_header ?? ""}
+            initialFormSubtext={artist?.form_subtext ?? ""}
+            initialFormButtonText={artist?.form_button_text ?? ""}
+          />
           </section>
         </div>
       </main>

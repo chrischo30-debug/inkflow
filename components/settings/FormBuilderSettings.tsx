@@ -63,14 +63,23 @@ type ItemRef = string;
 export function FormBuilderSettings({
   initialFields,
   initialCustomFields,
+  initialFormHeader,
+  initialFormSubtext,
+  initialFormButtonText,
 }: {
   initialFields: FormFieldConfig[];
   initialCustomFields: CustomFormFieldConfig[];
+  initialFormHeader: string;
+  initialFormSubtext: string;
+  initialFormButtonText: string;
 }) {
   const [fields, setFields] = useState<FormFieldConfig[]>(
     initialFields.length ? initialFields : DEFAULT_FORM_FIELDS
   );
   const [customFields, setCustomFields] = useState<CustomFormFieldConfig[]>(initialCustomFields);
+  const [formHeader, setFormHeader] = useState(initialFormHeader);
+  const [formSubtext, setFormSubtext] = useState(initialFormSubtext);
+  const [formButtonText, setFormButtonText] = useState(initialFormButtonText);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -355,6 +364,23 @@ export function FormBuilderSettings({
         if (field) orderedCustom.push({ ...field, sort_order: index });
       }
     });
+
+    const appearanceRes = await fetch("/api/artist/form-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        form_header: formHeader.trim() || null,
+        form_subtext: formSubtext.trim() || null,
+        form_button_text: formButtonText.trim() || null,
+      }),
+    });
+    if (!appearanceRes.ok) {
+      const body = await appearanceRes.json();
+      setMessage(body.error || "Failed to save form appearance.");
+      setMessageType("error");
+      setIsSaving(false);
+      return;
+    }
 
     const baseRes = await fetch("/api/artist/form-fields", {
       method: "PUT",
@@ -695,6 +721,37 @@ export function FormBuilderSettings({
       <p className="text-sm text-on-surface-variant mb-8 w-full leading-relaxed">
         Toggle which fields appear on your public booking form and choose which ones are required.
       </p>
+
+      <div className="mb-8 space-y-4 rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
+        <h4 className="font-heading font-semibold text-on-surface">Form Appearance</h4>
+        <label className="text-sm font-semibold text-on-surface block">
+          Header
+          <input
+            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
+            value={formHeader}
+            onChange={(e) => setFormHeader(e.target.value)}
+            placeholder="Book with {your name}"
+          />
+        </label>
+        <label className="text-sm font-semibold text-on-surface block">
+          Subtext
+          <textarea
+            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 min-h-[64px] resize-y"
+            value={formSubtext}
+            onChange={(e) => setFormSubtext(e.target.value)}
+            placeholder="Fill out the form below to request an appointment..."
+          />
+        </label>
+        <label className="text-sm font-semibold text-on-surface block">
+          Submit Button Text
+          <input
+            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
+            value={formButtonText}
+            onChange={(e) => setFormButtonText(e.target.value)}
+            placeholder="Submit Inquiry"
+          />
+        </label>
+      </div>
 
       <div className="space-y-3 mb-6">
         <h4 className="font-heading font-semibold text-on-surface">Active Fields</h4>

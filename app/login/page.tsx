@@ -20,8 +20,8 @@ export default async function LoginPage({
         <div className="absolute inset-0 bg-surface-dim mix-blend-multiply opacity-5 pointer-events-none" />
         
         <div className="z-10 flex items-center gap-4">
-          <img src="/logo.png" alt="FlashBook logo" className="w-16 h-16 object-contain drop-shadow-sm" />
-          <h1 className="text-4xl lg:text-5xl font-heading font-medium tracking-tighter text-on-surface">FlashBook</h1>
+          <img src="/logo.png" alt="FlashBook logo" className="block w-16 h-16 object-contain drop-shadow-sm -translate-y-2" />
+          <h1 className="text-4xl lg:text-5xl font-heading font-medium tracking-tighter text-on-surface leading-none">FlashBook</h1>
         </div>
         
         <div className="z-10">
@@ -35,8 +35,8 @@ export default async function LoginPage({
       {/* Form Panel - Functional Right Side */}
       <div className="flex-1 flex flex-col justify-center px-8 py-12 sm:px-12 md:px-16 lg:px-24 relative xl:max-w-2xl">
         <div className="md:hidden absolute top-8 left-8 flex items-center gap-2">
-          <img src="/logo.png" alt="FlashBook logo" className="w-8 h-8 object-contain drop-shadow-sm" />
-          <span className="text-lg font-heading font-bold tracking-tight">FlashBook</span>
+          <img src="/logo.png" alt="FlashBook logo" className="block w-8 h-8 object-contain drop-shadow-sm translate-y-0.5" />
+          <span className="text-lg font-heading font-bold tracking-tight leading-none">FlashBook</span>
         </div>
 
         <div className="w-full mt-20 md:mt-0">
