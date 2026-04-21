@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { PaymentSettings } from "@/components/settings/PaymentSettings";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
 export default async function PaymentLinksPage() {
   const supabase = await createClient();
@@ -19,7 +20,7 @@ export default async function PaymentLinksPage() {
     .eq("id", user.id)
     .single();
 
-  const paymentLinks = (artist?.payment_links ?? {}) as Record<string, string>;
+  const paymentLinks = normalizePaymentLinks(artist?.payment_links);
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">

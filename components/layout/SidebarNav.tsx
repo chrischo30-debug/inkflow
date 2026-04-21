@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/", label: "Dashboard" },
+  { href: "/bookings", label: "Bookings" },
   { href: "/calendar", label: "Calendar" },
   { href: "/settings", label: "Settings" },
   {
@@ -43,7 +44,7 @@ export function SidebarNav({
           </div>
         </Link>
 
-        <nav className="space-y-1">
+        <nav className="space-y-1.5">
           {navItems.map((item) => {
             const active = isActive(pathname, item.href);
             const expanded = "children" in item && active;
@@ -53,14 +54,14 @@ export function SidebarNav({
                   href={item.href}
                   className={
                     active
-                      ? "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg bg-surface-container-lowest text-primary shadow-sm"
-                      : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                      ? "flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg bg-surface-container-lowest text-primary shadow-sm"
+                      : "flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
                   }
                 >
                   {item.label}
                 </Link>
                 {expanded && item.children && (
-                  <div className="mt-0.5 ml-3 pl-3 border-l border-outline-variant/30 space-y-0.5">
+                  <div className="mt-1 ml-3 pl-3 border-l border-outline-variant/30 space-y-1">
                     {item.children.map((child) => {
                       const childActive = pathname === child.href;
                       return (
@@ -69,8 +70,8 @@ export function SidebarNav({
                           href={child.href}
                           className={
                             childActive
-                              ? "flex items-center px-3 py-2 text-xs font-medium rounded-lg text-primary bg-primary/5"
-                              : "flex items-center px-3 py-2 text-xs font-medium rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+                              ? "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-primary bg-primary/5"
+                              : "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
                           }
                         >
                           {child.label}

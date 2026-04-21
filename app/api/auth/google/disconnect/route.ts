@@ -18,6 +18,8 @@ export async function POST(request: Request) {
       .update({
         calendar_sync_enabled: false,
         google_refresh_token: null,
+        gmail_connected: false,
+        gmail_address: null,
       })
       .eq("id", user.id);
 

@@ -35,6 +35,7 @@ export interface Booking {
   deposit_amount?: number;
   appointment_date?: string; // ISO 8601
   last_email_sent_at?: string;
+  gmail_thread_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -48,4 +49,14 @@ export interface Artist {
   deposit_policy: DepositPolicy;
   payment_links: Record<string, string>; // e.g., { "Stripe": "...", "Venmo": "..." }
   calendar_sync_enabled: boolean;
+}
+
+export interface EmailTemplate {
+  id?: string;
+  artist_id?: string;
+  state: BookingState | null;
+  name?: string;
+  subject: string;
+  body: string;
+  auto_send: boolean;
 }

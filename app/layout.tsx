@@ -46,7 +46,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" data-theme={accentTheme} className={`${epilogue.variable} ${manrope.variable} ${cormorant.variable} ${spaceMono.variable} antialiased`}>
-      <body className="min-h-screen flex flex-col">{children}</body>
+      <body className="min-h-screen flex flex-col" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

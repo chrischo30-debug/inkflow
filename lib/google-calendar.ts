@@ -43,7 +43,11 @@ export function buildGoogleOAuthUrl({
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",
-    scope: "https://www.googleapis.com/auth/calendar",
+    scope: [
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/userinfo.email",
+    ].join(" "),
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -135,6 +139,59 @@ export async function createGoogleCalendarEvent({
     throw new Error(`Google event creation failed: ${text}`);
   }
 
+  const event = (await res.json()) as { id: string };
+  return event.id;
+}
+
+export async function deleteGoogleCalendarEvent({
+  accessToken,
+  eventId,
+}: {
+  accessToken: string;
+  eventId: string;
+}) {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+    { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Google event deletion failed: ${text}`);
+  }
+}
+
+export async function updateGoogleCalendarEvent({
+  accessToken,
+  eventId,
+  summary,
+  description,
+  startDateTime,
+  endDateTime,
+}: {
+  accessToken: string;
+  eventId: string;
+  summary: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+}) {
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary,
+        description,
+        start: { dateTime: startDateTime },
+        end: { dateTime: endDateTime },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google event update failed: ${text}`);
+  }
   const event = (await res.json()) as { id: string };
   return event.id;
 }

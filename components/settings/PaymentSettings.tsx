@@ -1,90 +1,126 @@
 "use client";
 
-import { useForm } from "react-hook-form";
 import { useState } from "react";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Plus, Trash2, Check } from "lucide-react";
+import type { PaymentLink } from "@/lib/pipeline-settings";
 
-const paymentSchema = z.object({
-  Stripe: z.string().url({ message: "Must be a valid URL" }).or(z.literal("")),
-  Venmo: z.string().url({ message: "Must be a valid URL" }).or(z.literal("")),
-  CashApp: z.string().url({ message: "Must be a valid URL" }).or(z.literal("")),
-  Squarespace: z.string().url({ message: "Must be a valid URL" }).or(z.literal("")),
-  Other: z.string().url({ message: "Must be a valid URL" }).or(z.literal("")),
-});
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-export function PaymentSettings({ initialLinks }: { initialLinks?: Record<string, string> }) {
-  const [saveMessage, setSaveMessage] = useState("");
-  const form = useForm<z.infer<typeof paymentSchema>>({
-    resolver: zodResolver(paymentSchema),
-    defaultValues: {
-      Stripe: initialLinks?.Stripe || "",
-      Venmo: initialLinks?.Venmo || "",
-      CashApp: initialLinks?.CashApp || "",
-      Squarespace: initialLinks?.Squarespace || "",
-      Other: initialLinks?.Other || "",
-    },
-  });
+export function PaymentSettings({ initialLinks }: { initialLinks: PaymentLink[] }) {
+  const [links, setLinks] = useState<PaymentLink[]>(initialLinks);
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [status, setStatus] = useState<SaveStatus>("idle");
 
-  const onSubmit = async (data: z.infer<typeof paymentSchema>) => {
-    setSaveMessage("");
+  const save = async (updated: PaymentLink[]) => {
+    setStatus("saving");
     const res = await fetch("/api/artist/payment-links", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ links: updated }),
     });
+    setStatus(res.ok ? "saved" : "error");
+    if (res.ok) setTimeout(() => setStatus("idle"), 2000);
+  };
 
-    if (!res.ok) {
-      setSaveMessage("Failed to save payment links.");
-      return;
-    }
+  const addLink = () => {
+    if (!newLabel.trim() || !newUrl.trim()) return;
+    const updated = [...links, { label: newLabel.trim(), url: newUrl.trim() }];
+    setLinks(updated);
+    setNewLabel("");
+    setNewUrl("");
+    setAdding(false);
+    save(updated);
+  };
 
-    setSaveMessage("Payment links saved.");
+  const removeLink = (i: number) => {
+    const updated = links.filter((_, idx) => idx !== i);
+    setLinks(updated);
+    save(updated);
   };
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm">
-      <h3 className="text-lg font-heading font-semibold mb-2 text-on-surface">Payment Settings</h3>
-      <p className="text-sm text-on-surface-variant mb-8 max-w-md leading-relaxed">
-        This link will be automatically sent to clients when you transition their inquiry to <strong className="text-on-surface">Deposit Sent</strong>.
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
+      <div className="flex items-start justify-between mb-1">
+        <h3 className="text-sm font-semibold text-on-surface">Payment Links</h3>
+        {status === "saved" && (
+          <span className="flex items-center gap-1 text-xs text-emerald-600">
+            <Check className="w-3 h-3" /> Saved
+          </span>
+        )}
+        {status === "error" && <span className="text-xs text-red-500">Failed to save</span>}
+      </div>
+      <p className="text-xs text-on-surface-variant mb-4">
+        Add links for each payment option. The <code className="bg-surface-container-high px-1 py-0.5 rounded text-[11px]">{"{paymentLinks}"}</code> placeholder in the deposit email will list all of them.
       </p>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
-          {(["Stripe", "Venmo", "CashApp", "Squarespace", "Other"] as const).map((provider) => (
-            <FormField
-              key={provider}
-              control={form.control}
-              name={provider}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-sans tracking-wide text-on-surface-variant">
-                    {provider} Link
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      placeholder={`https://${provider.toLowerCase()}.com/...`}
-                      className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          ))}
-          {saveMessage && <p className="text-sm text-on-surface-variant">{saveMessage}</p>}
-          <Button
-            type="submit"
-            className="w-full h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
-          >
-            Save Changes
-          </Button>
-        </form>
-      </Form>
+      <div className="space-y-2 mb-3">
+        {links.length === 0 && !adding && (
+          <p className="text-xs text-on-surface-variant/60 py-2">No payment links added yet.</p>
+        )}
+        {links.map((link, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-on-surface">{link.label}</p>
+              <p className="text-[11px] text-on-surface-variant truncate">{link.url}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeLink(i)}
+              className="p-1 text-on-surface-variant hover:text-destructive transition-colors"
+              title="Remove"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {adding ? (
+        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+          <input
+            type="text"
+            placeholder='Label — e.g. "Stripe 1hr" or "Venmo deposit"'
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            className="w-full px-3 py-2 text-xs text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
+          />
+          <input
+            type="url"
+            placeholder="https://buy.stripe.com/..."
+            value={newUrl}
+            onChange={e => setNewUrl(e.target.value)}
+            className="w-full px-3 py-2 text-xs text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={addLink}
+              disabled={!newLabel.trim() || !newUrl.trim()}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40"
+            >
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAdding(false); setNewLabel(""); setNewUrl(""); }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add link
+        </button>
+      )}
     </div>
   );
 }

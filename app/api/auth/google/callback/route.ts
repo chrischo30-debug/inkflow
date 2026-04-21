@@ -26,11 +26,9 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    const res = NextResponse.redirect(`${origin}/login?message=${encodeURIComponent("Please sign in and connect Google Calendar again.")}`);
+    const res = NextResponse.redirect(`${origin}/login?message=${encodeURIComponent("Please sign in and connect Google again.")}`);
     res.cookies.delete("google_oauth_state");
     return res;
   }
@@ -47,24 +45,44 @@ export async function GET(request: Request) {
 
     const refreshTokenToSave = tokens.refresh_token || artist?.google_refresh_token;
     if (!refreshTokenToSave) {
-      return redirectToCalendar("Google did not return a refresh token. Disconnect app access and reconnect with consent.");
+      return redirectToCalendar("Google did not return a refresh token. Disconnect app access in your Google account settings and reconnect.");
     }
+
+    // Fetch the Gmail address via userinfo
+    let gmailAddress: string | null = null;
+    try {
+      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (userInfoRes.ok) {
+        const info = await userInfoRes.json() as { email?: string };
+        gmailAddress = info.email ?? null;
+      }
+    } catch {
+      // Non-fatal — Gmail sending will still work, address just won't be displayed
+    }
+
+    const gmailGranted = tokens.scope?.includes("gmail.send") ?? false;
 
     const { error } = await supabase
       .from("artists")
       .update({
         google_refresh_token: refreshTokenToSave,
         calendar_sync_enabled: true,
+        gmail_connected: gmailGranted,
+        gmail_address: gmailAddress,
       })
       .eq("id", user.id);
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
-    return redirectToCalendar("Google Calendar connected successfully.");
+    const msg = gmailGranted
+      ? "Google Calendar and Gmail connected successfully."
+      : "Google Calendar connected. Gmail permission was not granted — reconnect to enable Gmail sending.";
+
+    return redirectToCalendar(msg);
   } catch (error: unknown) {
     console.error("Google callback error:", error);
-    return redirectToCalendar("Failed to finish Google Calendar connection.");
+    return redirectToCalendar("Failed to finish Google connection.");
   }
 }
