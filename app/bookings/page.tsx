@@ -17,7 +17,7 @@ export default async function BookingsPage({
   const params = await searchParams;
   const initialState = params.state ?? "confirmed";
 
-  const [{ data: bookingsData }, { data: baseFields }, { data: customFields }] = await Promise.all([
+  const [{ data: bookingsData }, { data: baseFields }, { data: customFields }, { data: artistData }] = await Promise.all([
     supabase
       .from("bookings")
       .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, gmail_thread_id, sent_emails, total_amount, tip_amount, completion_notes, created_at, updated_at")
@@ -25,6 +25,7 @@ export default async function BookingsPage({
       .order("created_at", { ascending: false }),
     supabase.from("form_fields").select("field_key, label").eq("artist_id", user.id),
     supabase.from("custom_form_fields").select("field_key, label").eq("artist_id", user.id),
+    supabase.from("artists").select("calendar_sync_enabled").eq("id", user.id).single(),
   ]);
 
   const bookings: Booking[] = (bookingsData ?? []) as Booking[];
@@ -41,7 +42,7 @@ export default async function BookingsPage({
           <AddBookingModal />
         </header>
         <div className="flex-1 overflow-hidden">
-          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} />
+          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} />
         </div>
       </main>
     </div>

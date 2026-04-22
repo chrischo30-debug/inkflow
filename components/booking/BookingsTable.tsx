@@ -8,6 +8,8 @@ import { StateBadge } from "./StateBadge";
 import { Mail, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
 import { gmailThreadUrl } from "@/lib/gmail";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
+import { AcceptModal } from "./AcceptModal";
+import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
 
 const STATE_TABS: { value: string; label: string }[] = [
   { value: "all",       label: "All" },
@@ -84,10 +86,12 @@ export function BookingsTable({
   bookings: initialBookings,
   fieldLabelMap,
   initialState,
+  calendarSyncEnabled = false,
 }: {
   bookings: Booking[];
   fieldLabelMap: Record<string, string>;
   initialState: string;
+  calendarSyncEnabled?: boolean;
 }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [activeTab, setActiveTab] = useState(initialState);
@@ -111,6 +115,8 @@ export function BookingsTable({
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
+  const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
 
   const q = search.trim().toLowerCase();
   const tabFiltered = activeTab === "all" ? bookings : bookings.filter(b => b.state === activeTab);
@@ -172,6 +178,10 @@ export function BookingsTable({
       setCompletionModal({ bookingId: id });
       return;
     }
+    if (currentState === "accepted") {
+      setConfirmModal({ bookingId: id });
+      return;
+    }
     const res = await fetch(`/api/bookings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -180,10 +190,31 @@ export function BookingsTable({
     if (!res.ok) return;
     const { newState } = await res.json();
     setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState } : b));
+  };
 
-    if (newState === "paid_calendar_link_sent") {
-      await openEmailCompose(id, "paid_calendar_link_sent");
-    }
+  const handleAcceptSent = (bookingId: string, threadId?: string) => {
+    const nowIso = new Date().toISOString();
+    setBookings(prev => prev.map(b =>
+      b.id === bookingId
+        ? {
+            ...b,
+            state: "accepted",
+            last_email_sent_at: nowIso,
+            ...(threadId ? { gmail_thread_id: threadId } : {}),
+            sent_emails: [...(b.sent_emails ?? []), { label: "Submission Accepted", sent_at: nowIso }],
+          }
+        : b
+    ));
+    setAcceptModal(null);
+  };
+
+  const handleAppointmentConfirmed = (bookingId: string, appointmentDate: string, googleEventId?: string) => {
+    setBookings(prev => prev.map(b =>
+      b.id === bookingId
+        ? { ...b, state: "confirmed", appointment_date: appointmentDate, ...(googleEventId ? { google_event_id: googleEventId } : {}) }
+        : b
+    ));
+    setConfirmModal(null);
   };
 
   const handleComplete = async () => {
@@ -328,7 +359,7 @@ export function BookingsTable({
                 <>
                   <button type="button" onClick={() => openRejectCompose(booking.id)} className="text-sm font-medium px-3 py-2 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">Reject</button>
                   <button type="button" onClick={() => openFollowUpCompose(booking.id)} className="text-sm font-medium px-3 py-2 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap">Follow Up</button>
-                  <button type="button" onClick={() => moveTo(booking.id, "accepted")} className="text-sm font-medium px-3 py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">Accept</button>
+                  <button type="button" onClick={() => setAcceptModal({ bookingId: booking.id })} className="text-sm font-medium px-3 py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">Accept</button>
                 </>
               ) : (
                 nextAction && (
@@ -584,6 +615,31 @@ export function BookingsTable({
           </div>
         </div>,
         document.body
+      )}
+
+      {acceptModal && (
+        <AcceptModal
+          bookingId={acceptModal.bookingId}
+          onSent={(threadId) => handleAcceptSent(acceptModal.bookingId, threadId)}
+          onClose={() => setAcceptModal(null)}
+        />
+      )}
+
+      {confirmModal && (
+        <ConfirmAppointmentModal
+          bookingId={confirmModal.bookingId}
+          calendarSyncEnabled={calendarSyncEnabled}
+          initialAppointmentDate={confirmModal.initialAppointmentDate}
+          existingAppointments={bookings
+            .filter(b => b.state === "confirmed" && b.appointment_date && b.id !== confirmModal.bookingId)
+            .map(b => ({ appointment_date: b.appointment_date!, client_name: b.client_name }))}
+          onConfirmed={(date, eventId) => handleAppointmentConfirmed(confirmModal.bookingId, date, eventId)}
+          onSkip={confirmModal.initialAppointmentDate ? undefined : async () => {
+            await moveTo(confirmModal.bookingId, "confirmed");
+            setConfirmModal(null);
+          }}
+          onClose={() => setConfirmModal(null)}
+        />
       )}
 
       {emailCompose && (
