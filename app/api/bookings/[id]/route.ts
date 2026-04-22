@@ -48,14 +48,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const getExtraBookingFields = async () => {
       const { data } = await supabase
         .from("bookings")
-        .select("google_event_id, gmail_thread_id")
+        .select("google_event_id, gmail_thread_id, sent_emails")
         .eq("id", id)
         .single();
-      const row = data as { google_event_id?: string; gmail_thread_id?: string } | null;
+      const row = data as { google_event_id?: string; gmail_thread_id?: string; sent_emails?: {label:string;sent_at:string}[] } | null;
       return {
         googleEventId: row?.google_event_id ?? null,
         gmailThreadId: row?.gmail_thread_id ?? null,
+        sentEmails: (row?.sent_emails ?? []) as {label:string;sent_at:string}[],
       };
+    };
+
+    // Append a sent email entry — separate update so it degrades gracefully if column not yet migrated
+    const appendSentEmail = async (label: string) => {
+      try {
+        const { data } = await supabase.from("bookings").select("sent_emails").eq("id", id).single();
+        const row = data as { sent_emails?: {label:string;sent_at:string}[] } | null;
+        const existing = row?.sent_emails ?? [];
+        await supabase.from("bookings")
+          .update({ sent_emails: [...existing, { label, sent_at: new Date().toISOString() }] })
+          .eq("id", id).eq("artist_id", user.id);
+      } catch { /* column may not exist yet */ }
     };
 
     // ── Move to any state ──────────────────────────────────────────────────────
@@ -109,17 +122,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (action === "update_appointment") {
       const newDate: string | undefined = body.appointment_date;
       if (!newDate) return NextResponse.json({ error: "appointment_date required" }, { status: 400 });
+      const durationMinutes: number = body.duration_minutes ?? 120;
 
       await supabase.from("bookings").update({ appointment_date: newDate }).eq("id", id);
 
       if (booking.state === "confirmed") {
         try {
           const { googleEventId } = await getExtraBookingFields();
-          if (googleEventId) {
-            const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
-            if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-              const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-              const endDate = new Date(new Date(newDate).getTime() + 1000 * 60 * 60 * 2).toISOString();
+          const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
+          if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
+            const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+            const endDate = new Date(new Date(newDate).getTime() + durationMinutes * 60 * 1000).toISOString();
+            if (googleEventId) {
               await updateGoogleCalendarEvent({
                 accessToken,
                 eventId: googleEventId,
@@ -128,6 +142,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 startDateTime: newDate,
                 endDateTime: endDate,
               });
+            } else {
+              // No existing event — create one
+              const newEventId = await createGoogleCalendarEvent({
+                accessToken,
+                summary: `${booking.client_name} appointment`,
+                description: booking.description ?? undefined,
+                startDateTime: newDate,
+                endDateTime: endDate,
+              });
+              if (newEventId) {
+                await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+              }
             }
           }
         } catch (e) { console.error("Calendar event update failed:", e); }
@@ -218,6 +244,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             last_email_sent_at: new Date().toISOString(),
             ...(threadId ? { gmail_thread_id: threadId } : {}),
           }).eq("id", id);
+          await appendSentEmail("Appointment Completed");
         } catch (e) { console.error("Completion email failed:", e); }
       }
 
@@ -247,6 +274,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     await supabase.from("bookings").update({ state: nextState }).eq("id", id).eq("artist_id", user.id);
 
+    const SENT_EMAIL_LABELS: Partial<Record<string, string>> = {
+      inquiry:   "Submission Received",
+      follow_up: "Follow Up",
+      accepted:  "Submission Accepted",
+      confirmed: "Booking Confirmation",
+      completed: "Appointment Completed",
+      rejected:  "Submission Rejected",
+    };
+
     const shouldAutoEmail = !templateRow || templateRow.auto_send;
     if (shouldAutoEmail) {
       try {
@@ -271,6 +307,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           last_email_sent_at: new Date().toISOString(),
           ...(threadId ? { gmail_thread_id: threadId } : {}),
         }).eq("id", id);
+        await appendSentEmail(SENT_EMAIL_LABELS[nextState] ?? nextState);
       } catch (e) { console.error("Email transition failed:", e); }
     }
 

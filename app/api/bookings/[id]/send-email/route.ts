@@ -107,7 +107,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     templates: allTemplates,
     paymentLinks: paymentLinksList,
     calendarLinks: calendarLinksList,
-    previewVars: vars as Record<string, string>,
+    previewVars: vars as unknown as Record<string, string>,
   });
 }
 
@@ -165,13 +165,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     existingThreadId: booking.gmail_thread_id ?? null,
   });
 
+  const nowIso = new Date().toISOString();
   await supabase
     .from('bookings')
     .update({
-      last_email_sent_at: new Date().toISOString(),
+      last_email_sent_at: nowIso,
       ...(threadId ? { gmail_thread_id: threadId } : {}),
     })
     .eq('id', id);
 
-  return NextResponse.json({ success: true, threadId: threadId ?? null });
+  // Append to sent_emails history — separate update degrades gracefully if migration not yet run
+  const sentEmailLabel = subject.slice(0, 60);
+  try {
+    const { data: emailLog } = await supabase.from('bookings').select('sent_emails').eq('id', id).single();
+    const row = emailLog as { sent_emails?: {label:string;sent_at:string}[] } | null;
+    const existing = row?.sent_emails ?? [];
+    await supabase.from('bookings')
+      .update({ sent_emails: [...existing, { label: sentEmailLabel, sent_at: nowIso }] })
+      .eq('id', id);
+  } catch { /* sent_emails column may not exist yet */ }
+
+  return NextResponse.json({ success: true, threadId: threadId ?? null, sentEmailLabel });
 }

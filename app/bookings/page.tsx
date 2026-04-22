@@ -20,7 +20,7 @@ export default async function BookingsPage({
   const [{ data: bookingsData }, { data: baseFields }, { data: customFields }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, gmail_thread_id, total_amount, tip_amount, completion_notes, created_at, updated_at")
+      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, gmail_thread_id, sent_emails, total_amount, tip_amount, completion_notes, created_at, updated_at")
       .eq("artist_id", user.id)
       .order("created_at", { ascending: false }),
     supabase.from("form_fields").select("field_key, label").eq("artist_id", user.id),

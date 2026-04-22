@@ -1,12 +1,12 @@
 // Types for FlashBook Phase 1
 
-export type BookingState = 
-  | 'inquiry' 
-  | 'reviewed' 
-  | 'deposit_sent' 
-  | 'deposit_paid' 
-  | 'confirmed' 
+export type BookingState =
+  | 'inquiry'
+  | 'follow_up'
+  | 'accepted'
+  | 'confirmed'
   | 'completed'
+  | 'rejected'
   | 'cancelled';
 
 export type DepositPolicyType = 'fixed' | 'percentage' | 'custom';
@@ -15,6 +15,11 @@ export type DepositPolicy =
   | { type: 'fixed';      amount: number }
   | { type: 'percentage'; value: number }
   | { type: 'custom';     note: string };
+
+export interface SentEmailEntry {
+  label: string;
+  sent_at: string;
+}
 
 export interface Booking {
   id: string;
@@ -36,6 +41,10 @@ export interface Booking {
   appointment_date?: string; // ISO 8601
   last_email_sent_at?: string;
   gmail_thread_id?: string;
+  sent_emails?: SentEmailEntry[];
+  total_amount?: number;
+  tip_amount?: number;
+  completion_notes?: string;
   created_at: string;
   updated_at: string;
 }

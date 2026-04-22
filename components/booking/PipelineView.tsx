@@ -236,9 +236,16 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
     });
     if (!res.ok) throw new Error("Failed to send email");
     const data = await res.json();
+    const nowIso = new Date().toISOString();
+    const newEntry = { label: data.sentEmailLabel ?? subject.slice(0, 60), sent_at: nowIso };
     setBookings(prev => prev.map(b =>
       b.id === bookingId
-        ? { ...b, last_email_sent_at: new Date().toISOString(), ...(data.threadId ? { gmail_thread_id: data.threadId } : {}) }
+        ? {
+            ...b,
+            last_email_sent_at: nowIso,
+            ...(data.threadId ? { gmail_thread_id: data.threadId } : {}),
+            sent_emails: [...(b.sent_emails ?? []), newEntry],
+          }
         : b
     ));
     setEmailCompose(null);
@@ -325,6 +332,9 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
           bookingId={confirmModal.bookingId}
           calendarSyncEnabled={calendarSyncEnabled}
           initialAppointmentDate={confirmModal.initialAppointmentDate}
+          existingAppointments={bookings
+            .filter(b => b.state === "confirmed" && b.appointment_date && b.id !== confirmModal.bookingId)
+            .map(b => ({ appointment_date: b.appointment_date!, client_name: b.client_name }))}
           onConfirmed={(date, eventId) => handleAppointmentConfirmed(confirmModal.bookingId, date, eventId)}
           onSkip={confirmModal.initialAppointmentDate ? undefined : async () => { await moveTo(confirmModal.bookingId, "confirmed"); setConfirmModal(null); }}
           onClose={() => setConfirmModal(null)}

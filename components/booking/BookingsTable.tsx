@@ -246,9 +246,16 @@ export function BookingsTable({
     });
     if (!res.ok) return;
     const data = await res.json();
+    const nowIso = new Date().toISOString();
+    const newEntry = { label: data.sentEmailLabel ?? subject.slice(0, 60), sent_at: nowIso };
     setBookings(prev => prev.map(b =>
       b.id === bookingId
-        ? { ...b, last_email_sent_at: new Date().toISOString(), ...(data.threadId ? { gmail_thread_id: data.threadId } : {}) }
+        ? {
+            ...b,
+            last_email_sent_at: nowIso,
+            ...(data.threadId ? { gmail_thread_id: data.threadId } : {}),
+            sent_emails: [...(b.sent_emails ?? []), newEntry],
+          }
         : b
     ));
     setEmailCompose(null);
@@ -373,7 +380,27 @@ export function BookingsTable({
                   <div><p className="font-medium text-on-surface-variant mb-0.5">Total</p><p className="text-on-surface">${booking.total_amount}{typeof booking.tip_amount === "number" ? ` + $${booking.tip_amount} tip` : ""}</p></div>
                 )}
                 {booking.completion_notes && <div className="col-span-full"><p className="font-medium text-on-surface-variant mb-0.5">Notes</p><p className="text-on-surface">{booking.completion_notes}</p></div>}
-                {booking.last_email_sent_at && <div><p className="font-medium text-on-surface-variant mb-0.5">Last Email</p><p className="text-on-surface">{fmtDate(booking.last_email_sent_at)} <span className="text-on-surface-variant/60">({timeAgo(booking.last_email_sent_at)})</span></p></div>}
+                {(booking.sent_emails ?? []).length > 0 ? (
+                  <div className="col-span-2">
+                    <p className="font-medium text-on-surface-variant mb-1">Emails Sent</p>
+                    <div className="space-y-0.5">
+                      {(booking.sent_emails ?? []).map((entry, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <p className="text-sm text-on-surface truncate">{entry.label}</p>
+                          <p className="text-sm text-on-surface-variant/60 whitespace-nowrap shrink-0">{fmtDate(entry.sent_at)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : booking.last_email_sent_at ? (
+                  <div><p className="font-medium text-on-surface-variant mb-0.5">Last Email</p><p className="text-on-surface">{fmtDate(booking.last_email_sent_at)} <span className="text-on-surface-variant/60">({timeAgo(booking.last_email_sent_at)})</span></p></div>
+                ) : null}
+                {booking.gmail_thread_id && (
+                  <div>
+                    <p className="font-medium text-on-surface-variant mb-0.5">Conversation</p>
+                    <a href={`https://mail.google.com/mail/u/0/#all/${booking.gmail_thread_id}`} target="_blank" rel="noreferrer" className="text-sm text-primary underline underline-offset-2 hover:opacity-70 transition-opacity">View in Gmail →</a>
+                  </div>
+                )}
                 <div><p className="font-medium text-on-surface-variant mb-0.5">Submitted</p><p className="text-on-surface">{fmtDate(booking.created_at)} <span className="text-on-surface-variant/60">({timeAgo(booking.created_at)})</span></p></div>
                 <div className="col-span-full"><p className="font-medium text-on-surface-variant mb-0.5">Description</p><p className="text-on-surface">{booking.description}</p></div>
               </div>

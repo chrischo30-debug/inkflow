@@ -1,6 +1,6 @@
 "use client";
 
-import { Booking, BookingState } from "@/lib/types";
+import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
 import { Check, Copy, MoreHorizontal, CalendarDays } from "lucide-react";
@@ -295,6 +295,31 @@ export function BookingCard({
               <div className="pt-1 border-t border-outline-variant/10 flex gap-4">
                 {typeof booking.total_amount === "number" && <p className="text-on-surface"><span className="font-medium">Total:</span> ${booking.total_amount}</p>}
                 {typeof booking.tip_amount === "number" && <p className="text-on-surface"><span className="font-medium">Tip:</span> ${booking.tip_amount}</p>}
+              </div>
+            )}
+            {/* Emails sent history */}
+            {(booking.sent_emails ?? []).length > 0 && (
+              <div className="pt-1 border-t border-outline-variant/10 space-y-1">
+                <p className="font-medium text-on-surface text-xs uppercase tracking-wide text-on-surface-variant">Emails sent</p>
+                {(booking.sent_emails as SentEmailEntry[]).map((entry, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-on-surface truncate">{entry.label}</p>
+                    <p className="text-xs text-on-surface-variant/60 whitespace-nowrap shrink-0">{fmtShort(entry.sent_at)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Gmail thread link */}
+            {booking.gmail_thread_id && (
+              <div className="pt-1 border-t border-outline-variant/10">
+                <a
+                  href={`https://mail.google.com/mail/u/0/#all/${booking.gmail_thread_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary underline underline-offset-2 hover:opacity-70 transition-opacity"
+                >
+                  View conversation in Gmail →
+                </a>
               </div>
             )}
             <div className="pt-1 border-t border-outline-variant/10 text-xs text-on-surface-variant/60">
