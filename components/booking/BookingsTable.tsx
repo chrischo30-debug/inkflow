@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Fragment, useMemo } from "react";
+import { useState, Fragment, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
@@ -94,7 +94,20 @@ export function BookingsTable({
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [emailCompose, setEmailCompose] = useState<EmailCompose | null>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openDropdown]);
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
@@ -324,7 +337,7 @@ export function BookingsTable({
                   </button>
                 )
               )}
-              <div className="relative">
+              <div className="relative" ref={openDropdown === booking.id ? dropdownRef : undefined}>
                 <button type="button" onClick={() => setOpenDropdown(openDropdown === booking.id ? null : booking.id)} className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Move to status">
                   <ChevronDown className="w-4 h-4" />
                 </button>
