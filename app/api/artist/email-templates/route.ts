@@ -4,7 +4,7 @@ import { BookingState, EmailTemplate } from '@/lib/types';
 import { DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
 
 const EMAILABLE_STATES: Exclude<BookingState, 'cancelled'>[] = [
-  'inquiry', 'reviewed', 'deposit_sent', 'deposit_paid', 'confirmed', 'completed',
+  'inquiry', 'follow_up', 'accepted', 'confirmed', 'completed', 'rejected',
 ];
 
 export async function GET() {

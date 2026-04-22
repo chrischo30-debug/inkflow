@@ -8,15 +8,16 @@ import {
   refreshGoogleAccessToken,
 } from "@/lib/google-calendar";
 
-const STATE_FLOW: Record<BookingState, BookingState | null> = {
-  inquiry: "reviewed",
-  reviewed: "deposit_sent",
-  deposit_sent: "deposit_paid",
-  deposit_paid: "confirmed",
+const STATE_FLOW: Partial<Record<BookingState, BookingState>> = {
+  inquiry:   "accepted",
+  follow_up: "accepted",
+  accepted:  "confirmed",
   confirmed: "completed",
-  completed: null,
-  cancelled: null,
 };
+
+const VALID_STATES: BookingState[] = [
+  "inquiry", "follow_up", "accepted", "confirmed", "completed", "rejected", "cancelled",
+];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -28,53 +29,57 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const action: string = body.action;
 
-    if (!["advance", "cancel", "update_appointment", "move"].includes(action)) {
+    if (!["advance", "cancel", "update_appointment", "confirm_appointment", "move", "complete"].includes(action)) {
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
     }
 
-    // Select only columns guaranteed in the base schema
     const { data: booking, error: fetchErr } = await supabase
       .from("bookings")
-      .select("state, client_email, client_name, artist_id, appointment_date, description, payment_link_sent")
+      .select("state, client_email, client_name, artist_id, appointment_date, description")
       .eq("id", id)
       .eq("artist_id", user.id)
       .single();
 
     if (fetchErr || !booking) {
-      console.error("Booking fetch error:", fetchErr);
-      return NextResponse.json({ error: "Booking not found", detail: fetchErr?.message }, { status: 404 });
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    // google_event_id and gmail_thread_id are migration-gated — fetch separately
-    let googleEventId: string | null = null;
-    let gmailThreadId: string | null = null;
-    {
-      const { data: extRow } = await supabase
+    // Fetch optional columns that may not exist in older DB instances
+    const getExtraBookingFields = async () => {
+      const { data } = await supabase
         .from("bookings")
         .select("google_event_id, gmail_thread_id")
         .eq("id", id)
         .single();
-      const r = extRow as { google_event_id?: string; gmail_thread_id?: string } | null;
-      googleEventId = r?.google_event_id ?? null;
-      gmailThreadId = r?.gmail_thread_id ?? null;
-    }
+      const row = data as { google_event_id?: string; gmail_thread_id?: string } | null;
+      return {
+        googleEventId: row?.google_event_id ?? null,
+        gmailThreadId: row?.gmail_thread_id ?? null,
+      };
+    };
 
-    // ── Move to any state ─────────────────────────────────────────────────────
+    // ── Move to any state ──────────────────────────────────────────────────────
     if (action === "move") {
       const targetState = body.target_state as BookingState;
-      const validStates: BookingState[] = ["inquiry", "reviewed", "deposit_sent", "deposit_paid", "confirmed", "completed", "cancelled"];
-      if (!validStates.includes(targetState)) {
+      if (!VALID_STATES.includes(targetState)) {
         return NextResponse.json({ error: "Invalid target_state" }, { status: 400 });
       }
-      await supabase.from("bookings").update({ state: targetState }).eq("id", id).eq("artist_id", user.id);
+      const { error: updateErr } = await supabase
+        .from("bookings")
+        .update({ state: targetState })
+        .eq("id", id)
+        .eq("artist_id", user.id);
+      if (updateErr) return NextResponse.json({ error: "Failed to update booking" }, { status: 500 });
 
-      // Delete calendar event if moving to cancelled
-      if (targetState === "cancelled" && googleEventId) {
+      if (targetState === "cancelled") {
         try {
-          const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled").eq("id", user.id).single();
-          if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-            const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-            await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
+          const { googleEventId } = await getExtraBookingFields();
+          if (googleEventId) {
+            const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled").eq("id", user.id).single();
+            if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
+              const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+              await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
+            }
           }
         } catch (e) { console.error("Calendar delete on move-to-cancelled failed:", e); }
       }
@@ -82,25 +87,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ success: true, newState: targetState });
     }
 
-    // ── Cancel ────────────────────────────────────────────────────────────────
+    // ── Cancel ─────────────────────────────────────────────────────────────────
     if (action === "cancel") {
       await supabase.from("bookings").update({ state: "cancelled" }).eq("id", id);
 
-      if (googleEventId) {
-        try {
-          const { data: artist } = await supabase
-            .from("artists")
-            .select("google_refresh_token, calendar_sync_enabled")
-            .eq("id", user.id)
-            .single();
+      try {
+        const { googleEventId } = await getExtraBookingFields();
+        if (googleEventId) {
+          const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled").eq("id", user.id).single();
           if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
             const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
             await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
           }
-        } catch (e) {
-          console.error("Calendar event deletion failed:", e);
         }
-      }
+      } catch (e) { console.error("Calendar event deletion failed:", e); }
 
       return NextResponse.json({ success: true, newState: "cancelled" });
     }
@@ -112,157 +112,169 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       await supabase.from("bookings").update({ appointment_date: newDate }).eq("id", id);
 
-      if (googleEventId && booking.state === "confirmed") {
+      if (booking.state === "confirmed") {
         try {
-          const { data: artist } = await supabase
-            .from("artists")
-            .select("google_refresh_token, calendar_sync_enabled, name")
-            .eq("id", user.id)
-            .single();
-          if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-            const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-            const endDate = new Date(new Date(newDate).getTime() + 1000 * 60 * 60 * 2).toISOString();
-            await updateGoogleCalendarEvent({
-              accessToken,
-              eventId: googleEventId,
-              summary: `${booking.client_name} appointment`,
-              description: booking.description ?? undefined,
-              startDateTime: newDate,
-              endDateTime: endDate,
-            });
+          const { googleEventId } = await getExtraBookingFields();
+          if (googleEventId) {
+            const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
+            if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
+              const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+              const endDate = new Date(new Date(newDate).getTime() + 1000 * 60 * 60 * 2).toISOString();
+              await updateGoogleCalendarEvent({
+                accessToken,
+                eventId: googleEventId,
+                summary: `${booking.client_name} appointment`,
+                description: booking.description ?? undefined,
+                startDateTime: newDate,
+                endDateTime: endDate,
+              });
+            }
           }
-        } catch (e) {
-          console.error("Calendar event update failed:", e);
-        }
+        } catch (e) { console.error("Calendar event update failed:", e); }
       }
 
       return NextResponse.json({ success: true, appointment_date: newDate });
     }
 
-    // ── Advance state ─────────────────────────────────────────────────────────
+    // ── Confirm appointment (accepted → confirmed) ─────────────────────────────
+    if (action === "confirm_appointment") {
+      const appointmentDate: string | undefined = body.appointment_date;
+      if (!appointmentDate) return NextResponse.json({ error: "appointment_date required" }, { status: 400 });
+      const durationMinutes: number = body.duration_minutes ?? 120;
+
+      const updateFields: Record<string, unknown> = { state: "confirmed", appointment_date: appointmentDate };
+      await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
+
+      // Google Calendar event creation
+      let newEventId: string | null = null;
+      try {
+        const { data: artist } = await supabase
+          .from("artists")
+          .select("name, google_refresh_token, calendar_sync_enabled")
+          .eq("id", user.id)
+          .single();
+        if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
+          const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+          const endDate = new Date(new Date(appointmentDate).getTime() + durationMinutes * 60 * 1000).toISOString();
+          newEventId = await createGoogleCalendarEvent({
+            accessToken,
+            summary: `${booking.client_name} appointment`,
+            description: booking.description ?? undefined,
+            startDateTime: appointmentDate,
+            endDateTime: endDate,
+          });
+          if (newEventId) {
+            await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+          }
+        }
+      } catch (e) { console.error("Google Calendar sync on confirm failed:", e); }
+
+      return NextResponse.json({ success: true, newState: "confirmed", google_event_id: newEventId });
+    }
+
+    // ── Complete ───────────────────────────────────────────────────────────────
+    if (action === "complete") {
+      const updateFields: Record<string, unknown> = { state: "completed" };
+      if (body.total_amount != null) updateFields.total_amount = body.total_amount;
+      if (body.tip_amount != null) updateFields.tip_amount = body.tip_amount;
+      if (body.completion_notes != null) updateFields.completion_notes = body.completion_notes;
+
+      await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
+
+      const [{ data: artist }, { data: templateRow }] = await Promise.all([
+        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, google_refresh_token").eq("id", booking.artist_id).single(),
+        supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
+      ]);
+
+      let gmailConnected = false;
+      let gmailAddress: string | null = null;
+      try {
+        const { data: gmailRow } = await supabase.from("artists").select("gmail_connected, gmail_address").eq("id", booking.artist_id).single();
+        const row = gmailRow as { gmail_connected?: boolean; gmail_address?: string } | null;
+        gmailConnected = row?.gmail_connected ?? false;
+        gmailAddress = row?.gmail_address ?? null;
+      } catch { /* column may not exist yet */ }
+
+      if (!templateRow || templateRow.auto_send) {
+        try {
+          const { gmailThreadId } = await getExtraBookingFields();
+          const { sendStateTransitionEmail } = await import("@/lib/email");
+          const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
+          const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
+            ? { refreshToken: artist.google_refresh_token, gmailAddress }
+            : null;
+          const { threadId } = await sendStateTransitionEmail({
+            toEmail: booking.client_email,
+            clientName: booking.client_name,
+            newState: "completed",
+            artistName: artist?.name ?? "Your Artist",
+            paymentLinksList: normalizePaymentLinks(artist?.payment_links),
+            calendarLinksList: [],
+            template: templateRow ?? null,
+            gmailContext,
+            existingThreadId: gmailThreadId,
+          });
+          await supabase.from("bookings").update({
+            last_email_sent_at: new Date().toISOString(),
+            ...(threadId ? { gmail_thread_id: threadId } : {}),
+          }).eq("id", id);
+        } catch (e) { console.error("Completion email failed:", e); }
+      }
+
+      return NextResponse.json({ success: true, newState: "completed" });
+    }
+
+    // ── Advance state ──────────────────────────────────────────────────────────
     const currentState = booking.state as BookingState;
     const nextState = STATE_FLOW[currentState];
     if (!nextState) {
       return NextResponse.json({ error: "Booking is already at a terminal state" }, { status: 400 });
     }
 
-    let paymentLinkToSend: string | undefined;
-    let artistName = "FlashBook Artist";
-
     const [{ data: artist }, { data: templateRow }] = await Promise.all([
-      supabase
-        .from("artists")
-        .select("name, payment_links, calendar_sync_enabled, google_refresh_token")
-        .eq("id", booking.artist_id)
-        .single(),
-      supabase
-        .from("email_templates")
-        .select("*")
-        .eq("artist_id", booking.artist_id)
-        .eq("state", nextState)
-        .maybeSingle(),
+      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, google_refresh_token").eq("id", booking.artist_id).single(),
+      supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
-    // gmail_connected / gmail_address added by migration — fetch separately
     let gmailConnected = false;
     let gmailAddress: string | null = null;
     try {
-      const { data: gmailRow } = await supabase
-        .from("artists")
-        .select("gmail_connected, gmail_address")
-        .eq("id", booking.artist_id)
-        .single();
+      const { data: gmailRow } = await supabase.from("artists").select("gmail_connected, gmail_address").eq("id", booking.artist_id).single();
       const row = gmailRow as { gmail_connected?: boolean; gmail_address?: string } | null;
       gmailConnected = row?.gmail_connected ?? false;
       gmailAddress = row?.gmail_address ?? null;
     } catch { /* column may not exist yet */ }
 
-    if (artist?.name) artistName = artist.name;
+    await supabase.from("bookings").update({ state: nextState }).eq("id", id).eq("artist_id", user.id);
 
-    if (nextState === "deposit_sent") {
-      const paymentLinks = (artist?.payment_links ?? {}) as Record<string, string>;
-      paymentLinkToSend = Object.values(paymentLinks).find((l) => typeof l === "string" && l.length > 0);
-
-      const { error: updateErr } = await supabase
-        .from("bookings")
-        .update({ state: nextState, payment_link_sent: paymentLinkToSend ?? null })
-        .eq("id", id)
-        .eq("artist_id", user.id);
-      if (updateErr) throw updateErr;
-    } else {
-      const { error: updateErr } = await supabase
-        .from("bookings")
-        .update({ state: nextState })
-        .eq("id", id)
-        .eq("artist_id", user.id);
-      if (updateErr) throw updateErr;
-
-      if (
-        nextState === "confirmed" &&
-        artist?.calendar_sync_enabled &&
-        artist.google_refresh_token &&
-        booking.appointment_date
-      ) {
-        try {
-          const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-          const startDate = booking.appointment_date;
-          const endDate = new Date(new Date(startDate).getTime() + 1000 * 60 * 60 * 2).toISOString();
-          const googleEventId = await createGoogleCalendarEvent({
-            accessToken,
-            summary: `${booking.client_name} appointment`,
-            description: booking.description ?? undefined,
-            startDateTime: startDate,
-            endDateTime: endDate,
-          });
-          await supabase
-            .from("bookings")
-            .update({ google_event_id: googleEventId })
-            .eq("id", id)
-            .eq("artist_id", user.id);
-        } catch (e) {
-          console.error("Google Calendar sync on confirm failed:", e);
-        }
-      }
-    }
-
-    const shouldSendEmail = !templateRow || templateRow.auto_send;
-    if (shouldSendEmail) {
+    const shouldAutoEmail = !templateRow || templateRow.auto_send;
+    if (shouldAutoEmail) {
       try {
-        const { sendStateTransitionEmail } = await import('@/lib/email');
-        const gmailContext =
-          gmailConnected && artist?.google_refresh_token && gmailAddress
-            ? { refreshToken: artist.google_refresh_token, gmailAddress }
-            : null;
-
-        const { normalizePaymentLinks } = await import('@/lib/pipeline-settings');
-        const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
+        const { gmailThreadId } = await getExtraBookingFields();
+        const { sendStateTransitionEmail } = await import("@/lib/email");
+        const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
+        const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
+          ? { refreshToken: artist.google_refresh_token, gmailAddress }
+          : null;
         const { threadId } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
           newState: nextState,
-          artistName,
-          paymentLinksList,
+          artistName: artist?.name ?? "Your Artist",
+          paymentLinksList: normalizePaymentLinks(artist?.payment_links),
           calendarLinksList: [],
-          primaryPaymentLink: paymentLinkToSend,
-          appointmentDate: booking.appointment_date ?? undefined,
           template: templateRow ?? null,
           gmailContext,
           existingThreadId: gmailThreadId,
         });
-
-        await supabase
-          .from("bookings")
-          .update({
-            last_email_sent_at: new Date().toISOString(),
-            ...(threadId ? { gmail_thread_id: threadId } : {}),
-          })
-          .eq("id", id);
-      } catch (e) {
-        console.error("Email transition failed:", e);
-      }
+        await supabase.from("bookings").update({
+          last_email_sent_at: new Date().toISOString(),
+          ...(threadId ? { gmail_thread_id: threadId } : {}),
+        }).eq("id", id);
+      } catch (e) { console.error("Email transition failed:", e); }
     }
 
-    return NextResponse.json({ success: true, newState: nextState }, { status: 200 });
+    return NextResponse.json({ success: true, newState: nextState });
 
   } catch (error: unknown) {
     console.error("Booking PATCH error:", error);

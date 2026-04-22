@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { PipelineView } from "@/components/booking/PipelineView";
+import { BooksToggle } from "@/components/dashboard/BooksToggle";
 import Link from "next/link";
 import type { Booking } from "@/lib/types";
-import { mergePipelineSettings } from "@/lib/pipeline-settings";
+import { isBooksOpen, booksStatusLabel } from "@/lib/books";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -13,13 +14,13 @@ export default async function DashboardPage() {
 
   const { data: artistData } = await supabase
     .from("artists")
-    .select("name, pipeline_settings")
+    .select("name, calendar_sync_enabled, books_open, books_open_at, books_close_at")
     .eq("id", user.id)
     .single();
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, gmail_thread_id, created_at, updated_at")
     .eq("artist_id", user.id)
     .neq("state", "cancelled")
     .order("created_at", { ascending: false });
@@ -34,12 +35,19 @@ export default async function DashboardPage() {
 
   const today = new Date().toISOString().slice(0, 10);
   const newInquiries = bookings.filter(b => b.state === "inquiry");
-  const awaitingDeposit = bookings.filter(b => b.state === "deposit_sent");
-  const depositPaid = bookings.filter(b => b.state === "deposit_paid");
+  const followUps = bookings.filter(b => b.state === "follow_up");
+  const awaitingConfirmation = bookings.filter(b => b.state === "accepted");
   const todayAppointments = bookings.filter(b => b.state === "confirmed" && b.appointment_date?.slice(0, 10) === today);
 
-  const pipelineSettings = mergePipelineSettings((artistData?.pipeline_settings as object ?? {}) as Parameters<typeof mergePipelineSettings>[0]);
   const firstName = artistData?.name?.split(" ")[0] ?? "there";
+
+  const booksStatus = {
+    books_open: artistData?.books_open ?? true,
+    books_open_at: (artistData as Record<string, unknown>)?.books_open_at as string ?? null,
+    books_close_at: (artistData as Record<string, unknown>)?.books_close_at as string ?? null,
+  };
+  const booksOpen = isBooksOpen(booksStatus);
+  const booksLabel = booksStatusLabel(booksStatus);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -49,9 +57,12 @@ export default async function DashboardPage() {
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <h1 className="text-xl font-heading font-semibold text-on-surface">Dashboard</h1>
-          <Link href="/bookings" className="px-4 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
-            All bookings
-          </Link>
+          <div className="flex items-center gap-3">
+            <BooksToggle initialOpen={booksOpen} statusLabel={booksLabel} />
+            <Link href="/bookings" className="px-4 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
+              All bookings
+            </Link>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
@@ -59,7 +70,7 @@ export default async function DashboardPage() {
           <div className="px-8 pt-6 pb-4">
             <p className="text-base text-on-surface-variant mb-5">{greeting}, {firstName}.</p>
 
-            {newInquiries.length === 0 && awaitingDeposit.length === 0 && depositPaid.length === 0 && todayAppointments.length === 0 ? (
+            {newInquiries.length === 0 && followUps.length === 0 && awaitingConfirmation.length === 0 && todayAppointments.length === 0 ? (
               <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 text-center">
                 <p className="text-sm font-medium text-on-surface">You&apos;re all caught up.</p>
                 <p className="text-sm text-on-surface-variant mt-1">No action items right now.</p>
@@ -69,25 +80,17 @@ export default async function DashboardPage() {
                 <ActionCard
                   label="New inquiries"
                   count={newInquiries.length}
-                  description="Waiting for your review"
+                  description={followUps.length > 0 ? `${followUps.length} follow-up${followUps.length > 1 ? "s" : ""} pending` : "Waiting for your review"}
                   urgent={newInquiries.length > 0}
                   href="/bookings?state=inquiry"
                   cta="Review now"
                 />
                 <ActionCard
-                  label="Awaiting deposit"
-                  count={awaitingDeposit.length}
-                  description="Deposit link sent, not yet paid"
-                  urgent={false}
-                  href="/bookings?state=deposit_sent"
-                  cta="View"
-                />
-                <ActionCard
-                  label="Deposit paid"
-                  count={depositPaid.length}
-                  description="Ready to confirm"
-                  urgent={depositPaid.length > 0}
-                  href="/bookings?state=deposit_paid"
+                  label="Awaiting confirmation"
+                  count={awaitingConfirmation.length}
+                  description="Accepted — needs to schedule"
+                  urgent={awaitingConfirmation.length > 0}
+                  href="/bookings?state=accepted"
                   cta="Confirm"
                 />
                 <ActionCard
@@ -106,7 +109,11 @@ export default async function DashboardPage() {
           <div className="px-8 pb-8">
             <h2 className="text-sm font-heading font-semibold text-on-surface mb-3">Pipeline</h2>
             {bookings.length > 0 ? (
-              <PipelineView initialBookings={bookings} fieldLabelMap={fieldLabelMap} pipelineSettings={pipelineSettings} />
+              <PipelineView
+                initialBookings={bookings}
+                fieldLabelMap={fieldLabelMap}
+                calendarSyncEnabled={Boolean(artistData?.calendar_sync_enabled)}
+              />
             ) : (
               <div className="rounded-xl border border-dashed border-outline-variant/30 p-12 text-center">
                 <p className="text-sm text-on-surface-variant">No bookings yet. Share your booking form to get started.</p>

@@ -59,7 +59,7 @@ export default async function CalendarPage({
           </div>
 
           <div className="max-w-5xl">
-            <CalendarView />
+            <CalendarView initialDate={params.date} />
           </div>
         </div>
       </main>

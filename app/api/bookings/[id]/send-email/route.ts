@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
-import { sendEmail, buildTemplateVars, DEFAULT_EMAIL_TEMPLATES, applyPlaceholders } from '@/lib/email';
+import { sendEmail, buildTemplateVars, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
 import type { CalendarLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
 
@@ -15,10 +15,15 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
 
   if (error || !booking) return null;
 
-  const [{ data: artist }, { data: templateRows }] = await Promise.all([
+  const [{ data: artistCore }, { data: artistExtra }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, payment_links, gmail_connected, google_refresh_token, gmail_address, calendar_links')
+      .select('name, studio_name, payment_links, gmail_connected, google_refresh_token, gmail_address')
+      .eq('id', userId)
+      .single(),
+    supabase
+      .from('artists')
+      .select('calendar_links')
       .eq('id', userId)
       .single(),
     supabase
@@ -27,17 +32,12 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
       .eq('artist_id', userId),
   ]);
 
-  return { booking, artist, templateRows: templateRows ?? [] };
-}
+  const artist = artistCore ? {
+    ...artistCore,
+    calendar_links: artistExtra?.calendar_links ?? [],
+  } : null;
 
-function resolveTemplate(
-  tmpl: { subject: string; body: string },
-  vars: ReturnType<typeof buildTemplateVars>
-) {
-  return {
-    subject: applyPlaceholders(tmpl.subject, vars),
-    body: applyPlaceholders(tmpl.body, vars),
-  };
+  return { booking, artist, templateRows: templateRows ?? [] };
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -50,45 +50,48 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!ctx) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
   const { booking, artist, templateRows } = ctx;
-  if (booking.state === 'cancelled') return NextResponse.json({ error: 'No email for cancelled bookings' }, { status: 400 });
+  if (booking.state === 'cancelled' || booking.state === 'rejected') return NextResponse.json({ error: 'No email for cancelled/rejected bookings' }, { status: 400 });
 
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
-
   const vars = buildTemplateVars({
     clientName: booking.client_name,
-    artistName: artist?.name ?? 'Your Artist',
+    artistName: artist?.name || artist?.studio_name || 'Your Artist',
     paymentLinksList,
     calendarLinksList,
     primaryPaymentLink: booking.payment_link_sent ?? undefined,
     appointmentDate: booking.appointment_date ?? undefined,
   });
 
-  // Build the full resolved template list for the picker
+  // Build the full template list for the picker — return RAW (unresolved) text so variables
+  // remain visible as {tokens} in the modal editor. POST handler resolves at send time.
   const stateDefaults = DEFAULT_EMAIL_TEMPLATES as Record<string, { subject: string; body: string }>;
   const savedByState = new Map(templateRows.filter(r => r.state).map(r => [r.state as string, r]));
   const customTemplates = templateRows.filter(r => !r.state);
 
-  // State-linked templates (one per emailable state)
-  const STATE_ORDER = ['inquiry', 'reviewed', 'deposit_sent', 'deposit_paid', 'confirmed', 'completed'];
-  const stateTemplates = STATE_ORDER.map(state => {
-    const saved = savedByState.get(state);
-    const raw = saved ?? stateDefaults[state];
-    const resolved = resolveTemplate(raw, vars);
-    return {
-      id: saved?.id ?? null,
-      name: saved?.name ?? stateDefaults[state] ? stateLabel(state) : state,
-      state,
-      ...resolved,
-    };
-  });
+  // State-linked templates (one per emailable state, in pipeline order)
+  const STATE_ORDER = ['inquiry', 'follow_up', 'accepted', 'confirmed', 'completed', 'rejected'];
+  const stateTemplates = STATE_ORDER
+    .filter(state => savedByState.has(state) || !!stateDefaults[state])
+    .map(state => {
+      const saved = savedByState.get(state);
+      const raw = saved ?? stateDefaults[state];
+      return {
+        id: saved?.id ?? null,
+        name: saved?.name ?? stateLabel(state),
+        state,
+        subject: raw.subject,
+        body: raw.body,
+      };
+    });
 
   // Custom (non-state) templates
   const custom = customTemplates.map(t => ({
     id: t.id,
     name: t.name ?? 'Custom template',
     state: null,
-    ...resolveTemplate(t, vars),
+    subject: t.subject,
+    body: t.body,
   }));
 
   const allTemplates = [...stateTemplates, ...custom];
@@ -98,21 +101,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const defaultTemplate = allTemplates.find(t => t.state === currentState) ?? allTemplates[0];
 
   return NextResponse.json({
-    subject: defaultTemplate.subject,
-    body: defaultTemplate.body,
+    subject: defaultTemplate?.subject ?? '',
+    body: defaultTemplate?.body ?? '',
     defaultTemplateState: currentState,
     templates: allTemplates,
+    paymentLinks: paymentLinksList,
+    calendarLinks: calendarLinksList,
+    previewVars: vars as Record<string, string>,
   });
 }
 
 function stateLabel(state: string): string {
   const map: Record<string, string> = {
-    inquiry: 'Inquiry Received',
-    reviewed: 'Inquiry Reviewed',
-    deposit_sent: 'Deposit Requested',
-    deposit_paid: 'Deposit Received',
-    confirmed: 'Appointment Confirmed',
-    completed: 'Appointment Completed',
+    inquiry:                 'Submission Received',
+    follow_up:               'Follow Ups',
+    accepted:                'Submission Accepted',
+    deposit_sent:            'Deposit Requested',
+    paid_calendar_link_sent: 'Deposit Received – Calendar Sent',
+    confirmed:               'Appointment Booked',
+    completed:               'Appointment Completed',
+    rejected:                'Submission Rejected',
   };
   return map[state] ?? state;
 }
@@ -129,7 +137,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { booking, artist } = ctx;
 
   const reqBody = await req.json().catch(() => ({}));
-  // subject/body are already resolved (user may have edited them)
   const subject: string = reqBody.subject ?? '';
   const body: string = reqBody.body ?? '';
 
@@ -138,12 +145,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       ? { refreshToken: artist.google_refresh_token, gmailAddress: artist.gmail_address }
       : null;
 
-  // vars only needed if subject/body still contain placeholders (edge case)
+  // subject/body may contain {variable} tokens — sendEmail resolves them at send time
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
   const vars = buildTemplateVars({
     clientName: booking.client_name,
-    artistName: artist?.name ?? 'Your Artist',
+    artistName: artist?.name || artist?.studio_name || 'Your Artist',
     paymentLinksList,
     calendarLinksList,
     primaryPaymentLink: booking.payment_link_sent ?? undefined,

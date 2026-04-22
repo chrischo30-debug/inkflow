@@ -7,22 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
 
 const STATE_LABELS: Record<Exclude<BookingState, "cancelled">, string> = {
-  inquiry:      "Inquiry Received",
-  reviewed:     "Inquiry Reviewed",
-  deposit_sent: "Deposit Requested",
-  deposit_paid: "Deposit Received",
-  confirmed:    "Appointment Confirmed",
-  completed:    "Appointment Completed",
+  inquiry:   "Submission Received",
+  follow_up: "Follow Ups",
+  accepted:  "Accepted – Deposit Requested",
+  confirmed: "Appointment Booked",
+  completed: "Appointment Completed",
+  rejected:  "Submission Rejected",
 };
 
 const VARIABLES = [
-  { name: "{clientName}",    description: "Client's full name",                        example: "Jane Smith" },
-  { name: "{artistName}",    description: "Your artist/studio name",                   example: "Ink by Alex" },
-  { name: "{paymentLink}",   description: "Your primary payment link URL",             example: "https://stripe.com/pay/..." },
-  { name: "{paymentLinks}",  description: "All payment links, one per line with labels", example: "Stripe: https://...\nVenmo: https://..." },
-  { name: "{calendarLink}",  description: "Your primary scheduling link URL",          example: "https://calendly.com/..." },
-  { name: "{calendarLinks}", description: "All scheduling links, one per line with labels", example: "30 min: https://...\n2 hr: https://..." },
-  { name: "{appointmentDate}", description: "Confirmed appointment date",              example: "May 3, 2026" },
+  { name: "{clientFirstName}", description: "Client's first name",                       example: "Jane" },
+  { name: "{artistName}",      description: "Your artist/studio name",                   example: "Ink by Alex" },
+  { name: "{paymentLink}",     description: "Your primary payment link URL",             example: "https://stripe.com/pay/..." },
+  { name: "{calendarLink}",    description: "Your primary scheduling link URL",          example: "https://calendly.com/..." },
+  { name: "{calendarLinks}",   description: "All scheduling links, one per line with labels", example: "30 min: https://...\n2 hr: https://..." },
+  { name: "{appointmentDate}", description: "Confirmed appointment date",               example: "May 3, 2026" },
 ];
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
@@ -193,7 +192,7 @@ function NewTemplateForm({ onCreated }: { onCreated: () => void }) {
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
       <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
-      <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder="Message body — use variables like {clientName}, {artistName}"
+      <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder="Message body — use variables like {clientFirstName}, {artistName}"
         className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors" />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button type="button" onClick={create} disabled={saving}

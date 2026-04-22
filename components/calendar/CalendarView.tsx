@@ -115,10 +115,11 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function CalendarView() {
+export function CalendarView({ initialDate }: { initialDate?: string }) {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-indexed
+  const seed = initialDate ? new Date(initialDate + "T12:00:00") : today;
+  const [year, setYear] = useState(seed.getFullYear());
+  const [month, setMonth] = useState(seed.getMonth()); // 0-indexed
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [googleSyncError, setGoogleSyncError] = useState("");

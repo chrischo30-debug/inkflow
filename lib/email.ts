@@ -7,36 +7,36 @@ const resend = new Resend(process.env.RESEND_API_KEY || 're_mock_key');
 
 export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>, { subject: string; body: string }> = {
   inquiry: {
-    subject: `Inquiry Received – {artistName}`,
-    body: `Hi {clientName},\n\nWe received your inquiry. {artistName} is reviewing it and will get back to you shortly.\n\nThanks,\n{artistName}`,
+    subject: `Submission Received – {artistName}`,
+    body: `Hi {clientFirstName},\n\nWe received your submission. {artistName} is reviewing it and will get back to you shortly.\n\nThanks,\n{artistName}`,
   },
-  reviewed: {
-    subject: `Good news! Your inquiry was reviewed – {artistName}`,
-    body: `Hi {clientName},\n\nYour tattoo idea looks great! {artistName} has reviewed your inquiry. Please wait for official deposit instructions shortly.\n\nThanks,\n{artistName}`,
+  follow_up: {
+    subject: `Following up on your tattoo request – {artistName}`,
+    body: `Hi {clientFirstName},\n\nThank you for reaching out! I had a few questions about your tattoo idea before moving forward:\n\n✏️ REPLACE THIS: Add your questions here\n\nLooking forward to hearing from you!\n\nThanks,\n{artistName}`,
   },
-  deposit_sent: {
-    subject: `Action Required: Deposit for {artistName}`,
-    body: `Hi {clientName},\n\nYour booking requires a deposit to hold your spot.\n\n{paymentLinks}\n\nThanks,\n{artistName}`,
-  },
-  deposit_paid: {
-    subject: `Deposit Received – {artistName}`,
-    body: `Hi {clientName},\n\nYour deposit was received. We're moving your booking to confirmed!\n\nThanks,\n{artistName}`,
+  accepted: {
+    subject: `You're in! Next steps from {artistName}`,
+    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit:\n{paymentLink}\n\nOnce your deposit is received, use this link to book your appointment time:\n{calendarLinks}\n\nThanks,\n{artistName}`,
   },
   confirmed: {
-    subject: `Appointment Confirmed – {artistName}`,
-    body: `Hi {clientName},\n\nYou're locked in!\n\n{calendarLinks}\n\nThanks,\n{artistName}`,
+    subject: `Appointment Booked – {artistName}`,
+    body: `Hi {clientFirstName},\n\nYou're locked in! See you on {appointmentDate}.\n\nThanks,\n{artistName}`,
   },
   completed: {
     subject: `Thanks for coming in – {artistName}`,
-    body: `Hi {clientName},\n\nIt was a pleasure working with you. Take care of your new tattoo!\n\nThanks,\n{artistName}`,
+    body: `Hi {clientFirstName},\n\nIt was a pleasure working with you. Take care of your new tattoo!\n\nThanks,\n{artistName}`,
+  },
+  rejected: {
+    subject: `Update on your tattoo request – {artistName}`,
+    body: `Hi {clientFirstName},\n\nThank you so much for your interest. Unfortunately, I'm unable to take on this project at this time.\n\nI hope you find the perfect artist for your vision!\n\nThanks,\n{artistName}`,
   },
 };
 
 export interface TemplateVars {
-  clientName: string;
+  clientFirstName: string;
+  clientName: string;     // kept for backwards compat with existing saved templates
   artistName: string;
-  paymentLink: string;    // first payment link URL (or empty)
-  paymentLinks: string;   // all payment links formatted as labeled list
+  paymentLink: string;    // primary payment link URL (or empty)
   calendarLink: string;   // first calendar link URL (or empty)
   calendarLinks: string;  // all calendar links formatted as labeled list
   appointmentDate: string;
@@ -51,9 +51,6 @@ export function buildTemplateVars(opts: {
   primaryPaymentLink?: string;
 }): TemplateVars {
   const paymentLink = opts.primaryPaymentLink || opts.paymentLinksList[0]?.url || '';
-  const paymentLinks = opts.paymentLinksList.length
-    ? opts.paymentLinksList.map(l => `${l.label}: ${l.url}`).join('\n')
-    : paymentLink;
 
   const calendarLink = opts.calendarLinksList[0]?.url || '';
   const calendarLinks = opts.calendarLinksList.length
@@ -61,10 +58,10 @@ export function buildTemplateVars(opts: {
     : calendarLink;
 
   return {
+    clientFirstName: opts.clientName.split(' ')[0],
     clientName: opts.clientName,
     artistName: opts.artistName,
     paymentLink,
-    paymentLinks,
     calendarLink,
     calendarLinks,
     appointmentDate: opts.appointmentDate ?? '',
@@ -73,10 +70,10 @@ export function buildTemplateVars(opts: {
 
 export function applyPlaceholders(template: string, vars: TemplateVars): string {
   return template
+    .replace(/\{clientFirstName\}/g, vars.clientFirstName)
     .replace(/\{clientName\}/g, vars.clientName)
     .replace(/\{artistName\}/g, vars.artistName)
     .replace(/\{paymentLink\}/g, vars.paymentLink)
-    .replace(/\{paymentLinks\}/g, vars.paymentLinks)
     .replace(/\{calendarLink\}/g, vars.calendarLink)
     .replace(/\{calendarLinks\}/g, vars.calendarLinks)
     .replace(/\{appointmentDate\}/g, vars.appointmentDate);
@@ -159,7 +156,7 @@ export async function sendStateTransitionEmail(payload: {
   if (newState === 'cancelled') return {};
 
   const defaults = DEFAULT_EMAIL_TEMPLATES[newState as Exclude<BookingState, 'cancelled'>];
-  if (!defaults) return {};
+  if (!defaults) return {}; // no template for this state (e.g. terminal states without a default)
 
   const vars = buildTemplateVars({
     clientName: payload.clientName,
