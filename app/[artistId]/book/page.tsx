@@ -1,7 +1,9 @@
 import { BookingPageShell } from "@/components/booking/BookingPageShell";
+import { BooksClosedPage } from "@/components/booking/BooksClosedPage";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCustomFormFields, normalizeFormFields } from "@/lib/form-fields";
+import { isBooksOpen } from "@/lib/books";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,17 +25,55 @@ export default async function BookPage({
 
   if (!artist) notFound();
 
+  // Gate: check if books are currently open
+  if (!isBooksOpen({
+    books_open: artist.books_open ?? true,
+    books_open_at: artist.books_open_at ?? null,
+    books_close_at: artist.books_close_at ?? null,
+  })) {
+    const showContact = artist.show_contact_on_closed && artist.contact_form_enabled;
+    const showNewsletter = artist.show_newsletter_on_closed && artist.newsletter_form_enabled && artist.kit_api_key && artist.kit_form_id;
+    return (
+      <BooksClosedPage
+        artistName={artist.name}
+        logoUrl={artist.logo_url ?? null}
+        message={artist.books_closed_message ?? null}
+        websiteUrl={artist.website_url ?? null}
+        socialLinks={Array.isArray(artist.social_links) ? artist.social_links : []}
+        showSocialOnBooking={artist.show_social_on_booking ?? false}
+        bgColor={artist.booking_bg_color ?? "#ffffff"}
+        accentTheme={(artist.accent_theme as "crimson" | "blue") ?? "crimson"}
+        contactForm={showContact ? {
+          artistSlug: artist.slug,
+          header: artist.contact_form_header ?? "",
+          subtext: artist.contact_form_subtext ?? "",
+          buttonText: artist.contact_form_button_text ?? "",
+          confirmationMessage: artist.contact_form_confirmation_message ?? "",
+          phoneEnabled: artist.contact_phone_enabled ?? false,
+          phoneRequired: artist.contact_phone_required ?? false,
+        } : null}
+        newsletter={showNewsletter ? {
+          artistSlug: artist.slug,
+          header: artist.newsletter_form_header ?? "",
+          subtext: artist.newsletter_form_subtext ?? "",
+          buttonText: artist.newsletter_form_button_text ?? "",
+          confirmationMessage: artist.newsletter_form_confirmation_message ?? "",
+        } : null}
+      />
+    );
+  }
+
   const artistName = artist.name;
 
   const [{ data: rawFields }, { data: rawCustomFields }] = await Promise.all([
     admin
       .from("form_fields")
-      .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
+      .select("field_key, label, enabled, required, sort_order, placeholder, description, input_type, options")
       .eq("artist_id", artist.id)
       .order("sort_order", { ascending: true }),
     admin
       .from("custom_form_fields")
-      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
+      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, description, options")
       .eq("artist_id", artist.id)
       .order("sort_order", { ascending: true }),
   ]);

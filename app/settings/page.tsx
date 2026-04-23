@@ -2,7 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { SettingsShell } from "@/components/settings/SettingsShell";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { mergePipelineSettings, normalizePaymentLinks } from "@/lib/pipeline-settings";
+import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
 
 export default async function SettingsPage() {
@@ -23,12 +23,20 @@ export default async function SettingsPage() {
     calendar_links?: CalendarLink[];
     stripe_api_key?: string;
     calcom_api_key?: string;
+    kit_api_key?: string;
+    kit_form_id?: string;
+    reminder_enabled?: boolean;
+    reminder_hours_before?: number;
+    books_open?: boolean;
+    books_open_at?: string | null;
+    books_close_at?: string | null;
+    books_closed_message?: string | null;
   };
   let extended: ExtendedArtist = {};
   try {
     const { data } = await supabase
       .from("artists")
-      .select("pipeline_settings, calendar_links, stripe_api_key, calcom_api_key")
+      .select("pipeline_settings, calendar_links, stripe_api_key, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before, books_open, books_open_at, books_close_at, books_closed_message")
       .eq("id", user.id)
       .single();
     extended = (data as ExtendedArtist) ?? {};
@@ -53,9 +61,16 @@ export default async function SettingsPage() {
         gmailAddress={artist?.gmail_address ?? ""}
         paymentLinks={normalizePaymentLinks(artist?.payment_links)}
         calendarLinks={(extended.calendar_links as CalendarLink[]) ?? []}
-        pipelineSettings={mergePipelineSettings((extended.pipeline_settings ?? {}) as Parameters<typeof mergePipelineSettings>[0])}
         stripeApiKey={extended.stripe_api_key ?? ""}
         calcomApiKey={extended.calcom_api_key ?? ""}
+        kitApiKey={extended.kit_api_key ?? ""}
+        kitFormId={extended.kit_form_id ?? ""}
+        reminderEnabled={extended.reminder_enabled ?? false}
+        reminderHoursBefore={extended.reminder_hours_before ?? 24}
+        booksOpen={extended.books_open ?? true}
+        booksClosedMessage={extended.books_closed_message ?? ""}
+        booksOpenAt={extended.books_open_at ? new Date(extended.books_open_at).toISOString().slice(0, 16) : ""}
+        booksCloseAt={extended.books_close_at ? new Date(extended.books_close_at).toISOString().slice(0, 16) : ""}
       />
     </div>
   );

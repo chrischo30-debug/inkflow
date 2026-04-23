@@ -1,58 +1,108 @@
-# roadmap.md
+# Inkflow Roadmap
 
-## Phase 1 — Build Now
+## Completed
 
-### Auth & Onboarding
-- [ ] Email + password sign up and login
-- [ ] Artist profile setup (name, studio, style tags, deposit amount)
-- [ ] Onboarding flow: connect Google Calendar, set availability, configure first form
+### Phase 1 — Pipeline Rework
+- Renamed states: `reviewed` → `accepted`, `deposit_paid` → `paid_calendar_link_sent`
+- Added states: `follow_up`, `rejected`
+- Inquiry cards show 3-button row: Reject / Follow Up / Accept
+- Reject and Follow Up open email compose with pre-loaded template, move state after send
+- Completion modal captures `total_amount`, `tip_amount`, `completion_notes`
+- Mail icon opens compose modal instead of auto-sending
+- Split migration required: `ALTER TYPE ADD VALUE` in one file, DML in a second (Supabase transaction constraint)
 
-### Inquiry Form Builder
-- [ ] Artist gets a unique public form URL (e.g. flashbook.app/book/[artist-slug])
-- [ ] Form fields: name, email, phone, tattoo description, size, placement, reference images, budget
-- [ ] Artist can toggle fields on/off and mark required
-- [ ] Form submissions saved to DB and trigger pipeline entry
+### Phase 2 — Email Compose Enhancements
+- Payment link and calendar link insert-at-cursor buttons in compose modal
+- Inserts at textarea cursor position with smart newline handling
 
-### Booking Pipeline (Kanban / List view)
-- [ ] View all inquiries with current state (inquiry → reviewed → deposit_sent → deposit_paid → confirmed → completed)
-- [ ] Move submissions through states manually or via automation
-- [ ] Filter by state, date, client name
-- [ ] "Needs action today" highlight — show what requires the artist's attention
+### Phase 3 — Bookings View
+- Search bar filtering across all states
+- Confirmed tab grouped by appointment date with date-header rows
+- Past Clients page (`/past-clients`) — searchable, expandable rows with completion data
 
-### Automated Messaging
-- [ ] Pre-written email templates for each pipeline state transition
-- [ ] Artist can edit template text
-- [ ] Auto-send on state change (configurable — artist can turn off per state)
-- [ ] Manual send option — review before sending
+### Phase 4 — Appointment Reminders
+- Vercel cron (`0 * * * *`) hitting `/api/reminders/send`
+- Configurable: toggle + hours before (2/4/8/12/24/48/72h)
+- Sends via Gmail (threaded) or Resend fallback; marks `reminder_sent_at` to prevent duplicates
+- Settings → Reminders tab
 
-### Payment Link Sending
-- [ ] Artist stores their payment links (Stripe, Venmo, Cash App, Squarespace, etc.)
-- [ ] One-click send deposit request email with their saved payment link embedded
-- [ ] Payment link not sent until artist approves — enforced by pipeline state
-- [ ] Mark deposit as paid manually (artist confirms receipt)
+### Phase 5 — Books Open / Closed
+- Migration: `books_open`, `books_open_at`, `books_close_at`, `books_closed_message`
+- `isBooksOpen()` checks manual toggle + optional schedule window
+- Public booking form gates on open status; shows `BooksClosedPage` with artist branding when closed
+- Dashboard header quick-toggle pill (green/gray, shows scheduled label)
+- Settings → Books tab: toggle, custom closed message, drop schedule (auto-open / auto-close datetime)
 
-### Calendar View
-- [ ] In-app calendar showing confirmed appointments
-- [ ] Availability blocks — artist sets open slots
-- [ ] Google Calendar two-way sync (read existing events, write confirmed bookings)
-- [ ] Day and week view minimum
+### Phase 6 — Inbox (Gmail)
+- OAuth scope updated to `gmail.modify` (read + mark-as-read)
+- `lib/gmail.ts`: list threads, fetch thread detail, mark read
+- `/api/inbox`, `/api/inbox/[threadId]`, `/api/inbox/reply`
+- `/inbox` page — split pane: thread list + thread detail + reply area
+- "Insert booking form link" pre-fills reply with booking URL template
+- Graceful error when Gmail scope not yet granted (prompts reconnect)
 
-### Dashboard
-- [ ] Today's appointments
-- [ ] Pipeline summary (count per state)
-- [ ] Unreviewed inquiries count
-- [ ] Pending deposits (sent but not paid)
+### Phase 7 — Import Bookings
+- `/api/bookings/import` — authenticated bulk insert
+- `AddBookingModal` — "+ Add booking" button in Bookings header, modal with all fields
+- `/import` page with two tabs:
+  - **Import CSV**: drag-and-drop → auto-detect columns → mapping table → preview → bulk import
+  - **Add manually**: inline form, resets after save for adding multiple entries
+
+### Phase 12 — Contact Form & Newsletter Signup
+- **Contact Form**: `/contact-form` admin page + `/{slug}/contact` public page
+  - Fields: name, email, phone (optional toggle + required), message
+  - Enable/disable toggle, show-on-closed-books-page toggle
+  - Submissions stored in `contact_submissions` table
+  - Email notification to artist via Resend on each submission; `replyTo` set to visitor's email
+- **Newsletter**: `/newsletter-form` admin page + `/{slug}/newsletter` public page
+  - Requires Kit (ConvertKit) API Key + Form ID (stored in `artists` table)
+  - Setup gate UI guides users through connecting Kit before enabling the form
+  - Subscriptions POST to `api.convertkit.com/v3/forms/{id}/subscribe`
+  - Kit settings in **Settings → Integrations → Newsletter** section alongside Stripe + Cal.com
+- **Books Closed embeds**: both contact and newsletter forms can be embedded on the `/{slug}/book` closed page via per-form toggle
+- **Resend transactional email**: `support@flashbooker.app` domain verified (DKIM + SPF + DMARC in Cloudflare); Supabase SMTP configured to use Resend for auth emails (password reset etc.)
+- **Gmail inbox improvements**:
+  - `Reply-To` header extracted from Gmail API messages; inbox reply defaults to visitor email instead of app sender
+  - Dropdown selector in reply area when both From and Reply-To addresses differ
+  - "Tattoo inquiries only" filter now passes through all emails from the app's sending domain (`@flashbooker.app`)
 
 ---
 
-## Phase 2 — Not Building Yet
-- [ ] Mobile app (iOS / Android)
-- [ ] Multi-artist studio accounts
-- [ ] In-app payment processing (Stripe Connect)
-- [ ] SMS messaging (Twilio)
-- [ ] Analytics (revenue, booking rate, drop-off by stage)
-- [ ] Waitlist management
-- [ ] Client portal (client can see their own booking status)
-- [ ] Deposit automation (auto-mark paid via Stripe webhook)
-- [ ] Custom domain for booking form
-- [ ] Instagram DM integration (receive inquiries via DM, reply from pipeline)
+## Planned
+
+### Phase 8 — Setup & Integrations Guide ✓
+- `/setup` page with progress bar (X of 5 steps complete)
+- Live status for: booking URL, logo, Gmail, payment links, calendar links
+- Recommended tools cards: Cal.com, Stripe, Kit (Venmo removed — Stripe preferred)
+- Get help section with support email (`SUPPORT_EMAIL` env var)
+
+### Phase 9 — Admin View ✓
+- `is_admin` boolean on `artists` table; manually set for operator account
+- `/admin` page: all artists with booking stats (total, inquiries, confirmed, completed, last booking)
+- `/admin/artists/[artistId]` detail page: profile, booking state summary, recent bookings list
+- "Generate Login Link" button — calls Supabase Admin API to create a magic link; copy and open in incognito for support
+- Admin link appears in sidebar only for is_admin users
+- Middleware guards all `/admin/*` routes, redirects non-admins to `/`
+
+### Phase 10 — Dark Theme Toggle
+Dark mode option in dashboard settings.
+
+### Phase 11 — Password Reset Flow ✓
+- `/forgot-password` page — email input, calls `supabase.auth.resetPasswordForEmail()` with callback redirect
+- `/reset-password` page — new + confirm password fields, calls `supabase.auth.updateUser()`, guards against expired links
+- "Forgot your password?" link on login page
+- `/forgot-password` added to middleware safePaths
+
+---
+
+## Original Backlog (not scheduled)
+- Mobile app (iOS / Android)
+- Multi-artist studio accounts
+- In-app payment processing (Stripe Connect)
+- SMS messaging (Twilio)
+- Analytics (revenue, booking rate, drop-off by stage)
+- Waitlist management
+- Client portal (client sees their own booking status)
+- Deposit automation (auto-mark paid via Stripe webhook)
+- Custom domain for booking form
+- Instagram DM integration

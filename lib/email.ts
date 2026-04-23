@@ -94,6 +94,7 @@ interface SendEmailPayload {
 
 interface SendEmailResult {
   threadId?: string;
+  subject?: string;
 }
 
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
@@ -113,7 +114,7 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
         body: text,
         threadId: existingThreadId ?? undefined,
       });
-      return { threadId: result.threadId };
+      return { threadId: result.threadId, subject };
     } catch (err) {
       console.error('Gmail send failed, falling back to Resend:', err);
     }
@@ -121,12 +122,12 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
 
   if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
     console.log('[MOCK EMAIL SENT]', { to: toEmail, subject, text });
-    return {};
+    return { subject };
   }
 
   try {
     await resend.emails.send({
-      from: 'FlashBook <noreply@flashbook.app>',
+      from: `FlashBooker <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`,
       to: [toEmail],
       subject,
       text,
@@ -135,7 +136,7 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
     console.error('Failed to send email via Resend:', error);
   }
 
-  return {};
+  return { subject };
 }
 
 // Legacy wrapper used by auto-send on state transitions

@@ -1,22 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { User, Link2, Columns3, Mail, ExternalLink } from "lucide-react";
+import { User, Link2, Mail, Bell, BookOpen, ExternalLink } from "lucide-react";
 import { AccountSettings } from "./AccountSettings";
 import { ThemeSettings } from "./ThemeSettings";
 import { GoogleIntegrationSettings } from "./GoogleIntegrationSettings";
-import { PaymentSettings } from "./PaymentSettings";
-import { CalendarLinksSettings } from "./CalendarLinksSettings";
-import { PipelineSettings } from "./PipelineSettings";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import { ExternalApiSettings } from "./ExternalApiSettings";
-import type { PipelineSettings as PipelineSettingsType, CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
+import { ReminderSettings } from "./ReminderSettings";
+import { BooksSettings } from "./BooksSettings";
+import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
+// CalendarLink/PaymentLink still used by SettingsShellProps (passed in from page but no longer rendered here)
 
 const TABS = [
   { id: "profile",      label: "Profile",      icon: User },
   { id: "integrations", label: "Integrations", icon: Link2 },
-  { id: "pipeline",     label: "Pipeline",     icon: Columns3 },
   { id: "emails",       label: "Emails",       icon: Mail },
+  { id: "reminders",    label: "Reminders",    icon: Bell },
+  { id: "books",        label: "Books",        icon: BookOpen },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -34,9 +35,16 @@ export interface SettingsShellProps {
   gmailAddress: string;
   paymentLinks: PaymentLink[];
   calendarLinks: CalendarLink[];
-  pipelineSettings: PipelineSettingsType;
   stripeApiKey: string;
   calcomApiKey: string;
+  kitApiKey: string;
+  kitFormId: string;
+  reminderEnabled: boolean;
+  reminderHoursBefore: number;
+  booksOpen: boolean;
+  booksClosedMessage: string;
+  booksOpenAt: string;
+  booksCloseAt: string;
 }
 
 export function SettingsShell(props: SettingsShellProps) {
@@ -98,7 +106,7 @@ export function SettingsShell(props: SettingsShellProps) {
 
           {tab === "integrations" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Integrations" description="Connect external services for email, calendar, and payments." />
+              <SectionHeading title="Integrations" description="Connect external services for email and calendar sync." />
               <GoogleIntegrationSettings
                 googleConfigured={props.googleConfigured}
                 hasRefreshToken={props.hasRefreshToken}
@@ -106,17 +114,11 @@ export function SettingsShell(props: SettingsShellProps) {
                 isGmailConnected={props.isGmailConnected}
                 gmailAddress={props.gmailAddress}
               />
-              <PaymentSettings initialLinks={props.paymentLinks} />
-              <CalendarLinksSettings initialLinks={props.calendarLinks} />
-              <ExternalApiSettings initialStripeKey={props.stripeApiKey} initialCalcomKey={props.calcomApiKey} />
-            </div>
-          )}
-
-          {tab === "pipeline" && (
-            <div className="max-w-3xl space-y-6">
-              <SectionHeading title="Pipeline" description="Customize what shows on booking cards and how your workflow stages are named and sequenced." />
-              <PipelineSettings
-                initialSettings={props.pipelineSettings}
+              <ExternalApiSettings
+                initialStripeKey={props.stripeApiKey}
+                initialCalcomKey={props.calcomApiKey}
+                initialKitApiKey={props.kitApiKey}
+                initialKitFormId={props.kitFormId}
               />
             </div>
           )}
@@ -125,6 +127,28 @@ export function SettingsShell(props: SettingsShellProps) {
             <div className="max-w-2xl space-y-6">
               <SectionHeading title="Email Templates" description="Customize messages sent at each stage. Toggle auto-send to control whether emails go out automatically." />
               <EmailTemplatesSettings />
+            </div>
+          )}
+
+          {tab === "reminders" && (
+            <div className="max-w-2xl space-y-6">
+              <SectionHeading title="Appointment Reminders" description="Send clients an automatic reminder email before their appointment." />
+              <ReminderSettings
+                initialEnabled={props.reminderEnabled}
+                initialHoursBefore={props.reminderHoursBefore}
+              />
+            </div>
+          )}
+
+          {tab === "books" && (
+            <div className="max-w-2xl space-y-6">
+              <SectionHeading title="Books Open / Closed" description="Control whether your booking form accepts new inquiries, and optionally schedule a drop window." />
+              <BooksSettings
+                initialOpen={props.booksOpen}
+                initialClosedMessage={props.booksClosedMessage}
+                initialOpenAt={props.booksOpenAt}
+                initialCloseAt={props.booksCloseAt}
+              />
             </div>
           )}
         </main>
