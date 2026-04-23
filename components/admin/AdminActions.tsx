@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 type Mode = "idle" | "accessLoading" | "accessFallback" | "resetLoading" | "resetLink" | "confirmDelete" | "deleteLoading";
 
@@ -22,10 +23,17 @@ export function AdminActions({
 
   // Exchange for a real session server-side (no OTP expiry race), then open
   // a relay page that calls setSession() with the returned tokens.
+  //
+  // Supabase cookies are shared across all same-origin tabs. When the relay
+  // page calls setSession() it overwrites the admin's cookie. We capture the
+  // admin session first and restore it when this tab regains focus.
   async function openAccessTab() {
     setMode("accessLoading");
     setError(null);
     try {
+      const supabase = createClient();
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+
       const res = await fetch("/api/admin/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -41,6 +49,17 @@ export function AdminActions({
         setMode("accessFallback");
       } else {
         setMode("idle");
+
+        if (adminSession) {
+          const restoreSession = () => {
+            supabase.auth.setSession({
+              access_token: adminSession.access_token,
+              refresh_token: adminSession.refresh_token,
+            });
+            window.removeEventListener("focus", restoreSession);
+          };
+          window.addEventListener("focus", restoreSession);
+        }
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed");
