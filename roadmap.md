@@ -66,6 +66,15 @@
   - Dropdown selector in reply area when both From and Reply-To addresses differ
   - "Tattoo inquiries only" filter now passes through all emails from the app's sending domain (`@flashbooker.app`)
 
+### Phase 13 — Stripe Deposit Tracking & Cal.com Scheduling Links
+- **Stripe deposit link generation**: "Deposit link" button on accepted/confirmed booking cards and table rows (only visible when Stripe API key is set). Clicking opens an amount modal → creates a Stripe Payment Link (with `metadata.booking_id`) via API → stores URL on booking → copies to clipboard. Re-clicking copies the existing link.
+- **Stripe webhook auto-mark**: `POST /api/webhooks/stripe/[artistId]` receives `checkout.session.completed`, verifies signature with per-artist `stripe_webhook_secret`, marks `deposit_paid = true` on the matching booking.
+- **Settings → Integrations**: Stripe section now shows the per-artist webhook URL to paste into Stripe dashboard + a signing secret field (only revealed once API key is saved).
+- **"Deposit paid" indicator**: Green badge on booking cards and table rows once deposit is confirmed.
+- **Cal.com scheduling links**: "Schedule" button on accepted/confirmed cards/rows (only when Cal.com API key is set). Server-side fetches username + event types at page load; copies `cal.com/{username}/{event}?name=...&email=...` to clipboard. Multi-event-type picker dropdown via portal.
+- Both integrations are fully opt-in — dashboard works identically without them.
+- New columns: `artists.stripe_webhook_secret`, `bookings.stripe_payment_link_url` (migration `20260424_stripe_deposit.sql`).
+
 ---
 
 ## Planned
@@ -104,6 +113,6 @@ Dark mode option in dashboard settings.
 - Analytics (revenue, booking rate, drop-off by stage)
 - Waitlist management
 - Client portal (client sees their own booking status)
-- Deposit automation (auto-mark paid via Stripe webhook)
+- Deposit automation (auto-mark paid via Stripe webhook) ✓ — done in Phase 13
 - Custom domain for booking form
 - Instagram DM integration

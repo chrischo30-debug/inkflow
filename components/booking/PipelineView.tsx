@@ -1,7 +1,7 @@
 "use client";
 
 import { Booking, BookingState } from "@/lib/types";
-import { BookingCard } from "./BookingCard";
+import { BookingCard, type CalcomData } from "./BookingCard";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { PIPELINE_COLUMNS, COLUMN_LABELS } from "@/lib/pipeline-settings";
@@ -13,6 +13,8 @@ interface PipelineViewProps {
   initialBookings: Booking[];
   fieldLabelMap?: Record<string, string>;
   calendarSyncEnabled?: boolean;
+  hasStripe?: boolean;
+  calcomData?: CalcomData | null;
 }
 
 type EmailCompose = {
@@ -29,7 +31,7 @@ type EmailCompose = {
 
 type CompletionModal = { bookingId: string };
 
-export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSyncEnabled = false }: PipelineViewProps) {
+export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSyncEnabled = false, hasStripe = false, calcomData = null }: PipelineViewProps) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<BookingState | null>(null);
@@ -302,8 +304,11 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
                     onCancel={handleCancel}
                     onMoveState={handleMoveState}
                     onEditAppointment={id => setConfirmModal({ bookingId: id, initialAppointmentDate: bookings.find(b => b.id === id)?.appointment_date })}
+                    onDepositPaid={id => setBookings(prev => prev.map(b => b.id === id ? { ...b, deposit_paid: true } : b))}
                     dragging={draggingId === booking.id}
                     onDragStart={setDraggingId}
+                    hasStripe={hasStripe}
+                    calcomData={calcomData}
                   />
                 ))}
                 {colBookings.length === 0 && (

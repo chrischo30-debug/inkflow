@@ -3,10 +3,15 @@
 import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, MoreHorizontal, CalendarDays } from "lucide-react";
+import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, Calendar } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ALL_BOOKING_STATES } from "@/lib/pipeline-settings";
+
+export interface CalcomData {
+  username: string;
+  events: { slug: string; title: string }[];
+}
 
 const STATE_LABELS: Record<BookingState, string> = {
   inquiry:   "Submission",
@@ -31,8 +36,11 @@ interface BookingCardProps {
   onCancel?: (bookingId: string) => Promise<void>;
   onMoveState?: (bookingId: string, targetState: BookingState) => Promise<void>;
   onEditAppointment?: (bookingId: string) => void;
+  onDepositPaid?: (bookingId: string) => void;
   dragging?: boolean;
   onDragStart?: (bookingId: string) => void;
+  hasStripe?: boolean;
+  calcomData?: CalcomData | null;
 }
 
 function CopyButton({ value }: { value: string }) {
@@ -70,6 +78,12 @@ function fmtShort(iso: string): string {
 
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const t = new Date();
+  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
 }
 
 
@@ -178,10 +192,32 @@ export function BookingCard({
   onCancel,
   onMoveState,
   onEditAppointment,
+  onDepositPaid,
   dragging,
   onDragStart,
+  hasStripe = false,
+  calcomData = null,
 }: BookingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [depositModal, setDepositModal] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositError, setDepositError] = useState("");
+  const [depositLinkUrl, setDepositLinkUrl] = useState(booking.stripe_payment_link_url ?? "");
+  const [depositCopied, setDepositCopied] = useState(false);
+  const [calcomMenu, setCalcomMenu] = useState<DOMRect | null>(null);
+  const calcomMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!calcomMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (calcomMenuRef.current && !calcomMenuRef.current.contains(e.target as Node)) {
+        setCalcomMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [calcomMenu]);
 
   const customEntries = Object.entries(booking.custom_answers ?? {}).filter(([, value]) => {
     if (Array.isArray(value)) return value.length > 0;
@@ -190,6 +226,54 @@ export function BookingCard({
 
   const isInquiry = booking.state === "inquiry" || booking.state === "follow_up";
   const isAccepted = booking.state === "accepted";
+  const showDepositActions = hasStripe && (isAccepted || booking.state === "confirmed");
+
+  // Notification states
+  const showActionDot = booking.has_unread_reply &&
+    (booking.state === "inquiry" || booking.state === "follow_up" || booking.state === "accepted");
+  const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) &&
+    (booking.state === "confirmed" || booking.state === "completed");
+
+  const generateDepositLink = async () => {
+    const cents = Math.round(parseFloat(depositAmount) * 100);
+    if (!cents || cents < 100) { setDepositError("Enter a valid amount (minimum $1)"); return; }
+    setDepositLoading(true);
+    setDepositError("");
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}/stripe-payment-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_cents: cents }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDepositError(data.error ?? "Failed to generate link"); return; }
+      setDepositLinkUrl(data.url);
+      setDepositModal(false);
+      navigator.clipboard.writeText(data.url).then(() => {
+        setDepositCopied(true);
+        setTimeout(() => setDepositCopied(false), 2000);
+      });
+    } catch {
+      setDepositError("Network error");
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  const copyDepositLink = () => {
+    navigator.clipboard.writeText(depositLinkUrl).then(() => {
+      setDepositCopied(true);
+      setTimeout(() => setDepositCopied(false), 2000);
+    });
+  };
+
+  const copySchedulingLink = (eventSlug: string) => {
+    if (!calcomData?.username) return;
+    const url = `https://cal.com/${calcomData.username}/${eventSlug}?name=${encodeURIComponent(booking.client_name)}&email=${encodeURIComponent(booking.client_email)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCalcomMenu(null);
+    });
+  };
 
   return (
     <div
@@ -199,9 +283,17 @@ export function BookingCard({
     >
       {/* Main content area */}
       <div className="p-4 flex flex-col gap-2.5">
-        {/* Header: name + state badge */}
+        {/* Header: name + notification dot + state badge */}
         <div className="flex justify-between items-start gap-2">
-          <h4 className="font-semibold text-base text-on-surface line-clamp-1 min-w-0">{booking.client_name}</h4>
+          <div className="flex items-center gap-2 min-w-0">
+            <h4 className="font-semibold text-base text-on-surface line-clamp-1 min-w-0">{booking.client_name}</h4>
+            {showActionDot && (
+              <span className="relative flex h-2 w-2 shrink-0" title="Client replied">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </span>
+            )}
+          </div>
           <StateBadge state={booking.state} />
         </div>
 
@@ -226,11 +318,18 @@ export function BookingCard({
               type="button"
               onClick={e => { e.stopPropagation(); onEditAppointment?.(booking.id); }}
               title="Edit appointment"
-              className="flex items-center gap-1.5 w-full rounded-lg bg-primary/5 border border-primary/15 px-2.5 py-2 hover:bg-primary/10 transition-colors text-left"
+              className={`flex items-center gap-1.5 w-full rounded-lg px-2.5 py-2 transition-colors text-left border ${appointmentToday ? "bg-amber-50/60 border-amber-200/60 hover:bg-amber-50" : "bg-primary/5 border-primary/15 hover:bg-primary/10"}`}
             >
-              <CalendarDays className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span className="text-xs font-medium text-primary truncate">{fmtDateTime(booking.appointment_date)}</span>
+              <CalendarDays className={`w-3.5 h-3.5 shrink-0 ${appointmentToday ? "text-amber-600" : "text-primary"}`} />
+              <span className={`text-xs font-medium truncate ${appointmentToday ? "text-amber-700" : "text-primary"}`}>{fmtDateTime(booking.appointment_date)}</span>
+              {appointmentToday && <span className="ml-auto text-xs font-semibold text-amber-600 shrink-0">Today</span>}
             </button>
+          ) : booking.state === "completed" && appointmentToday ? (
+            <div className="flex items-center gap-1.5 rounded-lg bg-surface-container-low border border-outline-variant/20 px-2.5 py-2">
+              <CalendarDays className="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0" />
+              <span className="text-xs text-on-surface-variant/70 truncate">{fmtShort(booking.appointment_date)}</span>
+              <span className="ml-auto text-xs font-medium text-on-surface-variant/50 shrink-0">Today</span>
+            </div>
           ) : (
             <p className="text-xs text-on-surface-variant/70">{fmtShort(booking.appointment_date)}</p>
           )
@@ -330,47 +429,165 @@ export function BookingCard({
       </div>
 
       {/* Footer — sits inside the rounded card, separated by border */}
-      <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-end gap-1.5">
-        {isInquiry ? (
-          <>
-            {onRejectInquiry && (
-              <button type="button" onClick={() => onRejectInquiry(booking.id)} className="h-8 text-xs px-2.5 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">
-                Reject
+      <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-between gap-1.5">
+        {/* Left: deposit + cal.com automation icons */}
+        <div className="flex items-center gap-1">
+          {showDepositActions && (
+            booking.deposit_paid ? (
+              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
+                <Check className="w-3 h-3" /> Deposit paid
+              </span>
+            ) : depositLinkUrl ? (
+              <button
+                type="button"
+                onClick={copyDepositLink}
+                title="Copy deposit link"
+                className="flex items-center gap-1 h-7 px-2 text-xs rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors"
+              >
+                {depositCopied ? <Check className="w-3 h-3 text-emerald-500" /> : <DollarSign className="w-3 h-3" />}
+                {depositCopied ? "Copied" : "Deposit link"}
               </button>
-            )}
-            {onFollowUpInquiry && booking.state === "inquiry" && (
-              <button type="button" onClick={() => onFollowUpInquiry(booking.id)} className="h-8 text-xs px-2.5 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap">
-                Follow Up
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setDepositAmount(booking.budget ? String(booking.budget) : "");
+                  setDepositError("");
+                  setDepositModal(true);
+                }}
+                title="Generate deposit link"
+                className="flex items-center gap-1 h-7 px-2 text-xs rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <DollarSign className="w-3 h-3" /> Deposit link
               </button>
-            )}
-            {onAcceptInquiry && (
-              <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80" onClick={() => onAcceptInquiry(booking.id)}>
-                Accept
+            )
+          )}
+          {calcomData && (isAccepted || booking.state === "confirmed") && (
+            <button
+              type="button"
+              title="Copy scheduling link"
+              onClick={(e) => {
+                if (calcomData.events.length === 1) {
+                  copySchedulingLink(calcomData.events[0].slug);
+                } else {
+                  setCalcomMenu(e.currentTarget.getBoundingClientRect());
+                }
+              }}
+              className="flex items-center gap-1 h-7 px-2 text-xs rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+            >
+              <Calendar className="w-3 h-3" /> Schedule
+            </button>
+          )}
+        </div>
+
+        {/* Right: primary action + overflow */}
+        <div className="flex items-center gap-1.5">
+          {isInquiry ? (
+            <>
+              {onRejectInquiry && (
+                <button type="button" onClick={() => onRejectInquiry(booking.id)} className="h-8 text-xs px-2.5 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">
+                  Reject
+                </button>
+              )}
+              {onFollowUpInquiry && booking.state === "inquiry" && (
+                <button type="button" onClick={() => onFollowUpInquiry(booking.id)} className="h-8 text-xs px-2.5 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap">
+                  Follow Up
+                </button>
+              )}
+              {onAcceptInquiry && (
+                <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80" onClick={() => onAcceptInquiry(booking.id)}>
+                  Accept
+                </Button>
+              )}
+            </>
+          ) : isAccepted ? (
+            onConfirmAppointment && (
+              <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80 whitespace-nowrap" onClick={() => onConfirmAppointment(booking.id)}>
+                Confirm Appt
               </Button>
-            )}
-          </>
-        ) : isAccepted ? (
-          onConfirmAppointment && (
-            <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80 whitespace-nowrap" onClick={() => onConfirmAppointment(booking.id)}>
-              Confirm Appt
-            </Button>
-          )
-        ) : (
-          nextActionLabel && onAdvanceState && (
-            <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80 whitespace-nowrap" onClick={() => onAdvanceState(booking.id, booking.state)}>
-              {nextActionLabel}
-            </Button>
-          )
-        )}
-        {(onMoveState || onCancel || onOpenEmail) && (
-          <CardOverflowMenu
-            current={booking.state}
-            onMove={onMoveState ? (s) => onMoveState(booking.id, s) : undefined}
-            onCancel={onCancel ? () => onCancel(booking.id) : undefined}
-            onEmail={onOpenEmail ? () => onOpenEmail(booking.id) : undefined}
-          />
-        )}
+            )
+          ) : (
+            nextActionLabel && onAdvanceState && (
+              <Button size="sm" className="h-8 text-xs px-2.5 bg-on-surface text-surface hover:opacity-80 whitespace-nowrap" onClick={() => onAdvanceState(booking.id, booking.state)}>
+                {nextActionLabel}
+              </Button>
+            )
+          )}
+          {(onMoveState || onCancel || onOpenEmail) && (
+            <CardOverflowMenu
+              current={booking.state}
+              onMove={onMoveState ? (s) => onMoveState(booking.id, s) : undefined}
+              onCancel={onCancel ? () => onCancel(booking.id) : undefined}
+              onEmail={onOpenEmail ? () => onOpenEmail(booking.id) : undefined}
+            />
+          )}
+        </div>
       </div>
+
+      {/* Deposit link modal */}
+      {depositModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setDepositModal(false)}>
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="text-sm font-semibold text-on-surface">Generate deposit link</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">Creates a Stripe payment link for {booking.client_name}.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-on-surface-variant">Deposit amount (USD)</label>
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-container-high/40 px-3 py-2 focus-within:border-primary transition-colors">
+                <span className="text-sm text-on-surface-variant">$</span>
+                <input
+                  autoFocus
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={depositAmount}
+                  onChange={e => setDepositAmount(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && generateDepositLink()}
+                  placeholder="0.00"
+                  className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                />
+              </div>
+              {depositError && <p className="text-xs text-destructive">{depositError}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setDepositModal(false)} className="flex-1 h-9 text-sm rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={generateDepositLink} disabled={depositLoading} className="flex-1 h-9 text-sm rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-50 transition-opacity">
+                {depositLoading ? "Creating…" : "Generate & copy"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Cal.com event type picker */}
+      {calcomMenu && calcomData && createPortal(
+        <div
+          ref={calcomMenuRef}
+          style={{
+            position: "fixed",
+            bottom: window.innerHeight - calcomMenu.top + 4,
+            left: calcomMenu.left,
+          }}
+          className="z-[9999] min-w-40 bg-surface-container-lowest border border-primary/20 rounded-xl shadow-lg py-1 overflow-hidden"
+        >
+          <p className="px-3 py-1.5 text-xs font-medium text-on-surface-variant/60 uppercase tracking-wide">Pick event type</p>
+          {calcomData.events.map(ev => (
+            <button
+              key={ev.slug}
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-primary/5 hover:text-on-surface transition-colors"
+              onClick={() => copySchedulingLink(ev.slug)}
+            >
+              {ev.title}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

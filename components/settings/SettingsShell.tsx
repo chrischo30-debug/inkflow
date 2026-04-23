@@ -23,6 +23,7 @@ const TABS = [
 type TabId = typeof TABS[number]["id"];
 
 export interface SettingsShellProps {
+  artistId: string;
   slug: string;
   artistName: string;
   studioName: string;
@@ -36,6 +37,7 @@ export interface SettingsShellProps {
   paymentLinks: PaymentLink[];
   calendarLinks: CalendarLink[];
   stripeApiKey: string;
+  stripeWebhookSecret: string;
   calcomApiKey: string;
   kitApiKey: string;
   kitFormId: string;
@@ -116,9 +118,11 @@ export function SettingsShell(props: SettingsShellProps) {
               />
               <ExternalApiSettings
                 initialStripeKey={props.stripeApiKey}
+                initialStripeWebhookSecret={props.stripeWebhookSecret}
                 initialCalcomKey={props.calcomApiKey}
                 initialKitApiKey={props.kitApiKey}
                 initialKitFormId={props.kitFormId}
+                artistId={props.artistId}
               />
             </div>
           )}

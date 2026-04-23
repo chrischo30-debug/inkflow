@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ExternalLink, Eye, EyeOff, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ExternalLink, Eye, EyeOff, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -146,26 +146,42 @@ const KIT_FORM_ID_STEPS = [
 
 export function ExternalApiSettings({
   initialStripeKey,
+  initialStripeWebhookSecret,
   initialCalcomKey,
   initialKitApiKey,
   initialKitFormId,
+  artistId,
 }: {
   initialStripeKey: string;
+  initialStripeWebhookSecret: string;
   initialCalcomKey: string;
   initialKitApiKey: string;
   initialKitFormId: string;
+  artistId: string;
 }) {
   const [stripeKey, setStripeKey] = useState(initialStripeKey);
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState(initialStripeWebhookSecret);
   const [calcomKey, setCalcomKey] = useState(initialCalcomKey);
   const [kitApiKey, setKitApiKey] = useState(initialKitApiKey);
   const [kitFormId, setKitFormId] = useState(initialKitFormId);
   const [stripeStatus, setStripeStatus] = useState<SaveStatus>("idle");
+  const [stripeWebhookStatus, setStripeWebhookStatus] = useState<SaveStatus>("idle");
   const [calcomStatus, setCalcomStatus] = useState<SaveStatus>("idle");
   const [kitApiStatus, setKitApiStatus] = useState<SaveStatus>("idle");
   const [kitFormStatus, setKitFormStatus] = useState<SaveStatus>("idle");
+  const [webhookUrlCopied, setWebhookUrlCopied] = useState(false);
+
+  const webhookUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/stripe/${artistId}`;
+
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl).then(() => {
+      setWebhookUrlCopied(true);
+      setTimeout(() => setWebhookUrlCopied(false), 2000);
+    });
+  };
 
   const saveExternalKey = async (
-    field: "stripe_api_key" | "calcom_api_key",
+    field: "stripe_api_key" | "calcom_api_key" | "stripe_webhook_secret",
     value: string,
     setStatus: (s: SaveStatus) => void,
   ) => {
@@ -210,7 +226,7 @@ export function ExternalApiSettings({
         <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Payment & Scheduling</p>
         <ApiKeyField
           label="Stripe"
-          description="Generate payment links directly from bookings without leaving the dashboard."
+          description="Generate deposit payment links directly from bookings. Clients pay, deposit is automatically marked as paid."
           value={stripeKey}
           onChange={setStripeKey}
           placeholder="sk_live_..."
@@ -220,6 +236,52 @@ export function ExternalApiSettings({
           status={stripeStatus}
           howToSteps={STRIPE_STEPS}
         />
+        {stripeKey && (
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-5 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-on-surface">Stripe Webhook</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Add this URL to Stripe so deposits are automatically tracked. Go to{" "}
+                <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Stripe → Developers → Webhooks
+                </a>{" "}
+                → Add endpoint, paste the URL below, and select the{" "}
+                <code className="text-xs bg-surface-container-high px-1 py-0.5 rounded">checkout.session.completed</code> event.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg bg-surface-container-high/60 border border-outline-variant/20 px-3 py-2">
+              <p className="flex-1 text-xs font-mono text-on-surface-variant truncate">{webhookUrl}</p>
+              <button
+                type="button"
+                onClick={copyWebhookUrl}
+                className="shrink-0 p-1 rounded text-on-surface-variant hover:text-on-surface transition-colors"
+                title="Copy URL"
+              >
+                {webhookUrlCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <ApiKeyField
+              label="Webhook Signing Secret"
+              description="After creating the webhook endpoint in Stripe, copy the signing secret (starts with whsec_) and save it here."
+              value={stripeWebhookSecret}
+              onChange={setStripeWebhookSecret}
+              placeholder="whsec_..."
+              signupUrl="https://dashboard.stripe.com/webhooks"
+              signupLabel="Open Stripe Webhooks"
+              onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus)}
+              status={stripeWebhookStatus}
+              howToSteps={[
+                "In Stripe, go to Developers → Webhooks.",
+                "Click Add endpoint.",
+                `Paste your webhook URL: ${webhookUrl}`,
+                "Under Events, select checkout.session.completed.",
+                "Click Add endpoint.",
+                "On the webhook detail page, click Reveal signing secret.",
+                "Copy the secret (starts with whsec_) and paste it above.",
+              ]}
+            />
+          </div>
+        )}
         <ApiKeyField
           label="Cal.com"
           description="Create booking links and send calendar invites directly from confirmed appointments."

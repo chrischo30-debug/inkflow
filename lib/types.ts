@@ -1,4 +1,4 @@
-// Types for FlashBook Phase 1
+// Types for FlashBooker Phase 1
 
 export type BookingState =
   | 'inquiry'
@@ -42,6 +42,9 @@ export interface Booking {
   last_email_sent_at?: string;
   gmail_thread_id?: string;
   sent_emails?: SentEmailEntry[];
+  has_unread_reply?: boolean;
+  deposit_paid?: boolean;
+  stripe_payment_link_url?: string;
   total_amount?: number;
   tip_amount?: number;
   completion_notes?: string;

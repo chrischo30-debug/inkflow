@@ -22,6 +22,7 @@ export default async function SettingsPage() {
     pipeline_settings?: object;
     calendar_links?: CalendarLink[];
     stripe_api_key?: string;
+    stripe_webhook_secret?: string;
     calcom_api_key?: string;
     kit_api_key?: string;
     kit_form_id?: string;
@@ -36,7 +37,7 @@ export default async function SettingsPage() {
   try {
     const { data } = await supabase
       .from("artists")
-      .select("pipeline_settings, calendar_links, stripe_api_key, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before, books_open, books_open_at, books_close_at, books_closed_message")
+      .select("pipeline_settings, calendar_links, stripe_api_key, stripe_webhook_secret, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before, books_open, books_open_at, books_close_at, books_closed_message")
       .eq("id", user.id)
       .single();
     extended = (data as ExtendedArtist) ?? {};
@@ -49,6 +50,7 @@ export default async function SettingsPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <SettingsShell
+        artistId={user.id}
         slug={artist?.slug ?? ""}
         artistName={artist?.name ?? ""}
         studioName={artist?.studio_name ?? ""}
@@ -62,6 +64,7 @@ export default async function SettingsPage() {
         paymentLinks={normalizePaymentLinks(artist?.payment_links)}
         calendarLinks={(extended.calendar_links as CalendarLink[]) ?? []}
         stripeApiKey={extended.stripe_api_key ?? ""}
+        stripeWebhookSecret={extended.stripe_webhook_secret ?? ""}
         calcomApiKey={extended.calcom_api_key ?? ""}
         kitApiKey={extended.kit_api_key ?? ""}
         kitFormId={extended.kit_form_id ?? ""}

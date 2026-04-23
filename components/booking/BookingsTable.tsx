@@ -5,11 +5,12 @@ import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import { Mail, ExternalLink, ChevronDown, ChevronRight, DollarSign, Calendar, Check } from "lucide-react";
 import { gmailThreadUrl } from "@/lib/gmail";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
+import type { CalcomData } from "./BookingCard";
 
 const STATE_TABS: { value: string; label: string }[] = [
   { value: "all",       label: "All" },
@@ -64,6 +65,12 @@ function isStale(iso: string, thresholdDays = 3): boolean {
   return Date.now() - new Date(iso).getTime() > thresholdDays * 86400000;
 }
 
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const t = new Date();
+  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
+}
+
 function looksLikeUrl(value: string) {
   return /^https?:\/\//i.test(value.trim());
 }
@@ -87,11 +94,15 @@ export function BookingsTable({
   fieldLabelMap,
   initialState,
   calendarSyncEnabled = false,
+  hasStripe = false,
+  calcomData = null,
 }: {
   bookings: Booking[];
   fieldLabelMap: Record<string, string>;
   initialState: string;
   calendarSyncEnabled?: boolean;
+  hasStripe?: boolean;
+  calcomData?: CalcomData | null;
 }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [activeTab, setActiveTab] = useState(initialState);
@@ -112,11 +123,65 @@ export function BookingsTable({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [openDropdown]);
+
+  // Sync Gmail reply status on mount
+  useEffect(() => {
+    fetch("/api/bookings/sync-replies", { method: "POST" })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { statuses?: { bookingId: string; has_unread_reply: boolean }[] } | null) => {
+        if (!data?.statuses?.length) return;
+        setBookings(prev => prev.map(b => {
+          const match = data.statuses!.find(s => s.bookingId === b.id);
+          return match ? { ...b, has_unread_reply: match.has_unread_reply } : b;
+        }));
+      })
+      .catch(() => {});
+  }, []);
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
   const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
+  const [depositModal, setDepositModal] = useState<{ bookingId: string; amount: string } | null>(null);
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositError, setDepositError] = useState("");
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const generateDepositLink = async () => {
+    if (!depositModal) return;
+    const cents = Math.round(parseFloat(depositModal.amount) * 100);
+    if (!cents || cents < 100) { setDepositError("Enter a valid amount (minimum $1)"); return; }
+    setDepositLoading(true);
+    setDepositError("");
+    try {
+      const res = await fetch(`/api/bookings/${depositModal.bookingId}/stripe-payment-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_cents: cents }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDepositError(data.error ?? "Failed to generate link"); setDepositLoading(false); return; }
+      setBookings(prev => prev.map(b => b.id === depositModal.bookingId ? { ...b, stripe_payment_link_url: data.url } : b));
+      setDepositModal(null);
+      navigator.clipboard.writeText(data.url).then(() => {
+        setCopiedLink(depositModal.bookingId);
+        setTimeout(() => setCopiedLink(null), 2000);
+      });
+    } catch {
+      setDepositError("Network error");
+    } finally {
+      setDepositLoading(false);
+    }
+  };
+
+  const copySchedulingLink = (booking: Booking, eventSlug: string) => {
+    if (!calcomData?.username) return;
+    const url = `https://cal.com/${calcomData.username}/${eventSlug}?name=${encodeURIComponent(booking.client_name)}&email=${encodeURIComponent(booking.client_email)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedLink(`calcom-${booking.id}`);
+      setTimeout(() => setCopiedLink(null), 2000);
+    });
+  };
 
   const q = search.trim().toLowerCase();
   const tabFiltered = activeTab === "all" ? bookings : bookings.filter(b => b.state === activeTab);
@@ -168,7 +233,7 @@ export function BookingsTable({
       body: JSON.stringify({ action: "move", target_state: targetState }),
     });
     if (!res.ok) return;
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: targetState } : b));
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: targetState, has_unread_reply: false } : b));
     setOpenDropdown(null);
   };
 
@@ -189,7 +254,7 @@ export function BookingsTable({
     });
     if (!res.ok) return;
     const { newState } = await res.json();
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState } : b));
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState, has_unread_reply: false } : b));
   };
 
   const handleAcceptSent = (bookingId: string, threadId?: string) => {
@@ -297,6 +362,7 @@ export function BookingsTable({
         ? {
             ...b,
             last_email_sent_at: nowIso,
+            has_unread_reply: false,
             ...(data.threadId ? { gmail_thread_id: data.threadId } : {}),
             sent_emails: [...(b.sent_emails ?? []), newEntry],
           }
@@ -317,6 +383,10 @@ export function BookingsTable({
       if (Array.isArray(v)) return v.length > 0;
       return v !== null && String(v).trim() !== "";
     });
+    const showActionDot = booking.has_unread_reply &&
+      (booking.state === "inquiry" || booking.state === "follow_up" || booking.state === "accepted");
+    const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) &&
+      (booking.state === "confirmed" || booking.state === "completed");
 
     return (
       <Fragment key={booking.id}>
@@ -328,7 +398,21 @@ export function BookingsTable({
             <ChevronRight className={`w-4 h-4 text-on-surface-variant transition-transform ${expanded ? "rotate-90" : ""}`} />
           </td>
           <td className="px-4 py-4">
-            <p className="text-sm font-medium text-on-surface">{booking.client_name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-on-surface">{booking.client_name}</p>
+              {showActionDot && (
+                <span className="relative flex h-2 w-2 shrink-0" title="Client replied">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                </span>
+              )}
+              {booking.deposit_paid && (
+                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md shrink-0">Deposit paid</span>
+              )}
+              {appointmentToday && (
+                <span className="text-xs font-medium text-amber-600 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-md shrink-0">Today</span>
+              )}
+            </div>
             <p className="text-sm text-on-surface-variant mt-0.5">{booking.client_email}</p>
           </td>
           <td className="px-4 py-4 hidden md:table-cell max-w-xs">
@@ -355,6 +439,50 @@ export function BookingsTable({
           </td>
           <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-end gap-2">
+              {/* Deposit link — shown for accepted/confirmed when Stripe connected */}
+              {hasStripe && (booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
+                booking.stripe_payment_link_url ? (
+                  <button
+                    type="button"
+                    title="Copy deposit link"
+                    onClick={() => {
+                      navigator.clipboard.writeText(booking.stripe_payment_link_url!).then(() => {
+                        setCopiedLink(booking.id);
+                        setTimeout(() => setCopiedLink(null), 2000);
+                      });
+                    }}
+                    className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                  >
+                    {copiedLink === booking.id ? <Check className="w-4 h-4 text-emerald-500" /> : <DollarSign className="w-4 h-4" />}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    title="Generate deposit link"
+                    onClick={() => setDepositModal({ bookingId: booking.id, amount: booking.budget ? String(booking.budget) : "" })}
+                    className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                  </button>
+                )
+              )}
+              {/* Cal.com scheduling link */}
+              {calcomData && (booking.state === "accepted" || booking.state === "confirmed") && (
+                <button
+                  type="button"
+                  title="Copy scheduling link"
+                  onClick={() => {
+                    if (calcomData.events.length === 1) {
+                      copySchedulingLink(booking, calcomData.events[0].slug);
+                    } else if (calcomData.events.length > 1) {
+                      copySchedulingLink(booking, calcomData.events[0].slug);
+                    }
+                  }}
+                  className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                >
+                  {copiedLink === `calcom-${booking.id}` ? <Check className="w-4 h-4 text-emerald-500" /> : <Calendar className="w-4 h-4" />}
+                </button>
+              )}
               {isInquiry ? (
                 <>
                   <button type="button" onClick={() => openRejectCompose(booking.id)} className="text-sm font-medium px-3 py-2 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">Reject</button>
@@ -659,6 +787,47 @@ export function BookingsTable({
           } : undefined}
           onClose={() => setEmailCompose(null)}
         />
+      )}
+
+      {/* Deposit link modal */}
+      {depositModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setDepositModal(null)}>
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="text-sm font-semibold text-on-surface">Generate deposit link</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Creates a Stripe payment link for {bookings.find(b => b.id === depositModal.bookingId)?.client_name}.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-on-surface-variant">Deposit amount (USD)</label>
+              <div className="flex items-center gap-1 rounded-lg border border-outline-variant/30 bg-surface-container-high/40 px-3 py-2 focus-within:border-primary transition-colors">
+                <span className="text-sm text-on-surface-variant">$</span>
+                <input
+                  autoFocus
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={depositModal.amount}
+                  onChange={e => setDepositModal(m => m ? { ...m, amount: e.target.value } : m)}
+                  onKeyDown={e => e.key === "Enter" && generateDepositLink()}
+                  placeholder="0.00"
+                  className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                />
+              </div>
+              {depositError && <p className="text-xs text-destructive">{depositError}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setDepositModal(null)} className="flex-1 h-9 text-sm rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={generateDepositLink} disabled={depositLoading} className="flex-1 h-9 text-sm rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-50 transition-opacity">
+                {depositLoading ? "Creating…" : "Generate & copy"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
