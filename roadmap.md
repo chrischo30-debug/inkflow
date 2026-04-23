@@ -76,13 +76,14 @@
 - Recommended tools cards: Cal.com, Stripe, Kit (Venmo removed — Stripe preferred)
 - Get help section with support email (`SUPPORT_EMAIL` env var)
 
-### Phase 9 — Admin View ✓
-- `is_admin` boolean on `artists` table; manually set for operator account
-- `/admin` page: all artists with booking stats (total, inquiries, confirmed, completed, last booking)
-- `/admin/artists/[artistId]` detail page: profile, booking state summary, recent bookings list
-- "Generate Login Link" button — calls Supabase Admin API to create a magic link; copy and open in incognito for support
-- Admin link appears in sidebar only for is_admin users
-- Middleware guards all `/admin/*` routes, redirects non-admins to `/`
+### Phase 9 — Superuser Panel ✓
+- `is_superuser` boolean on `artists` table (renamed from `is_admin` via migration); manually set for operator account
+- `/admin` page: all artists with booking stats; superuser accounts marked with SU badge
+- `/admin/artists/[artistId]` detail page: profile, booking state summary, recent bookings
+- **Access Account**: server-side OTP exchange — API generates token + immediately verifies via `POST /auth/v1/verify`, returns real session tokens; client opens `/admin/access-relay` relay page which calls `setSession()` and redirects to `/`. Bypasses Supabase OTP expiry entirely.
+- **Reset Password**: generates `recovery` link for the artist; superuser copies and sends
+- **Delete Account**: `admin.auth.admin.deleteUser()`; blocked for superusers and self-deletion
+- Superuser link in sidebar; middleware guards all `/admin/*` routes
 
 ### Phase 10 — Dark Theme Toggle
 Dark mode option in dashboard settings.

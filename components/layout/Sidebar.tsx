@@ -7,13 +7,14 @@ export async function Sidebar() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let artistName = "FlashBook";
+  let artistName = "FlashBooker";
   let artistSubtitle = "Booking Dashboard";
+  let adminUser = false;
 
   if (user) {
     const { data: artist } = await supabase
       .from("artists")
-      .select("name, studio_name")
+      .select("name, studio_name, is_superuser")
       .eq("id", user.id)
       .single();
 
@@ -25,7 +26,10 @@ export async function Sidebar() {
     } else if (user.email) {
       artistSubtitle = user.email;
     }
+    if (artist?.is_superuser) {
+      adminUser = true;
+    }
   }
 
-  return <SidebarNav artistName={artistName} artistSubtitle={artistSubtitle} />;
+  return <SidebarNav artistName={artistName} artistSubtitle={artistSubtitle} isSuperUser={adminUser} />;
 }

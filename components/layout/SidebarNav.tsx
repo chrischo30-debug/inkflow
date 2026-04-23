@@ -58,11 +58,11 @@ function isActive(pathname: string, href: string) {
 export function SidebarNav({
   artistName,
   artistSubtitle,
-  isAdmin = false,
+  isSuperUser = false,
 }: {
   artistName: string;
   artistSubtitle: string;
-  isAdmin?: boolean;
+  isSuperUser?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -131,7 +131,7 @@ export function SidebarNav({
             </div>
           ))}
 
-          {isAdmin && (
+          {isSuperUser && (
             <>
               <div className="h-px bg-outline-variant/20" />
               <Link
@@ -142,7 +142,7 @@ export function SidebarNav({
                     : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
                 }
               >
-                Admin
+                Superuser
               </Link>
             </>
           )}

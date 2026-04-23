@@ -35,20 +35,36 @@ export async function middleware(request: NextRequest) {
     '/login',
     '/signup',
     '/onboarding',
+    '/forgot-password',
     '/auth/callback',
+    '/admin/access-relay',
     '/api/bookings',
     '/api/auth/google/callback',
     '/api/uploads/reference-images',
   ]
 
   if (
-    !user && 
-    !safePaths.some((path) => request.nextUrl.pathname.startsWith(path)) && 
+    !user &&
+    !safePaths.some((path) => request.nextUrl.pathname.startsWith(path)) &&
     !request.nextUrl.pathname.includes('/book') // Public Artist Intake Forms
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  // Protect /admin routes — require is_superuser flag
+  if (user && request.nextUrl.pathname.startsWith('/admin')) {
+    const { data: artistData } = await supabase
+      .from('artists')
+      .select('is_superuser')
+      .eq('id', user.id)
+      .single()
+    if (!artistData?.is_superuser) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
