@@ -16,7 +16,7 @@ export default async function BookingsPage({
   if (!user) return redirect("/login");
 
   const params = await searchParams;
-  const initialState = params.state ?? "confirmed";
+  const initialState = params.state ?? "all";
 
   const [{ data: bookingsData }, { data: baseFields }, { data: customFields }, { data: artistData }] = await Promise.all([
     supabase
