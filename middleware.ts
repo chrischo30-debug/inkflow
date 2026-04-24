@@ -81,7 +81,7 @@ export async function middleware(request: NextRequest) {
     if (needsSetupCheck || needsSuperuserCheck) {
       const { data: artistData } = await supabase
         .from('artists')
-        .select('slug, gmail_address, is_superuser')
+        .select('name, slug, gmail_address, is_superuser')
         .eq('id', user.id)
         .single()
 
@@ -92,12 +92,22 @@ export async function middleware(request: NextRequest) {
       }
 
       if (needsSetupCheck) {
+        // Placeholder detection — the DB trigger seeds default name
+        // 'Artist XXXXXX' and default slug 'artist-XXXXXXXX' on signup.
+        const nameOk = Boolean(artistData?.name) && !artistData!.name!.startsWith('Artist ')
         const slugOk = Boolean(artistData?.slug) && !artistData!.slug!.startsWith('artist-')
         const replyToOk = Boolean(artistData?.gmail_address)
-        if (!slugOk || !replyToOk) {
+
+        if (!nameOk || !slugOk || !replyToOk) {
           const url = request.nextUrl.clone()
-          url.pathname = '/setup'
-          url.searchParams.set('incomplete', '1')
+          url.pathname = '/onboarding'
+          // Land them on the step that still needs attention
+          if (!nameOk || !slugOk) {
+            // Step 1 is default; no param needed
+            url.search = ''
+          } else if (!replyToOk) {
+            url.search = '?step=3'
+          }
           return NextResponse.redirect(url)
         }
       }
