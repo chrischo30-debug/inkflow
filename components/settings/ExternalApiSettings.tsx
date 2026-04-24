@@ -39,6 +39,7 @@ function ApiKeyField({
   label,
   description,
   value,
+  savedValue,
   onChange,
   placeholder,
   signupUrl,
@@ -51,6 +52,7 @@ function ApiKeyField({
   label: string;
   description: string;
   value: string;
+  savedValue: string;
   onChange: (v: string) => void;
   placeholder: string;
   signupUrl: string;
@@ -61,11 +63,30 @@ function ApiKeyField({
   howToSteps: string[];
 }) {
   const [show, setShow] = useState(false);
+  const isSaved = Boolean(savedValue) && value === savedValue;
+  const hasUnsavedChanges = Boolean(value) && value !== savedValue;
+
   return (
-    <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-5 space-y-3">
+    <div className={`rounded-xl border p-5 space-y-3 transition-colors ${
+      isSaved
+        ? "border-emerald-300/60 bg-emerald-50/40"
+        : "border-outline-variant/20 bg-surface-container-lowest"
+    }`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-on-surface">{label}</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-on-surface">{label}</p>
+            {isSaved && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                <Check className="w-3 h-3" /> Connected
+              </span>
+            )}
+            {hasUnsavedChanges && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                Unsaved changes
+              </span>
+            )}
+          </div>
           <p className="text-xs text-on-surface-variant mt-0.5">{description}</p>
         </div>
         <a
@@ -98,10 +119,16 @@ function ApiKeyField({
         <Button
           type="button"
           onClick={onSave}
-          disabled={status === "saving"}
-          className="h-auto py-2 px-4 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity shrink-0"
+          disabled={status === "saving" || (isSaved && !hasUnsavedChanges)}
+          className="h-auto py-2 px-4 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity shrink-0 disabled:opacity-40"
         >
-          {status === "saving" ? "Saving…" : status === "success" ? <Check className="w-4 h-4" /> : "Save"}
+          {status === "saving"
+            ? "Saving…"
+            : hasUnsavedChanges
+              ? (isSaved ? "Update" : "Save")
+              : isSaved
+                ? "Saved"
+                : "Save"}
         </Button>
       </div>
       {status === "error" && (
@@ -168,10 +195,15 @@ export function ExternalApiSettings({
   artistId: string;
 }) {
   const [stripeKey, setStripeKey] = useState(initialStripeKey);
+  const [savedStripeKey, setSavedStripeKey] = useState(initialStripeKey);
   const [stripeWebhookSecret, setStripeWebhookSecret] = useState(initialStripeWebhookSecret);
+  const [savedStripeWebhookSecret, setSavedStripeWebhookSecret] = useState(initialStripeWebhookSecret);
   const [calcomKey, setCalcomKey] = useState(initialCalcomKey);
+  const [savedCalcomKey, setSavedCalcomKey] = useState(initialCalcomKey);
   const [kitApiKey, setKitApiKey] = useState(initialKitApiKey);
+  const [savedKitApiKey, setSavedKitApiKey] = useState(initialKitApiKey);
   const [kitFormId, setKitFormId] = useState(initialKitFormId);
+  const [savedKitFormId, setSavedKitFormId] = useState(initialKitFormId);
   const [stripeStatus, setStripeStatus] = useState<SaveStatus>("idle");
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeWebhookStatus, setStripeWebhookStatus] = useState<SaveStatus>("idle");
@@ -196,6 +228,7 @@ export function ExternalApiSettings({
     value: string,
     setStatus: (s: SaveStatus) => void,
     setError?: (e: string | null) => void,
+    onSavedValue?: (v: string) => void,
   ) => {
     setStatus("saving");
     setError?.(null);
@@ -205,6 +238,7 @@ export function ExternalApiSettings({
       body: JSON.stringify({ [field]: value }),
     });
     if (res.ok) {
+      onSavedValue?.(value);
       setStatus("success");
       setTimeout(() => setStatus("idle"), 3000);
     } else {
@@ -223,6 +257,7 @@ export function ExternalApiSettings({
     field: "kit_api_key" | "kit_form_id",
     value: string,
     setStatus: (s: SaveStatus) => void,
+    onSavedValue?: (v: string) => void,
   ) => {
     setStatus("saving");
     const res = await fetch("/api/artist/kit-integration", {
@@ -231,6 +266,7 @@ export function ExternalApiSettings({
       body: JSON.stringify({ [field]: value }),
     });
     if (res.ok) {
+      onSavedValue?.(value);
       setStatus("success");
       setTimeout(() => setStatus("idle"), 3000);
     } else {
@@ -251,7 +287,8 @@ export function ExternalApiSettings({
           placeholder="sk_live_..."
           signupUrl="https://dashboard.stripe.com/register"
           signupLabel="Create Stripe account"
-          onSave={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus, setStripeError)}
+          savedValue={savedStripeKey}
+          onSave={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus, setStripeError, setSavedStripeKey)}
           status={stripeStatus}
           errorMessage={stripeError}
           howToSteps={STRIPE_STEPS}
@@ -288,7 +325,8 @@ export function ExternalApiSettings({
               placeholder="whsec_..."
               signupUrl="https://dashboard.stripe.com/webhooks"
               signupLabel="Open Stripe Webhooks"
-              onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus, setStripeWebhookError)}
+              savedValue={savedStripeWebhookSecret}
+              onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus, setStripeWebhookError, setSavedStripeWebhookSecret)}
               status={stripeWebhookStatus}
               errorMessage={stripeWebhookError}
               howToSteps={[
@@ -311,7 +349,8 @@ export function ExternalApiSettings({
           placeholder="cal_live_..."
           signupUrl="https://cal.com/signup"
           signupLabel="Create Cal.com account"
-          onSave={() => saveExternalKey("calcom_api_key", calcomKey, setCalcomStatus, setCalcomError)}
+          savedValue={savedCalcomKey}
+          onSave={() => saveExternalKey("calcom_api_key", calcomKey, setCalcomStatus, setCalcomError, setSavedCalcomKey)}
           status={calcomStatus}
           errorMessage={calcomError}
           howToSteps={CALCOM_STEPS}
@@ -324,11 +363,12 @@ export function ExternalApiSettings({
           label="Kit — API Key"
           description="Your public Kit API key. Used to add subscribers from your newsletter signup form."
           value={kitApiKey}
+          savedValue={savedKitApiKey}
           onChange={setKitApiKey}
           placeholder="your kit api key..."
           signupUrl="https://kit.com"
           signupLabel="Create Kit account"
-          onSave={() => saveKitField("kit_api_key", kitApiKey, setKitApiStatus)}
+          onSave={() => saveKitField("kit_api_key", kitApiKey, setKitApiStatus, setSavedKitApiKey)}
           status={kitApiStatus}
           howToSteps={KIT_API_KEY_STEPS}
         />
@@ -336,11 +376,12 @@ export function ExternalApiSettings({
           label="Kit — Form ID"
           description="The ID of the Kit form to subscribe people to. New subscribers are added to this form."
           value={kitFormId}
+          savedValue={savedKitFormId}
           onChange={setKitFormId}
           placeholder="12345"
           signupUrl="https://app.kit.com/forms"
           signupLabel="Open Kit forms"
-          onSave={() => saveKitField("kit_form_id", kitFormId, setKitFormStatus)}
+          onSave={() => saveKitField("kit_form_id", kitFormId, setKitFormStatus, setSavedKitFormId)}
           status={kitFormStatus}
           howToSteps={KIT_FORM_ID_STEPS}
         />
