@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
 import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
+import { loadArtistForSending, fallbackArtistRow } from '@/lib/email-sender';
 import type { CalendarLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
 
 async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, bookingId: string, userId: string) {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date, gmail_thread_id')
+    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date')
     .eq('id', bookingId)
     .eq('artist_id', userId)
     .single();
@@ -18,7 +19,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const [{ data: artistCore }, { data: artistExtra }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, studio_name, payment_links, gmail_connected, google_refresh_token, gmail_address')
+      .select('name, studio_name, payment_links')
       .eq('id', userId)
       .single(),
     supabase
@@ -140,11 +141,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const subject: string = reqBody.subject ?? '';
   const body: string = reqBody.body ?? '';
 
-  const gmailContext =
-    artist?.gmail_connected && artist.google_refresh_token && artist.gmail_address
-      ? { refreshToken: artist.google_refresh_token, gmailAddress: artist.gmail_address }
-      : null;
-
   // subject/body may contain {variable} tokens — sendEmail resolves them at send time
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
@@ -157,21 +153,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     appointmentDate: booking.appointment_date ?? undefined,
   });
 
-  const { threadId } = await sendEmail({
+  const artistRow = (await loadArtistForSending(supabase, user.id)) ?? fallbackArtistRow(user.id, artist?.name ?? null, null);
+
+  await sendEmail({
     toEmail: booking.client_email,
     vars,
     template: { subject, body },
-    gmailContext,
-    existingThreadId: booking.gmail_thread_id ?? null,
+    artist: artistRow,
+    bookingId: id,
   });
 
   const nowIso = new Date().toISOString();
   await supabase
     .from('bookings')
-    .update({
-      last_email_sent_at: nowIso,
-      ...(threadId ? { gmail_thread_id: threadId } : {}),
-    })
+    .update({ last_email_sent_at: nowIso })
     .eq('id', id);
 
   // Append to sent_emails history — separate update degrades gracefully if migration not yet run
@@ -185,5 +180,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .eq('id', id);
   } catch { /* sent_emails column may not exist yet */ }
 
-  return NextResponse.json({ success: true, threadId: threadId ?? null, sentEmailLabel });
+  return NextResponse.json({ success: true, sentEmailLabel });
 }

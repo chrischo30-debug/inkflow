@@ -240,24 +240,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
       ]);
 
-      let gmailConnected = false;
-      let gmailAddress: string | null = null;
-      try {
-        const { data: gmailRow } = await supabase.from("artists").select("gmail_connected, gmail_address").eq("id", booking.artist_id).single();
-        const row = gmailRow as { gmail_connected?: boolean; gmail_address?: string } | null;
-        gmailConnected = row?.gmail_connected ?? false;
-        gmailAddress = row?.gmail_address ?? null;
-      } catch { /* column may not exist yet */ }
-
       if (!templateRow || templateRow.auto_send) {
         try {
-          const { gmailThreadId } = await getExtraBookingFields();
           const { sendStateTransitionEmail } = await import("@/lib/email");
+          const { loadArtistForSending, fallbackArtistRow } = await import("@/lib/email-sender");
           const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-          const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
-            ? { refreshToken: artist.google_refresh_token, gmailAddress }
-            : null;
-          const { threadId, subject: sentSubject } = await sendStateTransitionEmail({
+          const artistRow = (await loadArtistForSending(supabase, booking.artist_id)) ?? fallbackArtistRow(booking.artist_id, artist?.name, null);
+          const { subject: sentSubject } = await sendStateTransitionEmail({
             toEmail: booking.client_email,
             clientName: booking.client_name,
             newState: "completed",
@@ -265,12 +254,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             paymentLinksList: normalizePaymentLinks(artist?.payment_links),
             calendarLinksList: [],
             template: templateRow ?? null,
-            gmailContext,
-            existingThreadId: gmailThreadId,
+            artist: artistRow,
+            bookingId: id,
           });
           await supabase.from("bookings").update({
             last_email_sent_at: new Date().toISOString(),
-            ...(threadId ? { gmail_thread_id: threadId } : {}),
           }).eq("id", id);
           await appendSentEmail(sentSubject ?? "Appointment Completed");
         } catch (e) { console.error("Completion email failed:", e); }
@@ -291,15 +279,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
-    let gmailConnected = false;
-    let gmailAddress: string | null = null;
-    try {
-      const { data: gmailRow } = await supabase.from("artists").select("gmail_connected, gmail_address").eq("id", booking.artist_id).single();
-      const row = gmailRow as { gmail_connected?: boolean; gmail_address?: string } | null;
-      gmailConnected = row?.gmail_connected ?? false;
-      gmailAddress = row?.gmail_address ?? null;
-    } catch { /* column may not exist yet */ }
-
     await supabase.from("bookings").update({ state: nextState, has_unread_reply: false }).eq("id", id).eq("artist_id", user.id);
 
     const SENT_EMAIL_LABELS: Partial<Record<string, string>> = {
@@ -314,13 +293,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const shouldAutoEmail = !templateRow || templateRow.auto_send;
     if (shouldAutoEmail) {
       try {
-        const { gmailThreadId } = await getExtraBookingFields();
         const { sendStateTransitionEmail } = await import("@/lib/email");
+        const { loadArtistForSending, fallbackArtistRow } = await import("@/lib/email-sender");
         const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-        const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
-          ? { refreshToken: artist.google_refresh_token, gmailAddress }
-          : null;
-        const { threadId, subject: sentSubject } = await sendStateTransitionEmail({
+        const artistRow = (await loadArtistForSending(supabase, booking.artist_id)) ?? fallbackArtistRow(booking.artist_id, artist?.name, null);
+        const { subject: sentSubject } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
           newState: nextState,
@@ -328,12 +305,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           paymentLinksList: normalizePaymentLinks(artist?.payment_links),
           calendarLinksList: [],
           template: templateRow ?? null,
-          gmailContext,
-          existingThreadId: gmailThreadId,
+          artist: artistRow,
+          bookingId: id,
         });
         await supabase.from("bookings").update({
           last_email_sent_at: new Date().toISOString(),
-          ...(threadId ? { gmail_thread_id: threadId } : {}),
         }).eq("id", id);
         await appendSentEmail(sentSubject ?? SENT_EMAIL_LABELS[nextState] ?? nextState);
       } catch (e) { console.error("Email transition failed:", e); }

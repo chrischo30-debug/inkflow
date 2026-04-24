@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { sendEmail, buildTemplateVars } from "@/lib/email";
+import { loadArtistForSending, fallbackArtistRow } from "@/lib/email-sender";
 import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
 import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
   // Fetch all artists with reminders enabled
   const { data: artists, error: artistErr } = await supabase
     .from("artists")
-    .select("id, name, payment_links, calendar_sync_enabled, google_refresh_token, gmail_connected, gmail_address, reminder_hours_before")
+    .select("id, name, payment_links, reminder_hours_before")
     .eq("reminder_enabled", true);
 
   if (artistErr || !artists?.length) {
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     // Find confirmed bookings whose appointment falls within the window and haven't been reminded
     const { data: bookings } = await supabase
       .from("bookings")
-      .select("id, client_name, client_email, appointment_date, payment_link_sent, gmail_thread_id")
+      .select("id, client_name, client_email, appointment_date, payment_link_sent")
       .eq("artist_id", artist.id)
       .eq("state", "confirmed")
       .is("reminder_sent_at", null)
@@ -57,14 +58,7 @@ export async function GET(req: Request) {
     const paymentLinksList = normalizePaymentLinks(artist.payment_links) as PaymentLink[];
     const calendarLinksList: CalendarLink[] = [];
 
-    // Gmail context
-    let gmailContext = null;
-    try {
-      const row = artist as { gmail_connected?: boolean; gmail_address?: string; google_refresh_token?: string };
-      if (row.gmail_connected && row.google_refresh_token && row.gmail_address) {
-        gmailContext = { refreshToken: row.google_refresh_token, gmailAddress: row.gmail_address };
-      }
-    } catch { /* no-op */ }
+    const artistRow = (await loadArtistForSending(supabase, artist.id)) ?? fallbackArtistRow(artist.id, artist.name, null);
 
     for (const booking of bookings) {
       try {
@@ -76,12 +70,12 @@ export async function GET(req: Request) {
           appointmentDate: booking.appointment_date ?? undefined,
         });
 
-        const { threadId } = await sendEmail({
+        await sendEmail({
           toEmail: booking.client_email,
           vars,
           template: DEFAULT_REMINDER_TEMPLATE,
-          gmailContext,
-          existingThreadId: booking.gmail_thread_id ?? null,
+          artist: artistRow,
+          bookingId: booking.id,
         });
 
         await supabase
@@ -89,7 +83,6 @@ export async function GET(req: Request) {
           .update({
             reminder_sent_at: new Date().toISOString(),
             last_email_sent_at: new Date().toISOString(),
-            ...(threadId ? { gmail_thread_id: threadId } : {}),
           })
           .eq("id", booking.id);
 

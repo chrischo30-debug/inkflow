@@ -1,9 +1,6 @@
-import { Resend } from 'resend';
 import { BookingState, EmailTemplate } from './types';
-import { sendViaGmail } from './gmail';
 import type { CalendarLink, PaymentLink } from './pipeline-settings';
-
-const resend = new Resend(process.env.RESEND_API_KEY || 're_mock_key');
+import { resolveArtistSender, dispatchEmail, type ArtistRow } from './email-sender';
 
 export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>, { subject: string; body: string }> = {
   inquiry: {
@@ -34,11 +31,11 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
 
 export interface TemplateVars {
   clientFirstName: string;
-  clientName: string;     // kept for backwards compat with existing saved templates
+  clientName: string;
   artistName: string;
-  paymentLink: string;    // primary payment link URL (or empty)
-  calendarLink: string;   // first calendar link URL (or empty)
-  calendarLinks: string;  // all calendar links formatted as labeled list
+  paymentLink: string;
+  calendarLink: string;
+  calendarLinks: string;
   appointmentDate: string;
 }
 
@@ -79,67 +76,37 @@ export function applyPlaceholders(template: string, vars: TemplateVars): string 
     .replace(/\{appointmentDate\}/g, vars.appointmentDate);
 }
 
-export interface GmailContext {
-  refreshToken: string;
-  gmailAddress: string;
-}
-
 interface SendEmailPayload {
   toEmail: string;
   vars: TemplateVars;
   template: { subject: string; body: string };
-  gmailContext?: GmailContext | null;
-  existingThreadId?: string | null;
+  artist: ArtistRow;
+  bookingId: string;
 }
 
 interface SendEmailResult {
-  threadId?: string;
   subject?: string;
+  providerMessageId?: string;
 }
 
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
-  const { toEmail, vars, template, gmailContext, existingThreadId } = payload;
+  const { toEmail, vars, template, artist, bookingId } = payload;
 
   const subject = applyPlaceholders(template.subject, vars);
   const text = applyPlaceholders(template.body, vars);
 
-  if (gmailContext) {
-    try {
-      const result = await sendViaGmail({
-        refreshToken: gmailContext.refreshToken,
-        fromAddress: gmailContext.gmailAddress,
-        fromName: vars.artistName,
-        to: toEmail,
-        subject,
-        body: text,
-        threadId: existingThreadId ?? undefined,
-      });
-      return { threadId: result.threadId, subject };
-    } catch (err) {
-      console.error('Gmail send failed, falling back to Resend:', err);
-    }
-  }
+  const sender = resolveArtistSender(artist);
+  const result = await dispatchEmail({
+    sender,
+    to: toEmail,
+    subject,
+    text,
+    bookingId,
+  });
 
-  if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
-    console.log('[MOCK EMAIL SENT]', { to: toEmail, subject, text });
-    return { subject };
-  }
-
-  try {
-    await resend.emails.send({
-      from: `FlashBooker <${process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'}>`,
-      to: [toEmail],
-      subject,
-      text,
-    });
-  } catch (error) {
-    console.error('Failed to send email via Resend:', error);
-  }
-
-  return { subject };
+  return { subject, providerMessageId: result.providerMessageId };
 }
 
-// Legacy wrapper used by auto-send on state transitions
 export async function sendStateTransitionEmail(payload: {
   toEmail: string;
   clientName: string;
@@ -150,14 +117,14 @@ export async function sendStateTransitionEmail(payload: {
   primaryPaymentLink?: string;
   appointmentDate?: string;
   template?: EmailTemplate | null;
-  gmailContext?: GmailContext | null;
-  existingThreadId?: string | null;
+  artist: ArtistRow;
+  bookingId: string;
 }): Promise<SendEmailResult> {
   const { newState } = payload;
   if (newState === 'cancelled') return {};
 
   const defaults = DEFAULT_EMAIL_TEMPLATES[newState as Exclude<BookingState, 'cancelled'>];
-  if (!defaults) return {}; // no template for this state (e.g. terminal states without a default)
+  if (!defaults) return {};
 
   const vars = buildTemplateVars({
     clientName: payload.clientName,
@@ -174,7 +141,7 @@ export async function sendStateTransitionEmail(payload: {
     template: payload.template
       ? { subject: payload.template.subject, body: payload.template.body }
       : defaults,
-    gmailContext: payload.gmailContext,
-    existingThreadId: payload.existingThreadId,
+    artist: payload.artist,
+    bookingId: payload.bookingId,
   });
 }
