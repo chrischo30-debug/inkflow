@@ -83,6 +83,7 @@ export default async function SetupPage({
 }) {
   const params = searchParams ? await searchParams : {};
   const isNew = params.new === "1";
+  const isIncomplete = params.incomplete === "1";
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -139,10 +140,20 @@ export default async function SetupPage({
           <div className="max-w-2xl space-y-10">
 
             {/* Welcome banner for new accounts */}
-            {isNew && (
+            {isNew && !isIncomplete && (
               <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/40 p-5">
                 <p className="text-sm font-semibold text-emerald-800">Profile saved — now let's connect your tools.</p>
                 <p className="text-sm text-emerald-700/80 mt-1">Complete the steps below to unlock the full FlashBooker workflow. You can always come back to this page from the sidebar.</p>
+              </div>
+            )}
+
+            {/* Redirected here because required setup isn't finished */}
+            {isIncomplete && (
+              <div className="rounded-xl border border-amber-300/60 bg-amber-50/60 p-5">
+                <p className="text-sm font-semibold text-amber-900">Finish the required steps to use your dashboard</p>
+                <p className="text-sm text-amber-800/80 mt-1">
+                  You need a booking URL and a reply-to email before clients can book or receive messages. Complete the two required items below — the rest is optional and can wait.
+                </p>
               </div>
             )}
 

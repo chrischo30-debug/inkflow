@@ -53,17 +53,54 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Protect /admin routes — require is_superuser flag
-  if (user && request.nextUrl.pathname.startsWith('/admin')) {
-    const { data: artistData } = await supabase
-      .from('artists')
-      .select('is_superuser')
-      .eq('id', user.id)
-      .single()
-    if (!artistData?.is_superuser) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
+  // Paths an authenticated user can always reach — even if their setup is incomplete.
+  // These are the places they'd go to *finish* setup, or to manage auth.
+  const setupExemptPaths = [
+    '/setup',
+    '/settings',
+    '/onboarding',
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/reset-password',
+    '/auth',
+    '/api',
+    '/admin',
+    '/past-clients', // ok to access read-only clients while in partial state
+  ]
+
+  if (user) {
+    const pathname = request.nextUrl.pathname
+    const isExempt = setupExemptPaths.some((p) => pathname.startsWith(p))
+    const isBookingPublic = pathname.includes('/book') || pathname.includes('/contact') || pathname.includes('/newsletter')
+
+    // Gate + superuser check in one artist fetch
+    const needsSetupCheck = !isExempt && !isBookingPublic
+    const needsSuperuserCheck = pathname.startsWith('/admin')
+
+    if (needsSetupCheck || needsSuperuserCheck) {
+      const { data: artistData } = await supabase
+        .from('artists')
+        .select('slug, gmail_address, is_superuser')
+        .eq('id', user.id)
+        .single()
+
+      if (needsSuperuserCheck && !artistData?.is_superuser) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/'
+        return NextResponse.redirect(url)
+      }
+
+      if (needsSetupCheck) {
+        const slugOk = Boolean(artistData?.slug) && !artistData!.slug!.startsWith('artist-')
+        const replyToOk = Boolean(artistData?.gmail_address)
+        if (!slugOk || !replyToOk) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/setup'
+          url.searchParams.set('incomplete', '1')
+          return NextResponse.redirect(url)
+        }
+      }
     }
   }
 
