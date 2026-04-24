@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  let query = supabase.from("artists").select("id").eq("slug", slug).limit(1);
+  let query = supabase.from("artists").select("id").ilike("slug", slug).limit(1);
   if (user) query = query.neq("id", user.id);
 
   const { data } = await query;

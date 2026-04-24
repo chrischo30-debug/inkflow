@@ -22,17 +22,32 @@ export async function PUT(req: Request) {
 
     const body = await req.json();
     const parsed = profileSchema.parse(body);
+    const normalizedSlug = parsed.slug.toLowerCase();
 
     const styleTags = (parsed.style_tags ?? "")
       .split(",")
       .map((tag) => tag.trim())
       .filter(Boolean);
 
+    // Explicit application-level check in addition to the DB unique index.
+    // Guards against race conditions and gives a clean 409 instead of a 500.
+    const { data: conflict } = await supabase
+      .from("artists")
+      .select("id")
+      .ilike("slug", normalizedSlug)
+      .neq("id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (conflict) {
+      return NextResponse.json({ error: "That public booking URL is already taken." }, { status: 409 });
+    }
+
     const { error } = await supabase
       .from("artists")
       .update({
         name: parsed.name,
-        slug: parsed.slug,
+        slug: normalizedSlug,
         studio_name: parsed.studio_name || null,
         style_tags: styleTags,
       })
