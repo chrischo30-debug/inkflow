@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceClient } from "@/utils/supabase/service";
 
 const profileSchema = z.object({
   name: z.string().min(2),
@@ -30,8 +31,10 @@ export async function PUT(req: Request) {
       .filter(Boolean);
 
     // Explicit application-level check in addition to the DB unique index.
-    // Guards against race conditions and gives a clean 409 instead of a 500.
-    const { data: conflict } = await supabase
+    // Must use the service client — RLS on artists hides other users' rows
+    // from the regular authed client, which would make the check always pass.
+    const svc = createServiceClient();
+    const { data: conflict } = await svc
       .from("artists")
       .select("id")
       .ilike("slug", normalizedSlug)
