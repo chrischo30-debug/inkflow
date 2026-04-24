@@ -45,6 +45,7 @@ function ApiKeyField({
   signupLabel,
   onSave,
   status,
+  errorMessage,
   howToSteps,
 }: {
   label: string;
@@ -56,6 +57,7 @@ function ApiKeyField({
   signupLabel: string;
   onSave: () => void;
   status: SaveStatus;
+  errorMessage?: string | null;
   howToSteps: string[];
 }) {
   const [show, setShow] = useState(false);
@@ -102,7 +104,13 @@ function ApiKeyField({
           {status === "saving" ? "Saving…" : status === "success" ? <Check className="w-4 h-4" /> : "Save"}
         </Button>
       </div>
-      {status === "error" && <p className="text-xs text-destructive">Failed to save. Check your key and try again.</p>}
+      {status === "error" && (
+        <p className="text-xs text-destructive">
+          {errorMessage
+            ? `Save failed: ${errorMessage}`
+            : "Failed to save. Check your key and try again."}
+        </p>
+      )}
       <HowToGuide steps={howToSteps} />
     </div>
   );
@@ -165,8 +173,11 @@ export function ExternalApiSettings({
   const [kitApiKey, setKitApiKey] = useState(initialKitApiKey);
   const [kitFormId, setKitFormId] = useState(initialKitFormId);
   const [stripeStatus, setStripeStatus] = useState<SaveStatus>("idle");
+  const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeWebhookStatus, setStripeWebhookStatus] = useState<SaveStatus>("idle");
+  const [stripeWebhookError, setStripeWebhookError] = useState<string | null>(null);
   const [calcomStatus, setCalcomStatus] = useState<SaveStatus>("idle");
+  const [calcomError, setCalcomError] = useState<string | null>(null);
   const [kitApiStatus, setKitApiStatus] = useState<SaveStatus>("idle");
   const [kitFormStatus, setKitFormStatus] = useState<SaveStatus>("idle");
   const [webhookUrlCopied, setWebhookUrlCopied] = useState(false);
@@ -184,8 +195,10 @@ export function ExternalApiSettings({
     field: "stripe_api_key" | "calcom_api_key" | "stripe_webhook_secret",
     value: string,
     setStatus: (s: SaveStatus) => void,
+    setError?: (e: string | null) => void,
   ) => {
     setStatus("saving");
+    setError?.(null);
     const res = await fetch("/api/artist/external-keys", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -195,8 +208,14 @@ export function ExternalApiSettings({
       setStatus("success");
       setTimeout(() => setStatus("idle"), 3000);
     } else {
+      let msg: string | null = null;
+      try {
+        const body = await res.json();
+        if (body?.error) msg = String(body.error);
+      } catch { /* ignore */ }
+      setError?.(msg);
       setStatus("error");
-      setTimeout(() => setStatus("idle"), 4000);
+      setTimeout(() => { setStatus("idle"); setError?.(null); }, 8000);
     }
   };
 
@@ -232,8 +251,9 @@ export function ExternalApiSettings({
           placeholder="sk_live_..."
           signupUrl="https://dashboard.stripe.com/register"
           signupLabel="Create Stripe account"
-          onSave={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus)}
+          onSave={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus, setStripeError)}
           status={stripeStatus}
+          errorMessage={stripeError}
           howToSteps={STRIPE_STEPS}
         />
         {stripeKey && (
@@ -268,8 +288,9 @@ export function ExternalApiSettings({
               placeholder="whsec_..."
               signupUrl="https://dashboard.stripe.com/webhooks"
               signupLabel="Open Stripe Webhooks"
-              onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus)}
+              onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus, setStripeWebhookError)}
               status={stripeWebhookStatus}
+              errorMessage={stripeWebhookError}
               howToSteps={[
                 "In Stripe, go to Developers → Webhooks.",
                 "Click Add endpoint.",
@@ -290,8 +311,9 @@ export function ExternalApiSettings({
           placeholder="cal_live_..."
           signupUrl="https://cal.com/signup"
           signupLabel="Create Cal.com account"
-          onSave={() => saveExternalKey("calcom_api_key", calcomKey, setCalcomStatus)}
+          onSave={() => saveExternalKey("calcom_api_key", calcomKey, setCalcomStatus, setCalcomError)}
           status={calcomStatus}
+          errorMessage={calcomError}
           howToSteps={CALCOM_STEPS}
         />
       </div>
