@@ -57,6 +57,7 @@ export function CalendarLinksSettings({ initialLinks }: { initialLinks: Calendar
   };
 
   const detected = newUrl ? detectService(newUrl) : null;
+  const canAdd = newLabel.trim().length > 0 && newUrl.trim().length > 0;
 
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
@@ -114,7 +115,7 @@ export function CalendarLinksSettings({ initialLinks }: { initialLinks: Calendar
             placeholder='Label — e.g. "30 min touch-up" or "2 hour piece"'
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
-            className="w-full px-3 py-2 text-xs text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
+            className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
           />
           <div>
             <input
@@ -122,37 +123,40 @@ export function CalendarLinksSettings({ initialLinks }: { initialLinks: Calendar
               placeholder="https://calendly.com/your-name/session"
               value={newUrl}
               onChange={e => setNewUrl(e.target.value)}
-              className="w-full px-3 py-2 text-xs text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
+              className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
             />
-            {detected && <p className="text-[11px] text-on-surface-variant mt-1">Detected: {detected}</p>}
+            {detected && <p className="text-xs text-on-surface-variant mt-1">Detected: {detected}</p>}
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={addLink}
-              disabled={!newLabel.trim() || !newUrl.trim()}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40"
-            >
-              Add
-            </button>
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => { setAdding(false); setNewLabel(""); setNewUrl(""); }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              onClick={addLink}
+              disabled={!canAdd}
+              style={{ background: '#000', color: '#fff', opacity: canAdd ? 1 : 0.35 }}
+              className="px-4 py-2.5 text-sm font-medium rounded-lg transition-opacity"
+            >
+              Add link
             </button>
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add link
-        </button>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            Add link
+          </button>
+        </div>
       )}
     </div>
   );

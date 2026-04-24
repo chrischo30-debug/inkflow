@@ -3,6 +3,7 @@ import { ContactFormSettings } from "@/components/contact/ContactFormSettings";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { ExternalLink } from "lucide-react";
+import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
 
 export default async function ContactFormPage() {
   const supabase = await createClient();
@@ -32,6 +33,7 @@ export default async function ContactFormPage() {
   } catch { /* migration not yet applied */ }
 
   const slug = settings.slug ?? "";
+  const contactPath = slug ? `/${slug}/contact` : null;
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -39,16 +41,19 @@ export default async function ContactFormPage() {
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
           <h1 className="text-xl font-heading font-semibold text-on-surface">Contact Form</h1>
-          {slug && (
-            <a
-              href={`/${slug}/contact`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity"
-            >
-              <ExternalLink className="w-4 h-4" />
-              View Live Form
-            </a>
+          {contactPath && (
+            <div className="flex items-center gap-2">
+              <CopyLinkButton path={contactPath} />
+              <a
+                href={contactPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open
+              </a>
+            </div>
           )}
         </header>
         <div className="flex-1 overflow-y-auto p-8">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
@@ -211,10 +211,10 @@ function AppointmentDatePicker({
                 ? "All day"
                 : new Date(ev.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
               return (
-                <div key={ev.id} className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg bg-amber-50 border border-amber-200">
+                <div key={ev.id} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
                   <span className="font-medium text-amber-800 shrink-0 w-16">{timeStr}</span>
                   <span className="text-amber-700 truncate">{ev.title.replace(/^Appointment:\s*/, "")}</span>
-                  <span className={`shrink-0 ml-auto text-[9px] px-1 py-px rounded font-medium ${ev.source === "google" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`}>
+                  <span className={`shrink-0 ml-auto text-[10px] px-1.5 py-px rounded font-medium ${ev.source === "google" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`}>
                     {ev.source === "google" ? "Google" : "FB"}
                   </span>
                 </div>
@@ -252,8 +252,10 @@ function AppointmentDatePicker({
 const BLANK = {
   client_name: "", client_email: "", client_phone: "",
   description: "", size: "", placement: "", budget: "",
-  state: "inquiry", appointment_date: "",
+  state: "confirmed", appointment_date: "",
 };
+
+type PaymentLinkOption = { label: string; url: string };
 
 // Controlled modal — used by CalendarView (click-to-create) and AddBookingModal
 export function BookingFormModal({
@@ -267,17 +269,36 @@ export function BookingFormModal({
   initialDateTime?: string;
   initialForm?: Partial<typeof BLANK>;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
   const [formKey, setFormKey] = useState(0);
+  const [sendPaymentLink, setSendPaymentLink] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Step 2 — email editor
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLinkOption[]>([]);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
   const router = useRouter();
 
   useEffect(() => {
     if (open) {
+      setStep(1);
       setForm({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
       setFormKey(k => k + 1);
       setError(null);
+      setSendPaymentLink(false);
+      setCreatedId(null);
+      setEmailSubject("");
+      setEmailBody("");
+      setPaymentLinks([]);
+      setEmailError(null);
     }
   // initialForm intentionally omitted — reset is driven by `open` transition
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -298,10 +319,60 @@ export function BookingFormModal({
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to save"); return; }
+
+      const bookingId: string | undefined = data.ids?.[0];
+      if (sendPaymentLink && bookingId) {
+        // Load email template context for the new booking
+        const emailRes = await fetch(`/api/bookings/${bookingId}/send-email`);
+        if (emailRes.ok) {
+          const emailData = await emailRes.json();
+          setEmailSubject(emailData.subject ?? "");
+          setEmailBody(emailData.body ?? "");
+          setPaymentLinks(emailData.paymentLinks ?? []);
+        }
+        setCreatedId(bookingId);
+        setStep(2);
+      } else {
+        onClose();
+        router.refresh();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const insertLink = (url: string) => {
+    const ta = bodyRef.current;
+    if (!ta) { setEmailBody(b => b + "\n" + url); return; }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = emailBody.slice(0, start) + url + emailBody.slice(end);
+    setEmailBody(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + url.length, start + url.length);
+    });
+  };
+
+  const handleSendEmail = async () => {
+    if (!createdId) return;
+    setSendingEmail(true);
+    setEmailError(null);
+    try {
+      const res = await fetch(`/api/bookings/${createdId}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: emailSubject, body: emailBody }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setEmailError(d.error ?? "Failed to send email");
+        return;
+      }
       onClose();
       router.refresh();
     } finally {
-      setSaving(false);
+      setSendingEmail(false);
     }
   };
 
@@ -313,29 +384,125 @@ export function BookingFormModal({
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
-        <form onSubmit={handleSubmit}>
-          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
-            <h2 className="text-base font-semibold text-on-surface">Add booking</h2>
-            <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+        {step === 1 ? (
+          <form onSubmit={handleSubmit}>
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
+              <h2 className="text-base font-semibold text-on-surface">Add booking</h2>
+              <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <BookingFormFields key={formKey} form={form} set={set} />
+
+              {/* Send payment link toggle */}
+              <div className="pt-1 border-t border-outline-variant/10">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={sendPaymentLink}
+                    onClick={() => setSendPaymentLink(v => !v)}
+                    className={`relative w-10 h-6 rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${sendPaymentLink ? "bg-primary" : "bg-outline-variant/50"}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sendPaymentLink ? "translate-x-4" : "translate-x-0"}`} />
+                  </button>
+                  <div>
+                    <p className="text-sm font-medium text-on-surface">Send payment link</p>
+                    <p className="text-xs text-on-surface-variant">After saving, compose a deposit request email</p>
+                  </div>
+                </label>
+              </div>
+
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </div>
+            <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
+              <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={saving} className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40">
+                {saving ? "Saving…" : sendPaymentLink ? "Save & compose email →" : "Add booking"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div>
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setStep(1)} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <h2 className="text-base font-semibold text-on-surface">Send payment link email</h2>
+              </div>
+              <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-on-surface-variant">Booking saved. Compose an email to send your client a payment link.</p>
+
+              {paymentLinks.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-2">Insert payment link</p>
+                  <div className="flex flex-wrap gap-2">
+                    {paymentLinks.map((pl, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => insertLink(pl.url)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                      >
+                        <span className="text-primary">+</span> {pl.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Subject</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={e => setEmailSubject(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Body</label>
+                <textarea
+                  ref={bodyRef}
+                  value={emailBody}
+                  onChange={e => setEmailBody(e.target.value)}
+                  rows={10}
+                  className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none font-mono placeholder:text-[#888888]"
+                />
+              </div>
+
+              {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+            </div>
+            <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
+              <button
+                type="button"
+                onClick={() => { onClose(); router.refresh(); }}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
+              >
+                Skip, save only
+              </button>
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                disabled={sendingEmail || !emailSubject.trim()}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40"
+              >
+                {sendingEmail ? "Sending…" : "Send email"}
+              </button>
+            </div>
           </div>
-          <div className="px-6 py-5 space-y-4">
-            <BookingFormFields key={formKey} form={form} set={set} />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-          </div>
-          <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={saving} className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40">
-              {saving ? "Saving…" : "Add booking"}
-            </button>
-          </div>
-        </form>
+        )}
       </div>
     </div>,
     document.body,

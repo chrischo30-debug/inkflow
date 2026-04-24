@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Check } from "lucide-react";
 
 type SaveError = string | null;
@@ -9,21 +9,34 @@ type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 export function BooksSettings({
   initialOpen,
+  initialClosedHeader,
   initialClosedMessage,
   initialOpenAt,
   initialCloseAt,
+  onPreviewReady,
 }: {
   initialOpen: boolean;
+  initialClosedHeader: string;
   initialClosedMessage: string;
   initialOpenAt: string;
   initialCloseAt: string;
+  onPreviewReady?: (fn: () => void) => void;
 }) {
   const [booksOpen, setBooksOpen] = useState(initialOpen);
+  const [closedHeader, setClosedHeader] = useState(initialClosedHeader);
   const [closedMessage, setClosedMessage] = useState(initialClosedMessage);
   const [openAt, setOpenAt] = useState(initialOpenAt);
   const [closeAt, setCloseAt] = useState(initialCloseAt);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<SaveError>(null);
+
+  const openPreviewRef = useRef<() => void>(() => {});
+  const openPreview = () => {
+    const state = { books_closed_header: closedHeader, books_closed_message: closedMessage };
+    window.open(`/form-builder/books/preview?s=${btoa(JSON.stringify(state))}`, "_blank");
+  };
+  openPreviewRef.current = openPreview;
+  useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
 
   const save = async (patch: Record<string, unknown>) => {
     setStatus("saving");
@@ -56,6 +69,7 @@ export function BooksSettings({
 
   const handleSaveSettings = () => {
     save({
+      books_closed_header: closedHeader,
       books_closed_message: closedMessage,
       books_open_at: openAt,
       books_close_at: closeAt,
@@ -96,21 +110,38 @@ export function BooksSettings({
         </div>
       </div>
 
-      {/* Closed message */}
+      {/* Closed page content */}
       <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
         <div>
-          <p className="text-sm font-semibold text-on-surface mb-0.5">Closed message</p>
+          <p className="text-sm font-semibold text-on-surface mb-0.5">Closed page</p>
           <p className="text-sm text-on-surface-variant">
-            Shown on the booking page when books are closed. Leave blank for the default message.
+            What visitors see when your booking form is closed.
           </p>
         </div>
-        <textarea
-          value={closedMessage}
-          onChange={e => setClosedMessage(e.target.value)}
-          rows={3}
-          placeholder="I'm not currently accepting new booking inquiries. Check back soon!"
-          className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none placeholder:text-[#888888]"
-        />
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-on-surface-variant">Page heading</label>
+          <input
+            type="text"
+            value={closedHeader}
+            onChange={e => setClosedHeader(e.target.value)}
+            maxLength={200}
+            placeholder="Your artist name (default)"
+            className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888]"
+          />
+          <p className="text-xs text-on-surface-variant/60">Defaults to your artist name if left blank.</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-on-surface-variant">Message</label>
+          <textarea
+            value={closedMessage}
+            onChange={e => setClosedMessage(e.target.value)}
+            rows={3}
+            placeholder="I'm not currently accepting new booking inquiries. Check back soon!"
+            className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none placeholder:text-[#888888]"
+          />
+        </div>
 
         {/* Drop schedule */}
         <div>

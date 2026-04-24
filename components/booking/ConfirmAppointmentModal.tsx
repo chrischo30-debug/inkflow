@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, AlertTriangle, CalendarDays } from "lucide-react";
+import { TimeSelect } from "@/components/ui/TimeSelect";
 
 type CalendarEvent = {
   id: string;
@@ -145,7 +146,17 @@ export function ConfirmAppointmentModal({
 
   const todayKey = toLocalDateKey(today.toISOString());
   const selectedDayEvents = date ? (eventsByDay.get(date) ?? []) : [];
-  const flashbookConflicts = selectedDayEvents.filter(e => e.source === "flashbook");
+
+  const selectedStart = date && time ? new Date(`${date}T${time}:00`) : null;
+  const selectedEnd = selectedStart ? new Date(selectedStart.getTime() + duration * 60_000) : null;
+  const timeOverlaps = selectedStart && selectedEnd
+    ? selectedDayEvents.filter(ev => {
+        if (!ev.start.includes("T")) return false;
+        const evStart = new Date(ev.start);
+        const evEnd = ev.end ? new Date(ev.end) : new Date(evStart.getTime() + 3_600_000);
+        return evStart < selectedEnd && evEnd > selectedStart;
+      })
+    : [];
 
   const handleConfirm = async () => {
     if (!date) return;
@@ -271,7 +282,7 @@ export function ConfirmAppointmentModal({
             <div className="flex items-center gap-3 mt-2 shrink-0">
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-sm bg-amber-100 border border-amber-300" />
-                <span className="text-[10px] text-on-surface-variant/60">FlashBook</span>
+                <span className="text-[10px] text-on-surface-variant/60">FlashBooker</span>
               </div>
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-sm bg-blue-100 border border-blue-300" />
@@ -331,13 +342,15 @@ export function ConfirmAppointmentModal({
                 </div>
               )}
 
-              {/* Conflict warning */}
-              {flashbookConflicts.length > 0 && (
+              {/* Time overlap warning */}
+              {timeOverlaps.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2.5 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700">
-                    {flashbookConflicts.length === 1 ? "Booking already scheduled this day." : `${flashbookConflicts.length} bookings this day.`}
-                    {" "}Check times don't overlap.
+                    {timeOverlaps.length === 1
+                      ? `"${timeOverlaps[0].title.replace(/^Appointment:\s*/, "")}" overlaps this time.`
+                      : `${timeOverlaps.length} events overlap this time slot.`}
+                    {" "}You can still schedule.
                   </p>
                 </div>
               )}
@@ -347,12 +360,7 @@ export function ConfirmAppointmentModal({
                 <label className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide block mb-1.5">
                   Time
                 </label>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={e => setTime(e.target.value)}
-                  className="w-full px-3 py-2 text-sm bg-surface-container-low border border-outline-variant/30 rounded-lg text-on-surface focus:outline-none focus:border-primary"
-                />
+                <TimeSelect value={time} onChange={setTime} className="w-full" />
               </div>
 
               {/* Duration */}

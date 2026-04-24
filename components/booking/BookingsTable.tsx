@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, Fragment, useMemo, useEffect, useRef } from "react";
+import { useState, Fragment, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ExternalLink, ChevronDown, ChevronRight, DollarSign, Calendar, Check } from "lucide-react";
+import { Mail, ExternalLink, ChevronDown, ChevronRight, DollarSign, Calendar, Check, Copy, CalendarDays } from "lucide-react";
 import { gmailThreadUrl } from "@/lib/gmail";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
@@ -87,29 +87,75 @@ type EmailCompose = {
   previewVars?: Record<string, string>;
 };
 
-type CompletionModal = { bookingId: string };
+type CompletionModal = { bookingId: string; images: File[] };
+
+function resolveEmailLabel(label: string, booking: { client_name?: string; appointment_date?: string | null }, artistName: string): string {
+  const firstName = (booking.client_name ?? "").split(" ")[0] || booking.client_name || "";
+  const apptDate = booking.appointment_date
+    ? new Date(booking.appointment_date).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
+    : "";
+  return label
+    .replace(/\{clientFirstName\}/g, firstName)
+    .replace(/\{clientName\}/g, booking.client_name ?? "")
+    .replace(/\{artistName\}/g, artistName)
+    .replace(/\{appointmentDate\}/g, apptDate)
+    .replace(/\{[^}]+\}/g, ""); // strip any remaining unknowns
+}
+
+function InlineCopyButton({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(value).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
+      title="Copy"
+      className={`shrink-0 p-1 rounded text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-high transition-colors ${className ?? ""}`}
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
 
 export function BookingsTable({
   bookings: initialBookings,
   fieldLabelMap,
   initialState,
+  initialExpandId = null,
   calendarSyncEnabled = false,
   hasStripe = false,
   calcomData = null,
+  artistName = "",
 }: {
   bookings: Booking[];
   fieldLabelMap: Record<string, string>;
   initialState: string;
+  initialExpandId?: string | null;
   calendarSyncEnabled?: boolean;
   hasStripe?: boolean;
   calcomData?: CalcomData | null;
+  artistName?: string;
 }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [activeTab, setActiveTab] = useState(initialState);
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(initialExpandId);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const setRowRef = useCallback((id: string) => (el: HTMLTableRowElement | null) => {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  }, []);
+
+  // Auto-scroll to initially expanded row
+  useEffect(() => {
+    if (!initialExpandId) return;
+    const timer = setTimeout(() => {
+      const el = rowRefs.current.get(initialExpandId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [initialExpandId]);
   const [emailCompose, setEmailCompose] = useState<EmailCompose | null>(null);
 
   // Close dropdown on click outside
@@ -140,6 +186,7 @@ export function BookingsTable({
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
+  const [completionUploading, setCompletionUploading] = useState(false);
   const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
   const [depositModal, setDepositModal] = useState<{ bookingId: string; amount: string } | null>(null);
@@ -240,7 +287,7 @@ export function BookingsTable({
   const advance = async (id: string, currentState: BookingState) => {
     if (currentState === "confirmed") {
       setCompletionData({ total_amount: "", tip_amount: "", notes: "" });
-      setCompletionModal({ bookingId: id });
+      setCompletionModal({ bookingId: id, images: [] });
       return;
     }
     if (currentState === "accepted") {
@@ -284,7 +331,19 @@ export function BookingsTable({
 
   const handleComplete = async () => {
     if (!completionModal) return;
-    const { bookingId } = completionModal;
+    const { bookingId, images } = completionModal;
+    setCompletionUploading(true);
+    let uploadedUrls: string[] = [];
+    for (const img of images.slice(0, 2)) {
+      const fd = new FormData();
+      fd.append("file", img);
+      const r = await fetch(`/api/bookings/${bookingId}/upload-completion-image`, { method: "POST", body: fd });
+      if (r.ok) {
+        const d = await r.json();
+        uploadedUrls = d.urls ?? uploadedUrls;
+      }
+    }
+    setCompletionUploading(false);
     const res = await fetch(`/api/bookings/${bookingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -302,6 +361,7 @@ export function BookingsTable({
       total_amount: completionData.total_amount ? parseFloat(completionData.total_amount) : undefined,
       tip_amount: completionData.tip_amount ? parseFloat(completionData.tip_amount) : undefined,
       completion_notes: completionData.notes || undefined,
+      completion_image_urls: uploadedUrls.length > 0 ? uploadedUrls : b.completion_image_urls,
     } : b));
     setCompletionModal(null);
   };
@@ -391,7 +451,8 @@ export function BookingsTable({
     return (
       <Fragment key={booking.id}>
         <tr
-          className={`border-b border-outline-variant/10 hover:bg-surface-container-low/40 transition-colors cursor-pointer ${expanded ? "bg-surface-container-low/40" : ""}`}
+          ref={setRowRef(booking.id)}
+          className={`border-b border-outline-variant/10 hover:bg-surface-container-low/40 transition-colors cursor-pointer ${expanded ? "bg-surface-container-low/60" : ""}`}
           onClick={() => setExpandedId(expanded ? null : booking.id)}
         >
           <td className="px-6 py-4">
@@ -524,57 +585,169 @@ export function BookingsTable({
           </td>
         </tr>
         {expanded && (
-          <tr key={`${booking.id}-detail`} className="border-b border-outline-variant/10 bg-surface-container-low/20">
-            <td />
-            <td colSpan={5} className="px-4 pb-5 pt-2">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-sm">
-                {booking.client_phone && <div><p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap.phone ?? "Phone"}</p><p className="text-on-surface">{booking.client_phone}</p></div>}
-                {booking.size && <div><p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap.size ?? "Size"}</p><p className="text-on-surface">{booking.size}</p></div>}
-                {booking.placement && <div><p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap.placement ?? "Placement"}</p><p className="text-on-surface">{booking.placement}</p></div>}
-                {typeof booking.budget === "number" && <div><p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap.budget ?? "Budget"}</p><p className="text-on-surface">${booking.budget}</p></div>}
-                {(booking.reference_urls ?? []).length > 0 && (
-                  <div className="col-span-2">
-                    <p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap.reference_images ?? "References"}</p>
-                    <div className="space-y-0.5">{(booking.reference_urls ?? []).map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-primary underline break-all">{url}</a>)}</div>
+          <tr key={`${booking.id}-detail`} className="border-b border-outline-variant/15 bg-surface-container-low/30">
+            <td colSpan={6} className="px-6 pb-5 pt-3">
+              <div className="border border-outline-variant/25 rounded-xl bg-surface shadow-sm overflow-hidden text-sm">
+
+                {/* Contact header */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-surface-container-low/50 border-b border-outline-variant/10">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-semibold text-on-surface">{booking.client_name}</span>
+                      <span className="text-on-surface-variant/60">·</span>
+                      <span className="text-sm text-on-surface-variant">{booking.client_email}</span>
+                      <InlineCopyButton value={booking.client_email} />
+                      {booking.client_phone && (
+                        <>
+                          <span className="text-on-surface-variant/60">·</span>
+                          <span className="text-sm text-on-surface-variant">{booking.client_phone}</span>
+                          <InlineCopyButton value={booking.client_phone} />
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Submitted {fmtDate(booking.created_at)} ({timeAgo(booking.created_at)})</p>
                   </div>
-                )}
-                {customEntries.map(([key, value]) => (
-                  <div key={key}>
-                    <p className="font-medium text-on-surface-variant mb-0.5">{fieldLabelMap[key] ?? key}</p>
-                    {Array.isArray(value)
-                      ? value.map(v => <p key={v} className="text-on-surface">{String(v)}</p>)
-                      : <p className="text-on-surface">{typeof value === "boolean" ? (value ? "Yes" : "No") : looksLikeUrl(String(value)) ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-primary underline">{String(value)}</a> : String(value)}</p>
-                    }
-                  </div>
-                ))}
-                {booking.appointment_date && <div><p className="font-medium text-on-surface-variant mb-0.5">Appointment</p><p className="text-on-surface">{fmtDate(booking.appointment_date)}</p></div>}
-                {typeof booking.total_amount === "number" && (
-                  <div><p className="font-medium text-on-surface-variant mb-0.5">Total</p><p className="text-on-surface">${booking.total_amount}{typeof booking.tip_amount === "number" ? ` + $${booking.tip_amount} tip` : ""}</p></div>
-                )}
-                {booking.completion_notes && <div className="col-span-full"><p className="font-medium text-on-surface-variant mb-0.5">Notes</p><p className="text-on-surface">{booking.completion_notes}</p></div>}
-                {(booking.sent_emails ?? []).length > 0 ? (
-                  <div className="col-span-2">
-                    <p className="font-medium text-on-surface-variant mb-1">Emails Sent</p>
-                    <div className="space-y-0.5">
-                      {(booking.sent_emails ?? []).map((entry, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <p className="text-sm text-on-surface truncate">{entry.label}</p>
-                          <p className="text-sm text-on-surface-variant/60 whitespace-nowrap shrink-0">{fmtDate(entry.sent_at)}</p>
+                  {/* Inline appointment edit */}
+                  {(booking.state === "confirmed" || booking.state === "accepted") && (
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); setConfirmModal({ bookingId: booking.id, initialAppointmentDate: booking.appointment_date ?? undefined }); }}
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5" />
+                      {booking.appointment_date ? "Reschedule" : "Set date"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-4 space-y-4">
+
+                  {/* Description */}
+                  {booking.description && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-1">Description</p>
+                      <p className="text-on-surface leading-relaxed">{booking.description}</p>
+                    </div>
+                  )}
+
+                  {/* Key tattoo details */}
+                  {(booking.size || booking.placement || typeof booking.budget === "number" || booking.appointment_date || typeof booking.total_amount === "number" || booking.deposit_paid) && (
+                    <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-outline-variant/10 pt-4">
+                      {booking.size && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">{fieldLabelMap.size ?? "Size"}</p>
+                          <p className="text-on-surface font-medium">{booking.size}</p>
+                        </div>
+                      )}
+                      {booking.placement && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">{fieldLabelMap.placement ?? "Placement"}</p>
+                          <p className="text-on-surface font-medium">{booking.placement}</p>
+                        </div>
+                      )}
+                      {typeof booking.budget === "number" && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">{fieldLabelMap.budget ?? "Budget"}</p>
+                          <p className="text-on-surface font-medium">${booking.budget}</p>
+                        </div>
+                      )}
+                      {booking.appointment_date && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">Appointment</p>
+                          <p className="text-on-surface font-medium">{fmtDateTime(booking.appointment_date)}</p>
+                        </div>
+                      )}
+                      {typeof booking.total_amount === "number" && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">Total paid</p>
+                          <p className="text-on-surface font-medium">
+                            ${booking.total_amount}
+                            {typeof booking.tip_amount === "number" && <span className="text-on-surface-variant font-normal"> + ${booking.tip_amount} tip</span>}
+                          </p>
+                        </div>
+                      )}
+                      {booking.deposit_paid && (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">Deposit</p>
+                          <p className="text-emerald-600 font-medium">Paid ✓</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom answers */}
+                  {customEntries.length > 0 && (
+                    <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-outline-variant/10 pt-4">
+                      {customEntries.map(([key, value]) => (
+                        <div key={key}>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-0.5">{fieldLabelMap[key] ?? key}</p>
+                          {Array.isArray(value)
+                            ? <div className="space-y-0.5">{value.map(v => <p key={String(v)} className="text-on-surface">{String(v)}</p>)}</div>
+                            : <p className="text-on-surface">{typeof value === "boolean" ? (value ? "Yes" : "No") : looksLikeUrl(String(value)) ? <a href={String(value)} target="_blank" rel="noreferrer" className="text-primary underline">{String(value)}</a> : String(value)}</p>
+                          }
                         </div>
                       ))}
                     </div>
-                  </div>
-                ) : booking.last_email_sent_at ? (
-                  <div><p className="font-medium text-on-surface-variant mb-0.5">Last Email</p><p className="text-on-surface">{fmtDate(booking.last_email_sent_at)} <span className="text-on-surface-variant/60">({timeAgo(booking.last_email_sent_at)})</span></p></div>
-                ) : null}
-                {booking.gmail_thread_id && (
-                  <div>
-                    <p className="font-medium text-on-surface-variant mb-0.5">Conversation</p>
-                    <a href={`https://mail.google.com/mail/u/0/#all/${booking.gmail_thread_id}`} target="_blank" rel="noreferrer" className="text-sm text-primary underline underline-offset-2 hover:opacity-70 transition-opacity">View in Gmail →</a>
-                  </div>
-                )}
-                <div><p className="font-medium text-on-surface-variant mb-0.5">Submitted</p><p className="text-on-surface">{fmtDate(booking.created_at)} <span className="text-on-surface-variant/60">({timeAgo(booking.created_at)})</span></p></div>
-                <div className="col-span-full"><p className="font-medium text-on-surface-variant mb-0.5">Description</p><p className="text-on-surface">{booking.description}</p></div>
+                  )}
+
+                  {/* References */}
+                  {(booking.reference_urls ?? []).length > 0 && (
+                    <div className="border-t border-outline-variant/10 pt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-2">{fieldLabelMap.reference_images ?? "References"}</p>
+                      <div className="space-y-1">{(booking.reference_urls ?? []).map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block text-primary underline break-all">{url}</a>)}</div>
+                    </div>
+                  )}
+
+                  {/* Completion notes */}
+                  {booking.completion_notes && (
+                    <div className="border-t border-outline-variant/10 pt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-1">Session notes</p>
+                      <p className="text-on-surface">{booking.completion_notes}</p>
+                    </div>
+                  )}
+
+                  {/* Final photos */}
+                  {(booking.completion_image_urls ?? []).length > 0 && (
+                    <div className="border-t border-outline-variant/10 pt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-2">Final photos</p>
+                      <div className="flex gap-3">
+                        {(booking.completion_image_urls ?? []).map((url, i) => (
+                          <a key={i} href={url} target="_blank" rel="noreferrer">
+                            <img src={url} alt={`Final photo ${i + 1}`} className="w-28 h-28 object-cover rounded-lg border border-outline-variant/20 hover:opacity-80 transition-opacity" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Email history */}
+                  {(booking.sent_emails ?? []).length > 0 ? (
+                    <div className="border-t border-outline-variant/10 pt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-2">Emails sent</p>
+                      <div className="space-y-2">
+                        {(booking.sent_emails ?? []).map((email, i) => (
+                          <div key={i} className="flex items-baseline justify-between gap-4">
+                            <span className="text-sm text-on-surface">{resolveEmailLabel(email.label, booking, artistName)}</span>
+                            <span className="text-xs text-on-surface-variant shrink-0">{fmtDate(email.sent_at)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {booking.gmail_thread_id && (
+                        <a href={gmailThreadUrl(booking.gmail_thread_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2 hover:opacity-70 transition-opacity mt-2">
+                          View thread in Gmail <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  ) : booking.last_email_sent_at ? (
+                    <div className="border-t border-outline-variant/10 pt-4 flex items-center gap-3 text-xs text-on-surface-variant">
+                      <span>Last emailed {fmtDate(booking.last_email_sent_at)}</span>
+                      {booking.gmail_thread_id && (
+                        <a href={gmailThreadUrl(booking.gmail_thread_id)} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 hover:opacity-70">View in Gmail →</a>
+                      )}
+                    </div>
+                  ) : null}
+
+                </div>
               </div>
             </td>
           </tr>
@@ -675,8 +848,8 @@ export function BookingsTable({
 
       {/* Completion modal */}
       {completionModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setCompletionModal(null)}>
-          <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/40" onClick={() => setCompletionModal(null)}>
+          <div className="bg-surface border border-outline-variant/20 rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full max-w-sm mx-0 sm:mx-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-on-surface mb-1">Complete booking</h2>
             <p className="text-sm text-on-surface-variant mb-5">Optionally record the final details for this appointment.</p>
             <div className="flex flex-col gap-3 mb-5">
@@ -708,11 +881,47 @@ export function BookingsTable({
                 <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Notes</label>
                 <textarea
                   placeholder="Any notes about this client or session…"
-                  rows={3}
+                  rows={2}
                   value={completionData.notes}
                   onChange={e => setCompletionData(d => ({ ...d, notes: e.target.value }))}
                   className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none"
                 />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">
+                  Final photos (up to 2)
+                </label>
+                {completionModal.images.length > 0 ? (
+                  <div className="flex gap-2 mb-2">
+                    {completionModal.images.map((img, i) => (
+                      <div key={i} className="relative">
+                        <img src={URL.createObjectURL(img)} alt="" className="w-20 h-20 object-cover rounded-lg border border-outline-variant/20" />
+                        <button
+                          type="button"
+                          onClick={() => setCompletionModal(m => m ? { ...m, images: m.images.filter((_, j) => j !== i) } : m)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-on-surface text-surface text-xs flex items-center justify-center hover:opacity-80"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {completionModal.images.length < 2 && (
+                  <label className="flex items-center gap-2 px-3 py-2.5 border border-dashed border-outline-variant/40 rounded-lg cursor-pointer hover:bg-surface-container-low transition-colors">
+                    <span className="text-sm text-on-surface-variant">
+                      {completionModal.images.length === 0 ? "Add photos…" : "Add another…"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) setCompletionModal(m => m ? { ...m, images: [...m.images, file].slice(0, 2) } : m);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between">
@@ -734,9 +943,10 @@ export function BookingsTable({
                 <button
                   type="button"
                   onClick={handleComplete}
-                  className="px-5 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
+                  disabled={completionUploading}
+                  className="px-5 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-50"
                 >
-                  Mark Complete
+                  {completionUploading ? "Uploading…" : "Mark Complete"}
                 </button>
               </div>
             </div>

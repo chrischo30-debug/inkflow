@@ -10,6 +10,7 @@ const formFieldSchema = z.object({
   required: z.boolean(),
   sort_order: z.number().int().nonnegative(),
   placeholder: z.string().optional(),
+  description: z.string().optional(),
   input_type: z.enum(["text", "textarea", "number", "select", "checkbox", "date", "url", "file_or_link"]),
   options: z.array(z.string()).optional(),
 });
@@ -30,7 +31,7 @@ export async function GET() {
 
     const { data } = await supabase
       .from("form_fields")
-      .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
+      .select("field_key, label, enabled, required, sort_order, placeholder, description, input_type, options")
       .eq("artist_id", user.id)
       .order("sort_order", { ascending: true });
 
@@ -63,6 +64,7 @@ export async function PUT(req: Request) {
           required: true,
           sort_order: field.sort_order,
           placeholder: null,
+          description: field.description || null,
           input_type: "text",
           options: [],
         };
@@ -76,6 +78,7 @@ export async function PUT(req: Request) {
           required: field.enabled ? field.required : false,
           sort_order: field.sort_order,
           placeholder: null,
+          description: field.description || null,
           input_type: "text",
           options: [],
         };
@@ -90,6 +93,7 @@ export async function PUT(req: Request) {
           required: field.enabled ? field.required : false,
           sort_order: field.sort_order,
           placeholder: field.placeholder || null,
+          description: field.description || null,
           input_type: "text",
           options: [],
         };
@@ -103,6 +107,7 @@ export async function PUT(req: Request) {
         required: field.enabled ? field.required : false,
         sort_order: field.sort_order,
         placeholder: field.placeholder || null,
+        description: field.description || null,
         input_type: field.input_type,
         options: field.input_type === "select" ? (field.options ?? []) : [],
       };

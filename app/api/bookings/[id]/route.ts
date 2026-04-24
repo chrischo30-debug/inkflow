@@ -29,8 +29,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const action: string = body.action;
 
-    if (!["advance", "cancel", "update_appointment", "confirm_appointment", "move", "complete"].includes(action)) {
+    if (!["advance", "cancel", "update_appointment", "confirm_appointment", "move", "complete", "edit_details", "mark_deposit_paid"].includes(action)) {
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
+    }
+
+    if (action === "mark_deposit_paid") {
+      await supabase.from("bookings").update({ deposit_paid: true }).eq("id", id).eq("artist_id", user.id);
+      return NextResponse.json({ success: true });
     }
 
     const { data: booking, error: fetchErr } = await supabase
@@ -71,6 +76,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } catch { /* column may not exist yet */ }
     };
 
+    // ── Edit details ──────────────────────────────────────────────────────────
+    if (action === "edit_details") {
+      const updates: Record<string, unknown> = {};
+      if (body.description != null) updates.description = body.description;
+      if (body.size !== undefined) updates.size = body.size || null;
+      if (body.placement !== undefined) updates.placement = body.placement || null;
+      if (body.total_amount !== undefined) updates.total_amount = body.total_amount != null && body.total_amount !== "" ? Number(body.total_amount) : null;
+      if (body.tip_amount !== undefined) updates.tip_amount = body.tip_amount != null && body.tip_amount !== "" ? Number(body.tip_amount) : null;
+      if (body.completion_notes !== undefined) updates.completion_notes = body.completion_notes || null;
+      if (body.appointment_date !== undefined) updates.appointment_date = body.appointment_date || null;
+
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+      }
+      const { error: updateErr } = await supabase
+        .from("bookings")
+        .update(updates)
+        .eq("id", id)
+        .eq("artist_id", user.id);
+      if (updateErr) return NextResponse.json({ error: "Failed to update booking" }, { status: 500 });
+      return NextResponse.json({ success: true });
+    }
+
     // ── Move to any state ──────────────────────────────────────────────────────
     if (action === "move") {
       const targetState = body.target_state as BookingState;
@@ -79,7 +107,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const { error: updateErr } = await supabase
         .from("bookings")
-        .update({ state: targetState })
+        .update({ state: targetState, has_unread_reply: false })
         .eq("id", id)
         .eq("artist_id", user.id);
       if (updateErr) return NextResponse.json({ error: "Failed to update booking" }, { status: 500 });
@@ -200,7 +228,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     // ── Complete ───────────────────────────────────────────────────────────────
     if (action === "complete") {
-      const updateFields: Record<string, unknown> = { state: "completed" };
+      const updateFields: Record<string, unknown> = { state: "completed", has_unread_reply: false };
       if (body.total_amount != null) updateFields.total_amount = body.total_amount;
       if (body.tip_amount != null) updateFields.tip_amount = body.tip_amount;
       if (body.completion_notes != null) updateFields.completion_notes = body.completion_notes;
@@ -229,7 +257,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
             ? { refreshToken: artist.google_refresh_token, gmailAddress }
             : null;
-          const { threadId } = await sendStateTransitionEmail({
+          const { threadId, subject: sentSubject } = await sendStateTransitionEmail({
             toEmail: booking.client_email,
             clientName: booking.client_name,
             newState: "completed",
@@ -244,7 +272,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             last_email_sent_at: new Date().toISOString(),
             ...(threadId ? { gmail_thread_id: threadId } : {}),
           }).eq("id", id);
-          await appendSentEmail("Appointment Completed");
+          await appendSentEmail(sentSubject ?? "Appointment Completed");
         } catch (e) { console.error("Completion email failed:", e); }
       }
 
@@ -272,7 +300,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       gmailAddress = row?.gmail_address ?? null;
     } catch { /* column may not exist yet */ }
 
-    await supabase.from("bookings").update({ state: nextState }).eq("id", id).eq("artist_id", user.id);
+    await supabase.from("bookings").update({ state: nextState, has_unread_reply: false }).eq("id", id).eq("artist_id", user.id);
 
     const SENT_EMAIL_LABELS: Partial<Record<string, string>> = {
       inquiry:   "Submission Received",
@@ -292,7 +320,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const gmailContext = gmailConnected && artist?.google_refresh_token && gmailAddress
           ? { refreshToken: artist.google_refresh_token, gmailAddress }
           : null;
-        const { threadId } = await sendStateTransitionEmail({
+        const { threadId, subject: sentSubject } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
           newState: nextState,
@@ -307,7 +335,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           last_email_sent_at: new Date().toISOString(),
           ...(threadId ? { gmail_thread_id: threadId } : {}),
         }).eq("id", id);
-        await appendSentEmail(SENT_EMAIL_LABELS[nextState] ?? nextState);
+        await appendSentEmail(sentSubject ?? SENT_EMAIL_LABELS[nextState] ?? nextState);
       } catch (e) { console.error("Email transition failed:", e); }
     }
 
@@ -315,6 +343,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   } catch (error: unknown) {
     console.error("Booking PATCH error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await params;
+    const { error } = await supabase
+      .from("bookings")
+      .delete()
+      .eq("id", id)
+      .eq("artist_id", user.id);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    console.error("Booking DELETE error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

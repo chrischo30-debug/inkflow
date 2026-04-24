@@ -3,11 +3,15 @@ import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { PipelineView } from "@/components/booking/PipelineView";
 import { BooksToggle } from "@/components/dashboard/BooksToggle";
+import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import type { CalcomData } from "@/components/booking/BookingCard";
 import { isBooksOpen, booksStatusLabel } from "@/lib/books";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -16,7 +20,7 @@ export default async function DashboardPage() {
 
   const { data: artistData } = await supabase
     .from("artists")
-    .select("name, calendar_sync_enabled, books_open, books_open_at, books_close_at, stripe_api_key, calcom_api_key")
+    .select("name, slug, calendar_sync_enabled, books_open, books_open_at, books_close_at, stripe_api_key, calcom_api_key")
     .eq("id", user.id)
     .single();
 
@@ -94,19 +98,32 @@ export default async function DashboardPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+        <header className="h-16 flex items-center justify-between px-4 md:px-6 xl:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <h1 className="text-xl font-heading font-semibold text-on-surface">Dashboard</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <BooksToggle initialOpen={booksOpen} statusLabel={booksLabel} />
-            <Link href="/bookings" className="px-4 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
+            {artistData?.slug && (
+              <a
+                href={`/${artistData.slug}/book`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View live booking form"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Live form</span>
+              </a>
+            )}
+            <Link href="/bookings" className="hidden sm:block px-3 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
               All bookings
             </Link>
+            <AddBookingModal />
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
           {/* Action items */}
-          <div className="px-8 pt-6 pb-4">
+          <div className="px-4 md:px-6 xl:px-8 pt-6 pb-4">
             <p className="text-base text-on-surface-variant mb-5">{greeting}, {firstName}.</p>
 
             {newInquiries.length === 0 && followUps.length === 0 && awaitingConfirmation.length === 0 && weekAppointments.length === 0 ? (
@@ -115,7 +132,7 @@ export default async function DashboardPage() {
                 <p className="text-sm text-on-surface-variant mt-1">No action items right now.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <ActionCard
                   label="New inquiries"
                   count={newInquiries.length}
@@ -148,7 +165,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Pipeline */}
-          <div className="px-8 pb-8">
+          <div className="px-4 md:px-6 xl:px-8 pb-8">
             <div className="flex items-center gap-1.5 mb-3">
               <h2 className="text-sm font-heading font-semibold text-on-surface">Pipeline</h2>
               <HelpTooltip body="All active bookings organized by stage — New, Accepted, Confirmed, and Completed. Use the action buttons on each card to move clients forward and send emails." />
@@ -187,22 +204,22 @@ function ActionCard({
   return (
     <Link
       href={href}
-      className={`group block rounded-xl border p-5 transition-all hover:shadow-sm ${
+      className={`group block rounded-xl border p-3.5 md:p-5 transition-all hover:shadow-sm ${
         urgent && count > 0
           ? "border-primary/30 bg-primary/5 hover:border-primary/50"
           : "border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40"
       }`}
     >
-      <div className="flex items-center gap-1.5 mb-1">
-        <p className="text-sm font-medium text-on-surface-variant">{label}</p>
+      <div className="flex items-center gap-1 mb-1">
+        <p className="text-xs md:text-sm font-medium text-on-surface-variant leading-tight">{label}</p>
         {tooltip && <HelpTooltip body={tooltip} />}
       </div>
-      <p className={`text-3xl font-heading font-bold ${urgent && count > 0 ? "text-primary" : "text-on-surface"}`}>
+      <p className={`text-2xl md:text-3xl font-heading font-bold ${urgent && count > 0 ? "text-primary" : "text-on-surface"}`}>
         {count}
       </p>
-      <p className="text-sm text-on-surface-variant mt-2 line-clamp-2">{description}</p>
+      <p className="text-xs md:text-sm text-on-surface-variant mt-1.5 md:mt-2 line-clamp-2">{description}</p>
       {count > 0 && (
-        <p className="text-sm font-medium text-primary mt-3 group-hover:underline">{cta} →</p>
+        <p className="text-xs md:text-sm font-medium text-primary mt-2 md:mt-3 group-hover:underline">{cta} →</p>
       )}
     </Link>
   );

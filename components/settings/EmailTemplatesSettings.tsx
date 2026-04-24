@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BookingState, EmailTemplate } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,47 +16,37 @@ const STATE_LABELS: Record<Exclude<BookingState, "cancelled">, string> = {
 };
 
 const VARIABLES = [
-  { name: "{clientFirstName}", description: "Client's first name",                       example: "Jane" },
-  { name: "{artistName}",      description: "Your artist/studio name",                   example: "Ink by Alex" },
-  { name: "{paymentLink}",     description: "Your primary payment link URL",             example: "https://stripe.com/pay/..." },
-  { name: "{calendarLink}",    description: "Your primary scheduling link URL",          example: "https://calendly.com/..." },
-  { name: "{calendarLinks}",   description: "All scheduling links, one per line with labels", example: "30 min: https://...\n2 hr: https://..." },
-  { name: "{appointmentDate}", description: "Confirmed appointment date",               example: "May 3, 2026" },
+  { name: "{clientFirstName}", description: "Client's first name",                            example: "Jane" },
+  { name: "{artistName}",      description: "Your artist/studio name",                        example: "Ink by Alex" },
+  { name: "{paymentLink}",     description: "Your primary payment link URL",                  example: "https://stripe.com/pay/..." },
+  { name: "{calendarLink}",    description: "Your primary scheduling link URL",               example: "https://calendly.com/..." },
+  { name: "{calendarLinks}",   description: "All scheduling links, one per line with labels", example: "30 min: https://..." },
+  { name: "{appointmentDate}", description: "Confirmed appointment date",                     example: "May 3, 2026" },
 ];
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
-function VariableReference() {
-  const [open, setOpen] = useState(false);
+// ── Variable chips ────────────────────────────────────────────────────────────
+
+function VarChips({ onInsert }: { onInsert: (v: string) => void }) {
   return (
-    <div className="rounded-xl border border-outline-variant/20 overflow-hidden mb-4">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container transition-colors text-left"
-      >
-        <span className="text-xs font-medium text-on-surface">Variable reference</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-on-surface-variant transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="px-4 pb-4 pt-3 border-t border-outline-variant/10 bg-surface-container-lowest">
-          <p className="text-xs text-on-surface-variant mb-3">Paste any variable into a subject or message body — it will be replaced with the real value when the email is sent.</p>
-          <div className="space-y-2">
-            {VARIABLES.map(v => (
-              <div key={v.name} className="grid grid-cols-[130px_1fr] gap-3 text-xs">
-                <code className="font-mono text-primary bg-primary/5 px-2 py-1 rounded self-start">{v.name}</code>
-                <div>
-                  <p className="text-on-surface">{v.description}</p>
-                  <p className="text-on-surface-variant/70 mt-0.5">e.g. {v.example}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="flex flex-wrap gap-1.5">
+      {VARIABLES.map(v => (
+        <button
+          key={v.name}
+          type="button"
+          onClick={() => onInsert(v.name)}
+          title={v.description}
+          className="text-xs px-2 py-1 rounded-md font-mono bg-primary/8 text-primary hover:bg-primary/15 transition-colors"
+        >
+          {v.name}
+        </button>
+      ))}
     </div>
   );
 }
+
+// ── Template editor (state-linked) ────────────────────────────────────────────
 
 function TemplateEditor({ template, onSaved }: { template: EmailTemplate; onSaved: () => void }) {
   const [subject, setSubject] = useState(template.subject);
@@ -64,11 +54,35 @@ function TemplateEditor({ template, onSaved }: { template: EmailTemplate; onSave
   const [autoSend, setAutoSend] = useState(template.auto_send);
   const [status, setStatus] = useState<SaveStatus>("idle");
 
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
+
   useEffect(() => {
     setSubject(template.subject);
     setBody(template.body);
     setAutoSend(template.auto_send);
   }, [template]);
+
+  const insertVar = (varName: string) => {
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : bodyRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
+    if (!el) {
+      if (isSubject) setSubject(v => v + varName);
+      else setBody(v => v + varName);
+      return;
+    }
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const newVal = val.slice(0, start) + varName + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + varName.length, start + varName.length);
+    });
+  };
 
   const save = async () => {
     setStatus("saving");
@@ -85,13 +99,28 @@ function TemplateEditor({ template, onSaved }: { template: EmailTemplate; onSave
     <div className="space-y-4">
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-on-surface-variant tracking-wide">Subject</label>
-        <Input value={subject} onChange={e => setSubject(e.target.value)}
-          className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors" />
+        <Input
+          ref={subjectRef}
+          value={subject}
+          onChange={e => setSubject(e.target.value)}
+          onFocus={() => { lastFocused.current = "subject"; }}
+          className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
+        />
       </div>
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={6}
-          className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors" />
+        <textarea
+          ref={bodyRef}
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          onFocus={() => { lastFocused.current = "body"; }}
+          rows={6}
+          className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
+        />
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+        <VarChips onInsert={insertVar} />
       </div>
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -114,17 +143,41 @@ function TemplateEditor({ template, onSaved }: { template: EmailTemplate; onSave
   );
 }
 
+// ── Custom template editor ────────────────────────────────────────────────────
+
 function CustomTemplateEditor({ template, onSaved, onDelete }: { template: EmailTemplate; onSaved: () => void; onDelete: () => void }) {
   const [name, setName] = useState(template.name ?? "");
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
   const [status, setStatus] = useState<SaveStatus>("idle");
 
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
+
+  const insertVar = (varName: string) => {
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : bodyRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
+    if (!el) {
+      if (isSubject) setSubject(v => v + varName);
+      else setBody(v => v + varName);
+      return;
+    }
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const newVal = val.slice(0, start) + varName + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + varName.length, start + varName.length);
+    });
+  };
+
   const save = async () => {
     if (!template.id) return;
     setStatus("saving");
-    // Update by deleting + recreating isn't ideal; use a dedicated PUT-by-id if added.
-    // For now, delete and re-create to preserve simplicity.
     await fetch("/api/artist/email-templates", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: template.id }) });
     const res = await fetch("/api/artist/email-templates", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -144,10 +197,27 @@ function CustomTemplateEditor({ template, onSaved, onDelete }: { template: Email
     <div className="space-y-3">
       <Input value={name} onChange={e => setName(e.target.value)} placeholder="Template name"
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
-      <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
-        className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
-      <textarea value={body} onChange={e => setBody(e.target.value)} rows={5} placeholder="Message body"
-        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors" />
+      <Input
+        ref={subjectRef}
+        value={subject}
+        onChange={e => setSubject(e.target.value)}
+        onFocus={() => { lastFocused.current = "subject"; }}
+        placeholder="Subject"
+        className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
+      />
+      <textarea
+        ref={bodyRef}
+        value={body}
+        onChange={e => setBody(e.target.value)}
+        onFocus={() => { lastFocused.current = "body"; }}
+        rows={5}
+        placeholder="Message body"
+        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
+      />
+      <div className="space-y-1.5">
+        <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+        <VarChips onInsert={insertVar} />
+      </div>
       <div className="flex items-center justify-between">
         <button type="button" onClick={del} className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-destructive transition-colors">
           <Trash2 className="w-3.5 h-3.5" /> Delete
@@ -165,12 +235,38 @@ function CustomTemplateEditor({ template, onSaved, onDelete }: { template: Email
   );
 }
 
+// ── New template form ─────────────────────────────────────────────────────────
+
 function NewTemplateForm({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
+
+  const insertVar = (varName: string) => {
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : bodyRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
+    if (!el) {
+      if (isSubject) setSubject(v => v + varName);
+      else setBody(v => v + varName);
+      return;
+    }
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const newVal = val.slice(0, start) + varName + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + varName.length, start + varName.length);
+    });
+  };
 
   const create = async () => {
     if (!name.trim() || !subject.trim() || !body.trim()) { setError("All fields are required."); return; }
@@ -190,10 +286,27 @@ function NewTemplateForm({ onCreated }: { onCreated: () => void }) {
       <p className="text-xs font-medium text-on-surface">New template</p>
       <Input value={name} onChange={e => setName(e.target.value)} placeholder="Name — e.g. Follow-up, Waitlist, Flash Sale"
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
-      <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
-        className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none" />
-      <textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder="Message body — use variables like {clientFirstName}, {artistName}"
-        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors" />
+      <Input
+        ref={subjectRef}
+        value={subject}
+        onChange={e => setSubject(e.target.value)}
+        onFocus={() => { lastFocused.current = "subject"; }}
+        placeholder="Subject"
+        className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
+      />
+      <textarea
+        ref={bodyRef}
+        value={body}
+        onChange={e => setBody(e.target.value)}
+        onFocus={() => { lastFocused.current = "body"; }}
+        rows={4}
+        placeholder="Message body"
+        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
+      />
+      <div className="space-y-1.5">
+        <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+        <VarChips onInsert={insertVar} />
+      </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button type="button" onClick={create} disabled={saving}
         className="h-auto py-2 px-4 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80">
@@ -202,6 +315,8 @@ function NewTemplateForm({ onCreated }: { onCreated: () => void }) {
     </div>
   );
 }
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export function EmailTemplatesSettings() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -226,8 +341,6 @@ export function EmailTemplatesSettings() {
 
   return (
     <div className="space-y-6">
-      <VariableReference />
-
       {/* State-linked templates */}
       <div className="space-y-2">
         <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-3">Stage templates</p>

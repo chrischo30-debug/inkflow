@@ -1,7 +1,7 @@
 # brand.md
 
 ## App Name
-FlashBook
+FlashBooker
 
 ## Personality
 Professional, clean, fast. Feels like a tool built for serious creatives — not a generic SaaS.

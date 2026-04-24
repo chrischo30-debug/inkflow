@@ -296,86 +296,57 @@ export function InquiryForm({
 
   if (isSuccess) {
     return (
-      <div className="p-8 text-center space-y-4 border border-border rounded-md bg-card">
-        <h3 className="text-xl font-heading font-semibold text-primary">Submission Confirmed</h3>
-        <p className="text-muted-foreground text-sm">
+      <div className="py-14 text-center space-y-3">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: `color-mix(in srgb, var(--primary) 12%, transparent)` }}>
+          <svg className="w-7 h-7" style={{ color: 'var(--primary)' }} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <p className="font-semibold text-lg mt-2" style={{ color: 'var(--primary)' }}>You're all set!</p>
+        <p className="text-sm" style={{ color: 'inherit', opacity: 0.6 }}>
           {confirmationMessage || "Thanks for reaching out! I'll review your request and get back to you shortly."}
         </p>
       </div>
     );
   }
 
-  // Shared upload zone — styled to match light dashboard theme
-  const UploadZone = ({
-    uploading,
-    onFiles,
-    id,
-  }: {
-    uploading: boolean;
-    onFiles: (files: FileList | null) => void;
-    id: string;
-  }) => (
-    <label
-      htmlFor={id}
-      className={`
-        flex flex-col items-center justify-center gap-2 w-full
-        min-h-[80px] rounded-md border border-dashed cursor-pointer
-        transition-colors duration-150 select-none
-        ${uploading
-          ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
-          : 'border-[var(--primary)] bg-[var(--primary)]/5 text-[var(--primary)] hover:bg-[var(--primary)]/10'
-        }
-      `}
-    >
-      <input
-        id={id}
-        type="file"
-        multiple
-        accept="image/*"
-        className="sr-only"
-        disabled={uploading}
-        onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = ''; }}
-      />
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-      </svg>
-      <span className="text-xs">
-        {uploading ? 'Uploading…' : 'Click to upload images'}
-      </span>
+  // Shared upload zone
+  const UploadZone = ({ uploading, onFiles, id }: { uploading: boolean; onFiles: (files: FileList | null) => void; id: string }) => (
+    <label htmlFor={id} className="block cursor-pointer">
+      <input id={id} type="file" multiple accept="image/*" className="sr-only" disabled={uploading}
+        onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = ''; }} />
+      <div style={{ border: '1.5px dashed rgba(0,0,0,0.18)', borderRadius: 10, padding: '20px 16px', textAlign: 'center', transition: 'border-color 0.15s, background 0.15s' }}
+        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--primary)'; (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--primary) 4%, transparent)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,0,0,0.18)'; (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
+        <svg className="w-5 h-5 mx-auto mb-2" style={{ color: 'var(--primary)', opacity: 0.7 }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+        </svg>
+        <p className="text-sm" style={{ color: 'var(--primary)', opacity: 0.8, fontWeight: 500 }}>
+          {uploading ? 'Uploading…' : 'Click to upload images'}
+        </p>
+      </div>
     </label>
   );
 
-  // Uploaded URLs list — light theme
+  // Uploaded URLs list
   const UploadedList = ({ urls, onRemove }: { urls: string[]; onRemove: (url: string) => void }) =>
     urls.length === 0 ? null : (
-      <ul className="mt-2 space-y-1">
+      <div className="space-y-1.5 mt-2">
         {urls.map((url) => (
-          <li key={url} className="flex items-center gap-2 text-xs text-[var(--on-surface-variant)] bg-[var(--surface-container)] rounded px-2 py-1.5">
-            <svg className="w-3 h-3 shrink-0 text-[var(--primary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
-            </svg>
-            <a href={url} target="_blank" rel="noreferrer" className="truncate hover:text-[var(--primary)] hover:underline transition-colors">
-              {url.split('/').pop()}
-            </a>
-            <button
-              type="button"
-              onClick={() => onRemove(url)}
-              className="ml-auto shrink-0 text-[var(--outline)] hover:text-[var(--error)] transition-colors"
-              aria-label="Remove"
-            >
-              ✕
-            </button>
-          </li>
+          <div key={url} className="flex items-center gap-2 text-xs rounded-lg px-3 py-2" style={{ background: 'rgba(0,0,0,0.04)' }}>
+            <span className="truncate flex-1 opacity-70">{url.split('/').pop()}</span>
+            <button type="button" onClick={() => onRemove(url)} style={{ color: '#999', lineHeight: 1 }} className="shrink-0 hover:text-red-500 transition-colors text-base leading-none">×</button>
+          </div>
         ))}
-      </ul>
+      </div>
     );
 
   // Divider between upload and link textarea
   const OrDivider = () => (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-px bg-[var(--primary)]/20" />
-      <span className="text-[10px] uppercase tracking-widest text-[var(--primary)] font-medium px-1">paste links or upload images above</span>
-      <div className="flex-1 h-px bg-[var(--primary)]/20" />
+    <div className="flex items-center gap-3 my-1">
+      <div className="flex-1 h-px" style={{ background: 'rgba(0,0,0,0.1)' }} />
+      <span className="text-xs" style={{ color: 'inherit', opacity: 0.4, fontWeight: 500 }}>or paste a link below</span>
+      <div className="flex-1 h-px" style={{ background: 'rgba(0,0,0,0.1)' }} />
     </div>
   );
 
@@ -400,28 +371,32 @@ export function InquiryForm({
       }
       if (inputType === "select") {
         return (
-          <select
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            value={field.value ?? ""}
-            onChange={field.onChange}
-            onBlur={field.onBlur}
-            name={field.name}
-            ref={field.ref as (instance: HTMLSelectElement | null) => void}
-          >
-            <option value="">Select an option</option>
-            {inputOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+          <div className="bk-select-wrap">
+            <select
+              value={field.value ?? ""}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              name={field.name}
+              ref={field.ref as (instance: HTMLSelectElement | null) => void}
+            >
+              <option value="">Select an option</option>
+              {inputOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
         );
       }
       if (inputType === "number") {
         return (
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium pointer-events-none" style={{ color: "#111111" }}>$</span>
-            <Input type="number" min="0" step="1" placeholder={placeholder || "0"} className="pl-7" {...field} />
+          <div style={{ display: "flex", alignItems: "center", background: "#fff", border: "1.5px solid rgba(0,0,0,0.13)", borderRadius: 10, padding: "13px 16px", gap: 6 }}>
+            <span style={{ color: "#111", fontWeight: 500, flexShrink: 0, lineHeight: 1 }}>$</span>
+            <input type="number" min="0" step="1" placeholder={placeholder || "0"}
+              style={{ border: "none", padding: 0, margin: 0, background: "transparent", outline: "none", width: "100%", color: "#111", fontWeight: 400, fontSize: "inherit" }}
+              value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name}
+              ref={field.ref as (instance: HTMLInputElement | null) => void} />
           </div>
         );
       }
@@ -433,16 +408,21 @@ export function InquiryForm({
       }
       if (inputType === "checkbox") {
         return (
-          <label className="inline-flex items-center gap-3 text-sm text-on-surface">
-            <input
-              type="checkbox"
-              checked={field.value === "true"}
-              onChange={(e) => field.onChange(e.target.checked ? "true" : "")}
-              onBlur={field.onBlur}
-              name={field.name}
-              ref={field.ref as (instance: HTMLInputElement | null) => void}
-            />
-            {placeholder || "Check if true"}
+          <label className="inline-flex items-center gap-3 cursor-pointer" style={{ fontSize: 'inherit' }}>
+            <span className="relative flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+              style={{ border: '1.5px solid rgba(0,0,0,0.2)', background: 'white' }}>
+              <input
+                type="checkbox"
+                checked={field.value === "true"}
+                onChange={(e) => field.onChange(e.target.checked ? "true" : "")}
+                onBlur={field.onBlur}
+                name={field.name}
+                ref={field.ref as (instance: HTMLInputElement | null) => void}
+                className="sr-only"
+              />
+              {field.value === "true" && <svg className="w-3 h-3" style={{ color: 'var(--primary)' }} fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+            </span>
+            <span style={{ opacity: 0.8 }}>{placeholder || "Check if true"}</span>
           </label>
         );
       }
@@ -464,7 +444,8 @@ export function InquiryForm({
             name="client_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("name") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("name") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -481,7 +462,8 @@ export function InquiryForm({
             name="client_email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("email") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("email") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -498,7 +480,8 @@ export function InquiryForm({
             name="client_phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("phone") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("phone") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -515,7 +498,8 @@ export function InquiryForm({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("description") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("description") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -532,7 +516,8 @@ export function InquiryForm({
             name="size"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("size") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("size") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -549,7 +534,8 @@ export function InquiryForm({
             name="placement"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("placement") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("placement") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -566,7 +552,8 @@ export function InquiryForm({
             name="budget"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("budget") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("budget") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {renderControl(field)}
                 </FormControl>
@@ -583,7 +570,8 @@ export function InquiryForm({
             name="reference_urls"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{label} {isRequired("reference_images") ? "*" : "(Optional)"}</FormLabel>
+                <FormLabel className="bk-label">{label} {isRequired("reference_images") ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}</FormLabel>
+                {cfg?.description && <p className="text-xs text-on-surface-variant -mt-1">{cfg.description}</p>}
                 <FormControl>
                   {inputType === "file_or_link" ? (
                     <div className="space-y-3">
@@ -623,16 +611,14 @@ export function InquiryForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         {errorMsgs.length > 0 && (
-          <div className="p-3 text-sm font-medium text-destructive-foreground bg-destructive/90 rounded-md space-y-1">
-            {errorMsgs.map((msg, i) => (
-              <p key={i}>{msg}</p>
-            ))}
+          <div className="rounded-xl p-4 text-sm space-y-1" style={{ background: 'rgba(186,26,26,0.08)', border: '1px solid rgba(186,26,26,0.2)', color: '#ba1a1a' }}>
+            {errorMsgs.map((msg, i) => <p key={i}>{msg}</p>)}
           </div>
         )}
 
-        <div className="space-y-6">
+        <div className="space-y-5">
           {orderedFields.map((item) => {
             if (item.kind === "base") {
               return <div key={`base-${item.key}`}>{renderBaseField(item.key)}</div>;
@@ -640,11 +626,10 @@ export function InquiryForm({
             const field = item.field;
             return (
               <div key={field.field_key} className="space-y-2">
-                <FormLabel>
-                  <span className="font-semibold">
-                    {field.label} {field.required ? "*" : "(Optional)"}
-                  </span>
-                </FormLabel>
+                <label className="bk-label">
+                  {field.label} {field.required ? <span style={{ color: 'var(--primary)' }}>*</span> : <span style={{ fontSize: '0.75em', opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>optional</span>}
+                </label>
+                {field.description && <p className="text-xs text-on-surface-variant -mt-1">{field.description}</p>}
 
                 {field.type === "text" && (
                   <Input
@@ -703,32 +688,38 @@ export function InquiryForm({
                 )}
 
                 {field.type === "select" && (
-                  <select
-                    value={String(customAnswers[field.field_key] ?? "")}
-                    onChange={(e) =>
-                      setCustomAnswers((prev) => ({ ...prev, [field.field_key]: e.target.value }))
-                    }
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Select an option</option>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="bk-select-wrap">
+                    <select
+                      value={String(customAnswers[field.field_key] ?? "")}
+                      onChange={(e) =>
+                        setCustomAnswers((prev) => ({ ...prev, [field.field_key]: e.target.value }))
+                      }
+                    >
+                      <option value="">Select an option</option>
+                      {(field.options ?? []).map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 {field.type === "checkbox" && (
-                  <label className="inline-flex items-center gap-2 text-sm text-on-surface-variant">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(customAnswers[field.field_key])}
-                      onChange={(e) =>
-                        setCustomAnswers((prev) => ({ ...prev, [field.field_key]: e.target.checked }))
-                      }
-                    />
-                    {field.placeholder || "Yes"}
+                  <label className="inline-flex items-center gap-3 cursor-pointer" style={{ fontSize: 'inherit' }}>
+                    <span className="relative flex items-center justify-center w-5 h-5 rounded-md flex-shrink-0"
+                      style={{ border: '1.5px solid rgba(0,0,0,0.2)', background: 'white' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(customAnswers[field.field_key])}
+                        onChange={(e) =>
+                          setCustomAnswers((prev) => ({ ...prev, [field.field_key]: e.target.checked }))
+                        }
+                        className="sr-only"
+                      />
+                      {Boolean(customAnswers[field.field_key]) && <svg className="w-3 h-3" style={{ color: 'var(--primary)' }} fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                    </span>
+                    <span style={{ opacity: 0.8 }}>{field.placeholder || "Yes"}</span>
                   </label>
                 )}
 
@@ -764,9 +755,9 @@ export function InquiryForm({
           })}
         </div>
 
-        <Button type="submit" className="w-full h-auto font-semibold py-3.5 text-base" disabled={isPending}>
-          {isPending ? "Submitting..." : buttonText}
-        </Button>
+        <button type="submit" disabled={isPending}>
+          {isPending ? "Submitting…" : buttonText}
+        </button>
       </form>
     </Form>
   );

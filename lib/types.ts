@@ -48,6 +48,7 @@ export interface Booking {
   total_amount?: number;
   tip_amount?: number;
   completion_notes?: string;
+  completion_image_urls?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -71,4 +72,24 @@ export interface EmailTemplate {
   subject: string;
   body: string;
   auto_send: boolean;
+}
+
+export type StandardBookingField =
+  | 'client_name'
+  | 'client_email'
+  | 'client_phone'
+  | 'description'
+  | 'size'
+  | 'placement'
+  | 'budget';
+
+export interface WebhookSource {
+  id: string;
+  artist_id: string;
+  name: string;
+  token: string;
+  /** Maps incoming form field keys to StandardBookingField or a custom_answers key */
+  field_mappings: Record<string, string>;
+  enabled: boolean;
+  created_at: string;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { createGoogleCalendarEvent, listGoogleCalendarEvents, refreshGoogleAccessToken } from "@/lib/google-calendar";
+import { createGoogleCalendarEvent, listAllGoogleCalendarEvents, refreshGoogleAccessToken, updateGoogleCalendarEvent } from "@/lib/google-calendar";
 import type { Booking } from "@/lib/types";
 
 type CalendarEvent = {
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
       try {
         const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-        const rows = await listGoogleCalendarEvents({
+        const rows = await listAllGoogleCalendarEvents({
           accessToken,
           timeMin: start,
           timeMax: end,
@@ -127,5 +127,43 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     console.error("Create calendar event error:", error);
     return NextResponse.json({ error: "Failed to create event" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { googleEventId, title, description, startDateTime, endDateTime } = await req.json() as {
+      googleEventId: string;
+      title: string;
+      description?: string;
+      startDateTime: string;
+      endDateTime: string;
+    };
+
+    if (!googleEventId || !title || !startDateTime || !endDateTime) {
+      return NextResponse.json({ error: "googleEventId, title, startDateTime, and endDateTime are required" }, { status: 400 });
+    }
+
+    const { data: artist } = await supabase
+      .from("artists")
+      .select("calendar_sync_enabled, google_refresh_token")
+      .eq("id", user.id)
+      .single();
+
+    if (!artist?.calendar_sync_enabled || !artist.google_refresh_token) {
+      return NextResponse.json({ error: "Google Calendar is not connected." }, { status: 400 });
+    }
+
+    const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+    await updateGoogleCalendarEvent({ accessToken, eventId: googleEventId, summary: title, description, startDateTime, endDateTime });
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    console.error("Update calendar event error:", error);
+    return NextResponse.json({ error: "Failed to update event" }, { status: 500 });
   }
 }

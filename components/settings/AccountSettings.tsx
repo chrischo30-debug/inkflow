@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const accountSchema = z.object({
   name: z.string().min(2, "Artist name must be at least 2 characters"),
@@ -34,6 +34,8 @@ export function AccountSettings({
   const [errorMsg, setErrorMsg] = useState("");
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const slugTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
   const form = useForm<AccountSettingsValues>({
@@ -47,6 +49,21 @@ export function AccountSettings({
 
   const slug = form.watch("slug");
   const bookingUrl = `${origin}/${slug}/book`;
+
+  useEffect(() => {
+    if (!slug || slug === initialValues.slug) { setSlugStatus("idle"); return; }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) { setSlugStatus("idle"); return; }
+    setSlugStatus("checking");
+    if (slugTimerRef.current) clearTimeout(slugTimerRef.current);
+    slugTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/check-slug?slug=${encodeURIComponent(slug)}`);
+        const data = await res.json();
+        setSlugStatus(data.available ? "available" : "taken");
+      } catch { setSlugStatus("idle"); }
+    }, 400);
+    return () => { if (slugTimerRef.current) clearTimeout(slugTimerRef.current); };
+  }, [slug, initialValues.slug]);
 
   const copyUrl = async () => {
     const url = `${window.location.origin}/${slug}/book`;
@@ -113,11 +130,22 @@ export function AccountSettings({
               <FormItem>
                 <FormLabel className="text-sm font-sans tracking-wide text-on-surface-variant">Public Booking URL Slug</FormLabel>
                 <FormControl>
-                  <Input
-                    {...field}
-                    className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
-                  />
+                  <div className="relative">
+                    <Input
+                      {...field}
+                      className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 pr-10 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
+                    />
+                    {slugStatus !== "idle" && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {slugStatus === "checking" && <Loader2 className="w-4 h-4 text-on-surface-variant/40 animate-spin" />}
+                        {slugStatus === "available" && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                        {slugStatus === "taken" && <XCircle className="w-4 h-4 text-destructive" />}
+                      </span>
+                    )}
+                  </div>
                 </FormControl>
+                {slugStatus === "available" && <p className="text-xs text-emerald-600 font-medium">"{slug}" is available!</p>}
+                {slugStatus === "taken" && <p className="text-xs text-destructive">"{slug}" is already taken. Try another.</p>}
                 <FormMessage />
               </FormItem>
             )}

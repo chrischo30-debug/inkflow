@@ -34,6 +34,9 @@ function makeSchema(phoneEnabled: boolean, phoneRequired: boolean) {
 
 type FormValues = z.infer<ReturnType<typeof makeSchema>>;
 
+const fieldCls = "w-full px-3 py-3 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 transition-colors";
+const labelCls = "block text-sm font-medium text-gray-700 mb-1.5";
+
 export function ContactPage({
   artistSlug,
   artistName,
@@ -73,30 +76,30 @@ export function ContactPage({
   };
 
   const displayHeader = header || "Get in touch";
-  const displaySubtext = subtext || `Fill out the form and ${artistName} will get back to you soon.`;
+  const displaySubtext = subtext || "Fill out the form and I'll get back to you soon.";
   const displayButton = buttonText || "Send Message";
   const displayConfirmation = confirmationMessage || "Thanks for reaching out! I'll be in touch soon.";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-white">
-      <div className="w-full max-w-md">
-        {/* Logo + name */}
-        <div className="text-center mb-8">
+    <div className="min-h-screen flex items-center justify-center px-6 py-12 bg-white">
+      <div className="w-full max-w-lg">
+        {/* Logo + header */}
+        <div className="mb-10">
           {logoUrl && (
             <img
               src={logoUrl}
               alt={artistName}
-              className="w-16 h-16 object-contain rounded-xl mx-auto mb-4"
+              className="h-16 w-auto object-contain mb-8"
             />
           )}
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">{displayHeader}</h1>
-          {displaySubtext && (
-            <p className="text-gray-600 text-sm leading-relaxed">{displaySubtext}</p>
-          )}
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 mb-2 leading-tight">
+            {displayHeader}
+          </h1>
+          <p className="text-gray-500 text-base leading-relaxed mt-2">{displaySubtext}</p>
         </div>
 
         {submitted ? (
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center space-y-3">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
               <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -105,63 +108,60 @@ export function ContactPage({
             <p className="text-gray-900 font-medium">{displayConfirmation}</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit(onSubmit)} className="rounded-2xl border border-gray-200 p-6 space-y-4 bg-white shadow-sm">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {/* Name */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-900">
-                Name <span className="text-red-500">*</span>
+            <div>
+              <label className={labelCls}>
+                Name {<span className="text-red-500">*</span>}
               </label>
               <input
                 type="text"
                 {...register("name")}
-                placeholder="Your name"
-                className="w-full px-3 py-2.5 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder:text-gray-400"
+                className={fieldCls}
               />
-              {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
+              {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name.message}</p>}
             </div>
 
             {/* Email */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-900">
+            <div>
+              <label className={labelCls}>
                 Email <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
                 {...register("email")}
-                placeholder="your@email.com"
-                className="w-full px-3 py-2.5 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder:text-gray-400"
+                className={fieldCls}
               />
-              {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
+              {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
             </div>
 
-            {/* Phone (optional) */}
+            {/* Phone */}
             {phoneEnabled && (
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-gray-900">
+              <div>
+                <label className={labelCls}>
                   Phone Number {phoneRequired && <span className="text-red-500">*</span>}
+                  {!phoneRequired && <span className="text-gray-400 font-normal"> (optional)</span>}
                 </label>
                 <input
                   type="tel"
                   {...register("phone")}
-                  placeholder="(555) 000-0000"
-                  className="w-full px-3 py-2.5 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 placeholder:text-gray-400"
+                  className={fieldCls}
                 />
-                {errors.phone && <p className="text-xs text-red-600">{errors.phone.message}</p>}
+                {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
               </div>
             )}
 
             {/* Message */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-900">
+            <div>
+              <label className={labelCls}>
                 Message <span className="text-red-500">*</span>
               </label>
               <textarea
                 {...register("message")}
-                rows={4}
-                placeholder="What's on your mind?"
-                className="w-full px-3 py-2.5 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 resize-none placeholder:text-gray-400"
+                rows={5}
+                className={`${fieldCls} resize-none`}
               />
-              {errors.message && <p className="text-xs text-red-600">{errors.message.message}</p>}
+              {errors.message && <p className="text-xs text-red-600 mt-1">{errors.message.message}</p>}
             </div>
 
             {serverError && (

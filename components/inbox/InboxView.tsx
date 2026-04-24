@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { InboxThreadSummary, InboxThreadDetail } from "@/lib/gmail";
+import type { InboxThreadSummary, InboxThreadDetail, InboxAttachment } from "@/lib/gmail";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -66,8 +66,6 @@ function cleanEmailText(text: string): string {
     .filter(l => !/^\s*View image:\s*/i.test(l))
     .filter(l => !/^\s*Follow image link:\s*/i.test(l))
     .filter(l => !/^\s*Caption:\s*$/i.test(l))
-    // Remove lines that are purely a URL
-    .filter(l => !/^\s*https?:\/\/\S+\s*$/.test(l))
     // Remove decorative separator lines (---, ===, ———, mixed)
     .filter(l => !/^\s*[-=—–*_]{3,}\s*$/.test(l))
     // Convert markdown headings (### Foo) to plain text
@@ -111,15 +109,42 @@ function splitQuoted(body: string): { fresh: string; quoted: string } {
   return { fresh, quoted };
 }
 
-function EmailBody({ body }: { body: string }) {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentList({ attachments }: { attachments: InboxAttachment[] }) {
+  if (!attachments.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 pt-2 border-t border-outline-variant/20">
+      {attachments.map((a, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 text-xs text-on-surface-variant"
+        >
+          <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span className="font-medium text-on-surface truncate max-w-[160px]">{a.name}</span>
+          {a.size > 0 && <span className="shrink-0 opacity-60">{formatBytes(a.size)}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmailBody({ body, attachments }: { body: string; attachments: InboxAttachment[] }) {
   const [showQuoted, setShowQuoted] = useState(false);
-  if (!body) return <span className="text-on-surface-variant italic">(empty)</span>;
+  if (!body && !attachments.length) return <span className="text-on-surface-variant italic">(empty)</span>;
 
   const { fresh, quoted } = splitQuoted(cleanEmailText(body));
 
   return (
     <div className="text-sm text-on-surface leading-relaxed space-y-3">
-      {renderParagraphs(fresh)}
+      {fresh && renderParagraphs(fresh)}
       {quoted && (
         <>
           <button
@@ -136,9 +161,19 @@ function EmailBody({ body }: { body: string }) {
           )}
         </>
       )}
+      <AttachmentList attachments={attachments} />
     </div>
   );
 }
+
+type ContactSubmission = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  message: string;
+  created_at: string;
+};
 
 export function InboxView({
   slug,
@@ -151,10 +186,18 @@ export function InboxView({
   filterKeywords?: string[];
   appSenderEmail?: string;
 }) {
+  const [tab, setTab] = useState<"gmail" | "contact">("gmail");
+
+  // Gmail state
   const [threads, setThreads] = useState<InboxThreadSummary[]>([]);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [threadsError, setThreadsError] = useState<string | null>(null);
+
+  // Contact submissions state
+  const [contacts, setContacts] = useState<ContactSubmission[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<ContactSubmission | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<InboxThreadDetail | null>(null);
@@ -171,9 +214,19 @@ export function InboxView({
 
   const detailRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => { fetchThreads(); }, []);
+
   useEffect(() => {
-    fetchThreads();
-  }, []);
+    if (tab === "contact" && contacts.length === 0) fetchContacts();
+  }, [tab]);
+
+  const fetchContacts = async () => {
+    setLoadingContacts(true);
+    try {
+      const res = await fetch("/api/artist/contact-submissions");
+      if (res.ok) { const d = await res.json(); setContacts(d.submissions ?? []); }
+    } finally { setLoadingContacts(false); }
+  };
 
   const fetchThreads = async (pageToken?: string) => {
     setLoadingThreads(true);
@@ -289,111 +342,168 @@ export function InboxView({
     <div className="flex flex-1 overflow-hidden">
       {/* Thread list */}
       <div className="w-80 shrink-0 border-r border-outline-variant/10 flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-outline-variant/10">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-medium text-on-surface-variant uppercase tracking-wide">
-              Inbox {unreadCount > 0 && <span className="ml-1 text-primary">{unreadCount} new</span>}
-            </span>
-          </div>
-
-          {/* Search */}
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search…"
-            className="w-full px-3 py-1.5 text-sm bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888] text-on-surface"
-          />
-
-          {/* Tattoo filter toggle */}
-          {filterKeywords.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTattoosOnly(f => !f)}
-              title="Only show threads matching your email template subjects"
-              className={`mt-1.5 w-full text-xs px-2.5 py-1.5 rounded-lg border transition-colors text-left ${
-                tattoosOnly
-                  ? "bg-primary/10 border-primary/40 text-primary font-medium"
-                  : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant hover:text-on-surface"
-              }`}
-            >
-              {tattoosOnly ? "✓ Tattoo inquiries only" : "Show tattoo inquiries only"}
-            </button>
-          )}
+        {/* Tab switcher */}
+        <div className="flex border-b border-outline-variant/10 shrink-0">
+          <button
+            type="button"
+            onClick={() => setTab("gmail")}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === "gmail" ? "text-on-surface border-b-2 border-on-surface" : "text-on-surface-variant hover:text-on-surface"}`}
+          >
+            Gmail {unreadCount > 0 && <span className="ml-1 text-xs text-primary">{unreadCount}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("contact")}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === "contact" ? "text-on-surface border-b-2 border-on-surface" : "text-on-surface-variant hover:text-on-surface"}`}
+          >
+            Contact Us {contacts.length > 0 && <span className="ml-1 text-xs text-on-surface-variant">{contacts.length}</span>}
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {loadingThreads && threads.length === 0 && (
-            <div className="p-6 text-sm text-on-surface-variant text-center">Loading…</div>
-          )}
-
-          {threadsError === "inbox_scope" && (
-            <div className="p-5 text-sm text-on-surface-variant">
-              <p className="font-medium text-on-surface mb-1">Inbox access required</p>
-              <p className="mb-3">Your Google connection needs to be updated to read emails.</p>
-              <a
-                href="/api/auth/google/connect"
-                className="inline-block px-3 py-1.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
+        {tab === "gmail" && (
+          <div className="px-4 py-3 border-b border-outline-variant/10 shrink-0">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full px-3 py-1.5 text-sm bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888] text-on-surface"
+            />
+            {filterKeywords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setTattoosOnly(f => !f)}
+                className={`mt-1.5 w-full text-xs px-2.5 py-1.5 rounded-lg border transition-colors text-left ${
+                  tattoosOnly
+                    ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                    : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant hover:text-on-surface"
+                }`}
               >
-                Reconnect Google
-              </a>
-            </div>
+                {tattoosOnly ? "✓ Tattoo inquiries only" : "Show tattoo inquiries only"}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Gmail list */}
+          {tab === "gmail" && (
+            <>
+              {loadingThreads && threads.length === 0 && (
+                <div className="p-6 text-sm text-on-surface-variant text-center">Loading…</div>
+              )}
+              {threadsError === "inbox_scope" && (
+                <div className="p-5 text-sm text-on-surface-variant">
+                  <p className="font-medium text-on-surface mb-1">Inbox access required</p>
+                  <p className="mb-3">Your Google connection needs to be updated to read emails.</p>
+                  <a href="/api/auth/google/connect" className="inline-block px-3 py-1.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity">
+                    Reconnect Google
+                  </a>
+                </div>
+              )}
+              {threadsError && threadsError !== "inbox_scope" && (
+                <div className="p-5 text-sm text-destructive">{threadsError}</div>
+              )}
+              {!threadsError && visibleThreads.map(thread => (
+                <button
+                  key={thread.threadId}
+                  type="button"
+                  onClick={() => selectThread(thread.threadId)}
+                  className={`w-full text-left px-4 py-3.5 border-b border-outline-variant/10 transition-colors hover:bg-surface-container-high ${selectedId === thread.threadId ? "bg-surface-container-high" : ""}`}
+                >
+                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                    <span className={`text-sm truncate ${thread.unread ? "font-semibold text-on-surface" : "font-medium text-on-surface-variant"}`}>{thread.from}</span>
+                    <span className="text-xs text-on-surface-variant shrink-0">{formatDate(thread.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    {thread.unread && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-px" />}
+                    <span className={`text-sm truncate ${thread.unread ? "font-medium text-on-surface" : "text-on-surface-variant"}`}>{thread.subject}</span>
+                  </div>
+                  <p className="text-xs text-on-surface-variant truncate">{thread.snippet}</p>
+                </button>
+              ))}
+              {!threadsError && !loadingThreads && visibleThreads.length === 0 && threads.length > 0 && (
+                <div className="p-6 text-sm text-on-surface-variant text-center">No matches</div>
+              )}
+              {nextPageToken && !loadingThreads && (
+                <button type="button" onClick={() => fetchThreads(nextPageToken)} className="w-full py-3 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+                  Load more
+                </button>
+              )}
+            </>
           )}
 
-          {threadsError && threadsError !== "inbox_scope" && (
-            <div className="p-5 text-sm text-destructive">{threadsError}</div>
-          )}
-
-          {!threadsError && visibleThreads.map(thread => (
-            <button
-              key={thread.threadId}
-              type="button"
-              onClick={() => selectThread(thread.threadId)}
-              className={`w-full text-left px-4 py-3.5 border-b border-outline-variant/10 transition-colors hover:bg-surface-container-high ${
-                selectedId === thread.threadId ? "bg-surface-container-high" : ""
-              }`}
-            >
-              <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                <span className={`text-sm truncate ${thread.unread ? "font-semibold text-on-surface" : "font-medium text-on-surface-variant"}`}>
-                  {thread.from}
-                </span>
-                <span className="text-xs text-on-surface-variant shrink-0">{formatDate(thread.date)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 mb-0.5">
-                {thread.unread && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-px" />}
-                <span className={`text-sm truncate ${thread.unread ? "font-medium text-on-surface" : "text-on-surface-variant"}`}>
-                  {thread.subject}
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant truncate">{thread.snippet}</p>
-            </button>
-          ))}
-
-          {!threadsError && !loadingThreads && visibleThreads.length === 0 && threads.length > 0 && (
-            <div className="p-6 text-sm text-on-surface-variant text-center">No matches</div>
-          )}
-
-          {nextPageToken && !loadingThreads && (
-            <button
-              type="button"
-              onClick={() => fetchThreads(nextPageToken)}
-              className="w-full py-3 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
-            >
-              Load more
-            </button>
+          {/* Contact Us list */}
+          {tab === "contact" && (
+            <>
+              {loadingContacts && (
+                <div className="p-6 text-sm text-on-surface-variant text-center">Loading…</div>
+              )}
+              {!loadingContacts && contacts.length === 0 && (
+                <div className="p-6 text-sm text-on-surface-variant text-center">No contact messages yet.</div>
+              )}
+              {contacts.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedContact(c)}
+                  className={`w-full text-left px-4 py-3.5 border-b border-outline-variant/10 transition-colors hover:bg-surface-container-high ${selectedContact?.id === c.id ? "bg-surface-container-high" : ""}`}
+                >
+                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                    <span className="text-sm font-medium text-on-surface truncate">{c.name}</span>
+                    <span className="text-xs text-on-surface-variant shrink-0">{formatDate(c.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-on-surface-variant truncate">{c.email}</p>
+                  <p className="text-xs text-on-surface-variant truncate mt-0.5">{c.message}</p>
+                </button>
+              ))}
+            </>
           )}
         </div>
       </div>
 
-      {/* Thread detail */}
+      {/* Detail panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {!selectedId && (
+        {/* Contact submission detail */}
+        {tab === "contact" && !selectedContact && (
+          <div className="flex-1 flex items-center justify-center text-sm text-on-surface-variant">
+            Select a message to read
+          </div>
+        )}
+        {tab === "contact" && selectedContact && (
+          <div className="flex-1 overflow-y-auto px-8 py-6">
+            <div className="max-w-2xl space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-on-surface">{selectedContact.name}</h2>
+                  <p className="text-sm text-on-surface-variant mt-0.5">{selectedContact.email}</p>
+                  {selectedContact.phone && <p className="text-sm text-on-surface-variant">{selectedContact.phone}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-on-surface-variant">{formatFullDate(selectedContact.created_at)}</span>
+                  <a
+                    href={`mailto:${selectedContact.email}?subject=Re: Your message`}
+                    className="text-xs px-2.5 py-1 rounded-md border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                  >
+                    Reply via email ↗
+                  </a>
+                </div>
+              </div>
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-5">
+                <p className="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">{selectedContact.message}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gmail thread detail */}
+        {tab === "gmail" && !selectedId && (
           <div className="flex-1 flex items-center justify-center text-sm text-on-surface-variant">
             Select a thread to read
           </div>
         )}
 
-        {selectedId && (
+        {tab === "gmail" && selectedId && (
           <>
             <div ref={detailRef} className="flex-1 overflow-y-auto px-8 py-6 space-y-4">
               {loadingDetail && (
@@ -433,7 +543,7 @@ export function InboxView({
                       {msg.to && (
                         <p className="text-xs text-on-surface-variant">To: {msg.to}</p>
                       )}
-                      <EmailBody body={msg.body} />
+                      <EmailBody body={msg.body} attachments={msg.attachments ?? []} />
                     </div>
                   ))}
                 </>

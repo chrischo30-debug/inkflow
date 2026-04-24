@@ -1,23 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { User, Link2, Mail, Bell, BookOpen, ExternalLink } from "lucide-react";
+import { User, Link2, Mail, Bell, Webhook } from "lucide-react";
 import { AccountSettings } from "./AccountSettings";
 import { ThemeSettings } from "./ThemeSettings";
 import { GoogleIntegrationSettings } from "./GoogleIntegrationSettings";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import { ExternalApiSettings } from "./ExternalApiSettings";
 import { ReminderSettings } from "./ReminderSettings";
-import { BooksSettings } from "./BooksSettings";
+import { WebhookSourcesSettings } from "./WebhookSourcesSettings";
 import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
-// CalendarLink/PaymentLink still used by SettingsShellProps (passed in from page but no longer rendered here)
 
 const TABS = [
   { id: "profile",      label: "Profile",      icon: User },
   { id: "integrations", label: "Integrations", icon: Link2 },
+  { id: "webhooks",     label: "Webhooks",     icon: Webhook },
   { id: "emails",       label: "Emails",       icon: Mail },
   { id: "reminders",    label: "Reminders",    icon: Bell },
-  { id: "books",        label: "Books",        icon: BookOpen },
 ] as const;
 
 type TabId = typeof TABS[number]["id"];
@@ -43,10 +42,6 @@ export interface SettingsShellProps {
   kitFormId: string;
   reminderEnabled: boolean;
   reminderHoursBefore: number;
-  booksOpen: boolean;
-  booksClosedMessage: string;
-  booksOpenAt: string;
-  booksCloseAt: string;
 }
 
 export function SettingsShell(props: SettingsShellProps) {
@@ -54,19 +49,8 @@ export function SettingsShell(props: SettingsShellProps) {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
+      <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
         <h1 className="text-xl font-heading font-semibold text-on-surface">Settings</h1>
-        {props.slug && (
-          <a
-            href={`/${props.slug}/book`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity"
-          >
-            <ExternalLink className="w-4 h-4" />
-            View Live Form
-          </a>
-        )}
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -127,6 +111,16 @@ export function SettingsShell(props: SettingsShellProps) {
             </div>
           )}
 
+          {tab === "webhooks" && (
+            <div className="max-w-2xl space-y-6">
+              <SectionHeading
+                title="Webhook Sources"
+                description="Accept submissions from external forms (JotForm, Wix, Forminator, etc.) and route them into your bookings pipeline."
+              />
+              <WebhookSourcesSettings />
+            </div>
+          )}
+
           {tab === "emails" && (
             <div className="max-w-2xl space-y-6">
               <SectionHeading title="Email Templates" description="Customize messages sent at each stage. Toggle auto-send to control whether emails go out automatically." />
@@ -144,17 +138,6 @@ export function SettingsShell(props: SettingsShellProps) {
             </div>
           )}
 
-          {tab === "books" && (
-            <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Books Open / Closed" description="Control whether your booking form accepts new inquiries, and optionally schedule a drop window." />
-              <BooksSettings
-                initialOpen={props.booksOpen}
-                initialClosedMessage={props.booksClosedMessage}
-                initialOpenAt={props.booksOpenAt}
-                initialCloseAt={props.booksCloseAt}
-              />
-            </div>
-          )}
         </main>
       </div>
     </div>

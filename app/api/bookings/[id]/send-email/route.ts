@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
-import { sendEmail, buildTemplateVars, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
+import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
 import type { CalendarLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
 
@@ -175,7 +175,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .eq('id', id);
 
   // Append to sent_emails history — separate update degrades gracefully if migration not yet run
-  const sentEmailLabel = subject.slice(0, 60);
+  const sentEmailLabel = applyPlaceholders(subject, vars).slice(0, 80);
   try {
     const { data: emailLog } = await supabase.from('bookings').select('sent_emails').eq('id', id).single();
     const row = emailLog as { sent_emails?: {label:string;sent_at:string}[] } | null;

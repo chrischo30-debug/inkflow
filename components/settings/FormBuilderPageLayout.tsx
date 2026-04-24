@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Eye, Settings2 } from "lucide-react";
-import Link from "next/link";
+import { ExternalLink, Eye } from "lucide-react";
+import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
 import { FormBuilderSettings } from "./FormBuilderSettings";
 import { FormFieldConfig, CustomFormFieldConfig } from "@/lib/form-fields";
 
@@ -28,19 +28,16 @@ export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields
       <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
         <h1 className="text-xl font-heading font-semibold text-on-surface">Form Builder</h1>
         <div className="flex items-center gap-2">
-          <Link href="/form-builder/settings" className={btnOutline}>
-            <Settings2 className="w-4 h-4" />
-            Page Settings
-          </Link>
           {previewFn && (
             <button onClick={previewFn} className={btnOutline}>
               <Eye className="w-4 h-4" />
               Preview
             </button>
           )}
+          <CopyLinkButton path={`/${slug}/book`} />
           <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled}>
             <ExternalLink className="w-4 h-4" />
-            View Live Form
+            Open
           </a>
         </div>
       </header>

@@ -25,6 +25,7 @@ export interface FormFieldConfig {
   required: boolean;
   sort_order: number;
   placeholder?: string;
+  description?: string;
   input_type: BaseFieldInputType;
   options?: string[];
 }
@@ -48,6 +49,7 @@ export interface CustomFormFieldConfig {
   required: boolean;
   sort_order: number;
   placeholder?: string;
+  description?: string;
   options?: string[];
 }
 
@@ -100,6 +102,7 @@ export function normalizeFormFields(rows: Partial<FormFieldConfig>[] | null | un
         row.input_type === "file_or_link"
           ? row.input_type
           : fallback.input_type,
+      description: typeof row.description === "string" ? row.description : fallback.description,
       options: Array.isArray(row.options)
         ? row.options.map((opt) => String(opt)).filter(Boolean)
         : fallback.options,
@@ -123,6 +126,7 @@ export function normalizeCustomFormFields(rows: Partial<CustomFormFieldConfig>[]
       required: typeof row.required === "boolean" ? row.required : false,
       sort_order: typeof row.sort_order === "number" ? row.sort_order : index,
       placeholder: row.placeholder || "",
+      description: row.description || "",
       options: Array.isArray(row.options) ? row.options.map((opt) => String(opt)).filter(Boolean) : [],
     }))
     .sort((a, b) => a.sort_order - b.sort_order);

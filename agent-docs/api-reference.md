@@ -56,7 +56,7 @@ Returns: { template: EmailTemplate }
 ## Calendar
 
 ### GET /api/calendar/events
-Auth required. Returns upcoming events from Google Calendar + confirmed FlashBook bookings.
+Auth required. Returns upcoming events from Google Calendar + confirmed FlashBooker bookings.
 Query params: start (ISO date), end (ISO date)
 Returns: { events: CalendarEvent[] }
 

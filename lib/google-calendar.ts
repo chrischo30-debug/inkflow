@@ -45,7 +45,7 @@ export function buildGoogleOAuthUrl({
     include_granted_scopes: "true",
     scope: [
       "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/gmail.modify",
       "https://www.googleapis.com/auth/userinfo.email",
     ].join(" "),
     state,
@@ -200,29 +200,69 @@ export async function listGoogleCalendarEvents({
   accessToken,
   timeMin,
   timeMax,
+  calendarId = "primary",
 }: {
   accessToken: string;
   timeMin: string;
   timeMax: string;
+  calendarId?: string;
 }) {
   const params = new URLSearchParams({
     timeMin,
     timeMax,
     singleEvents: "true",
     orderBy: "startTime",
-    maxResults: "100",
+    maxResults: "250",
   });
-  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Google events fetch failed: ${text}`);
+    throw new Error(`Google events fetch failed (${calendarId}): ${text}`);
   }
 
   const data = (await res.json()) as { items?: GoogleCalendarListEvent[] };
   return data.items ?? [];
+}
+
+export async function listAllGoogleCalendarEvents({
+  accessToken,
+  timeMin,
+  timeMax,
+}: {
+  accessToken: string;
+  timeMin: string;
+  timeMax: string;
+}): Promise<GoogleCalendarListEvent[]> {
+  // Fetch all calendars the user has access to
+  const calRes = await fetch(
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50",
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+
+  let calendarIds: string[] = ["primary"];
+  if (calRes.ok) {
+    const calData = (await calRes.json()) as { items?: { id: string }[] };
+    const ids = (calData.items ?? []).map(c => c.id).filter(Boolean);
+    if (ids.length > 0) calendarIds = ids;
+  }
+
+  // Fetch events from all calendars in parallel, deduplicate by event id
+  const results = await Promise.allSettled(
+    calendarIds.map(id => listGoogleCalendarEvents({ accessToken, timeMin, timeMax, calendarId: id })),
+  );
+
+  const seen = new Set<string>();
+  const all: GoogleCalendarListEvent[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      for (const ev of r.value) {
+        if (ev.id && !seen.has(ev.id)) { seen.add(ev.id); all.push(ev); }
+      }
+    }
+  }
+  return all;
 }

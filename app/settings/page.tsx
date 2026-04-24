@@ -28,16 +28,12 @@ export default async function SettingsPage() {
     kit_form_id?: string;
     reminder_enabled?: boolean;
     reminder_hours_before?: number;
-    books_open?: boolean;
-    books_open_at?: string | null;
-    books_close_at?: string | null;
-    books_closed_message?: string | null;
   };
   let extended: ExtendedArtist = {};
   try {
     const { data } = await supabase
       .from("artists")
-      .select("pipeline_settings, calendar_links, stripe_api_key, stripe_webhook_secret, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before, books_open, books_open_at, books_close_at, books_closed_message")
+      .select("pipeline_settings, calendar_links, stripe_api_key, stripe_webhook_secret, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before")
       .eq("id", user.id)
       .single();
     extended = (data as ExtendedArtist) ?? {};
@@ -70,10 +66,6 @@ export default async function SettingsPage() {
         kitFormId={extended.kit_form_id ?? ""}
         reminderEnabled={extended.reminder_enabled ?? false}
         reminderHoursBefore={extended.reminder_hours_before ?? 24}
-        booksOpen={extended.books_open ?? true}
-        booksClosedMessage={extended.books_closed_message ?? ""}
-        booksOpenAt={extended.books_open_at ? new Date(extended.books_open_at).toISOString().slice(0, 16) : ""}
-        booksCloseAt={extended.books_close_at ? new Date(extended.books_close_at).toISOString().slice(0, 16) : ""}
       />
     </div>
   );

@@ -1,0 +1,2 @@
+ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE custom_form_fields ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';

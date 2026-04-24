@@ -67,8 +67,9 @@ export function gmailThreadUrl(threadId: string): string {
 interface GmailHeader { name: string; value: string }
 interface GmailBodyPart {
   mimeType: string;
+  filename?: string;
   headers?: GmailHeader[];
-  body?: { data?: string; size: number };
+  body?: { data?: string; size: number; attachmentId?: string };
   parts?: GmailBodyPart[];
 }
 interface GmailMessage {
@@ -96,6 +97,12 @@ export interface InboxThreadSummary {
   messageCount: number;
 }
 
+export interface InboxAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface InboxMessage {
   messageId: string;
   from: string;
@@ -105,6 +112,7 @@ export interface InboxMessage {
   subject: string;
   date: string;
   body: string;
+  attachments: InboxAttachment[];
   unread: boolean;
 }
 
@@ -126,9 +134,52 @@ function parseFrom(from: string): { name: string; email: string } {
   return { name: from, email: from };
 }
 
+function stripHtml(html: string): string {
+  return html
+    // Remove entire style/script/head blocks (content would leak as raw text)
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    // Anchor tags: preserve href so links remain readable
+    .replace(/<a[^>]*?\shref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, inner) => {
+      const label = inner.replace(/<[^>]+>/g, "").trim();
+      if (!label || label === href || /^https?:\/\//.test(label)) return href;
+      return `${label} (${href})`;
+    })
+    .replace(/<a[^>]*>([\s\S]*?)<\/a>/gi, "$1")
+    // Block elements → newlines
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
+    .replace(/<h[1-6][^>]*>/gi, "")
+    // Strip all remaining tags
+    .replace(/<[^>]+>/g, "")
+    // HTML entities
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    // Clean up whitespace
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^ +/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function decodeBody(part: GmailBodyPart): string {
   if (part.mimeType === "text/plain" && part.body?.data) {
     return Buffer.from(part.body.data, "base64url").toString("utf-8");
+  }
+  if (part.mimeType === "text/html" && part.body?.data) {
+    return stripHtml(Buffer.from(part.body.data, "base64url").toString("utf-8"));
   }
   if (part.parts) {
     for (const p of part.parts) {
@@ -142,21 +193,26 @@ function decodeBody(part: GmailBodyPart): string {
     }
     for (const p of part.parts) {
       if (p.mimeType === "text/html" && p.body?.data) {
-        return Buffer.from(p.body.data, "base64url")
-          .toString("utf-8")
-          .replace(/<br\s*\/?>/gi, "\n")
-          .replace(/<\/p>/gi, "\n")
-          .replace(/<[^>]+>/g, "")
-          .replace(/&nbsp;/g, " ")
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .trim();
+        return stripHtml(Buffer.from(p.body.data, "base64url").toString("utf-8"));
       }
     }
   }
   return "";
+}
+
+function extractAttachments(part: GmailBodyPart): InboxAttachment[] {
+  const result: InboxAttachment[] = [];
+  if (!part.parts) return result;
+  for (const p of part.parts) {
+    if (p.filename?.trim() && (p.body?.attachmentId || (p.body?.size ?? 0) > 0)) {
+      const isBodyPart = p.mimeType === "text/plain" || p.mimeType === "text/html";
+      if (!isBodyPart) {
+        result.push({ name: p.filename.trim(), mimeType: p.mimeType, size: p.body?.size ?? 0 });
+      }
+    }
+    if (p.parts) result.push(...extractAttachments(p));
+  }
+  return result;
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -244,6 +300,7 @@ export async function getGmailThreadDetail(
       subject: getHeader(headers, "Subject") || "(no subject)",
       date: dateRaw ? new Date(dateRaw).toISOString() : new Date().toISOString(),
       body: msg.payload ? decodeBody(msg.payload) : "",
+      attachments: msg.payload ? extractAttachments(msg.payload) : [],
       unread: msg.labelIds?.includes("UNREAD") ?? false,
     } satisfies InboxMessage;
   });

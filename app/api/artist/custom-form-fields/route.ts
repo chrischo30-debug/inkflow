@@ -12,6 +12,7 @@ const customFieldSchema = z.object({
   required: z.boolean(),
   sort_order: z.number().int().nonnegative(),
   placeholder: z.string().optional(),
+  description: z.string().optional(),
   options: z.array(z.string()).optional(),
 });
 
@@ -31,7 +32,7 @@ export async function GET() {
 
     const { data } = await supabase
       .from("custom_form_fields")
-      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
+      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, description, options")
       .eq("artist_id", user.id)
       .order("sort_order", { ascending: true });
 
@@ -66,6 +67,7 @@ export async function PUT(req: Request) {
       required: field.enabled ? field.required : false,
       sort_order: field.sort_order,
       placeholder: field.placeholder || null,
+      description: field.description || null,
       options: field.type === "select" ? (field.options ?? []) : [],
     }));
 

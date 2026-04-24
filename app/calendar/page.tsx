@@ -1,9 +1,8 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { CalendarView } from "@/components/calendar/CalendarView";
-import { Settings } from "lucide-react";
+import { AddBookingModal } from "@/components/booking/AddBookingModal";
 
 export default async function CalendarPage({
   searchParams,
@@ -30,24 +29,19 @@ export default async function CalendarPage({
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <h1 className="text-xl font-heading font-semibold text-on-surface">Calendar</h1>
-          <Link
-            href="/settings#google"
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:border-outline-variant transition-colors"
-          >
-            <Settings className="w-4 h-4" />
-            Manage integrations
-          </Link>
+          <div className="flex items-center gap-3">
+            <AddBookingModal />
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+        {/* Status strip + optional message — shrink-0 so they don't eat into the calendar height */}
+        <div className="px-8 pt-5 pb-3 shrink-0 space-y-3">
           {params.message && (
             <p className="max-w-3xl p-3 rounded-lg border border-amber-300/50 bg-amber-50 text-amber-700 text-sm">
               {params.message}
             </p>
           )}
-
-          {/* Connection status strip */}
-          <div className="max-w-3xl flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3">
             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${isCalendarConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container-high text-on-surface-variant border border-outline-variant/20"}`}>
               <span className={`w-2 h-2 rounded-full ${isCalendarConnected ? "bg-emerald-500" : "bg-on-surface-variant/40"}`} />
               Calendar {isCalendarConnected ? "syncing" : "not connected"}
@@ -57,10 +51,11 @@ export default async function CalendarPage({
               Gmail {isGmailConnected ? `sending from ${artist?.gmail_address ?? "your account"}` : "not connected"}
             </span>
           </div>
+        </div>
 
-          <div className="max-w-5xl">
-            <CalendarView initialDate={params.date} />
-          </div>
+        {/* Calendar fills all remaining vertical space */}
+        <div className="flex-1 min-h-0 overflow-hidden px-8 pb-6">
+          <CalendarView initialDate={params.date} />
         </div>
       </main>
     </div>

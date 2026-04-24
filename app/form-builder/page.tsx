@@ -16,12 +16,12 @@ export default async function FormBuilderPage() {
 
   const { data } = await supabase
     .from("form_fields")
-    .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
+    .select("field_key, label, enabled, required, sort_order, placeholder, description, input_type, options")
     .eq("artist_id", user.id)
     .order("sort_order", { ascending: true });
   const { data: customData } = await supabase
     .from("custom_form_fields")
-    .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
+    .select("id, field_key, label, type, enabled, required, sort_order, placeholder, description, options")
     .eq("artist_id", user.id)
     .order("sort_order", { ascending: true });
 

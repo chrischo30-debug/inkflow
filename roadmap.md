@@ -75,6 +75,14 @@
 - Both integrations are fully opt-in — dashboard works identically without them.
 - New columns: `artists.stripe_webhook_secret`, `bookings.stripe_payment_link_url` (migration `20260424_stripe_deposit.sql`).
 
+### Session — Analytics Expansion, Branding & Legal Pages (2026-04-24)
+- **Analytics revenue breakdown**: Top Placements and Size Distribution now show per-row revenue (sum of `total_amount + tip_amount` for completed bookings) alongside counts, with a "Revenue from completed" footer total
+- **Popular Request Types**: new full-width section on analytics page. Keyword-matches 16 common tattoo styles/subjects (Floral, Animal, Portrait, Script/Lettering, Geometric, Traditional, Japanese, Blackwork, Fine Line, Realism, Minimalist, Color, Skull/Dark, Celestial, Memorial, Cover-up) against booking descriptions; a single booking can match multiple types
+- **New logo**: replaced `public/logo.png`; bumped sidebar sizes (collapsed 28→36px, expanded 32→44px); auth-page brand logo 64→96px; `-translate-y-3` offset on big logos to optically align with "FlashBooker" wordmark (image has heavier bottom padding than top)
+- **Auth page layout**: left brand panel narrowed from 50% to `md:basis-2/5 lg:basis-[38%]` with tighter padding; right form panel dropped `xl:max-w-2xl` cap and heavy padding, content centered at `max-w-md`; login page gained inline "Forgot?" link next to Password label and OR divider before sign-up link; signup gained password hint and OR divider before log-in link
+- **Legal pages**: `/terms` and `/privacy` — shared `LegalShell` component with header, prose styles, and footer. Terms covers 18+ eligibility, User Content license (logos + client reference images), third-party integrations, AAA arbitration + class-action waiver (30-day opt-out), $100-or-fees-paid liability cap, Pennsylvania governing law. Privacy separates Artist (controller) vs Client (processor on Artist's behalf) data roles, lists all third parties (Supabase, Stripe, Resend, Gmail, Google Calendar, Kit, Cal.com, Google Analytics), US-only storage, retention-until-deletion, CCPA section. Signup form links both
+- **Support email default** in `/setup` updated from `chris.cho.30@gmail.com` to `support@flashbooker.app`
+
 ### Session — Form Builder & Booking Page Settings Polish (2026-04-24)
 - **FormBuilderSettings redesign**: field cards replaced three-row Button block (Required: On/Off, Edit/Done, Remove from Form) with a compact header row — drag handle icon + field name + type badge + single active/inactive toggle
 - **Draft-based field editing**: clicking a card row snapshots field state into `editDraft`; edits are local until Save or discarded on Cancel. Required toggle moved inside the expanded panel. Clicking the row again cancels.

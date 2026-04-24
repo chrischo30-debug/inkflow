@@ -3,7 +3,7 @@
 import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, Calendar } from "lucide-react";
+import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, Calendar, ExternalLink } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ALL_BOOKING_STATES } from "@/lib/pipeline-settings";
@@ -89,11 +89,15 @@ function isToday(iso: string): boolean {
 
 function CardOverflowMenu({
   current,
+  bookingId,
+  clientName,
   onMove,
   onCancel,
   onEmail,
 }: {
   current: BookingState;
+  bookingId: string;
+  clientName: string;
   onMove?: (s: BookingState) => void;
   onCancel?: () => void;
   onEmail?: () => void;
@@ -138,6 +142,14 @@ function CardOverflowMenu({
       </button>
       {open && createPortal(
         <div ref={menuRef} style={menuStyle} className="z-[9999] w-48 bg-surface-container-lowest border border-primary/20 rounded-xl shadow-lg py-1 overflow-hidden">
+          <a
+            href={`/bookings?expand=${encodeURIComponent(bookingId)}`}
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-primary/5 hover:text-on-surface transition-colors"
+            onClick={() => close()}
+          >
+            <ExternalLink className="w-3.5 h-3.5" /> View all details
+          </a>
+          <div className="my-1 border-t border-outline-variant/20" />
           {canEmail && (
             <>
               <button
@@ -205,6 +217,8 @@ export function BookingCard({
   const [depositError, setDepositError] = useState("");
   const [depositLinkUrl, setDepositLinkUrl] = useState(booking.stripe_payment_link_url ?? "");
   const [depositCopied, setDepositCopied] = useState(false);
+  const [depositPaid, setDepositPaid] = useState(booking.deposit_paid ?? false);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const [calcomMenu, setCalcomMenu] = useState<DOMRect | null>(null);
   const calcomMenuRef = useRef<HTMLDivElement>(null);
 
@@ -227,6 +241,7 @@ export function BookingCard({
   const isInquiry = booking.state === "inquiry" || booking.state === "follow_up";
   const isAccepted = booking.state === "accepted";
   const showDepositActions = hasStripe && (isAccepted || booking.state === "confirmed");
+  const showDepositBadge = !hasStripe && booking.state === "confirmed";
 
   // Notification states
   const showActionDot = booking.has_unread_reply &&
@@ -318,20 +333,33 @@ export function BookingCard({
               type="button"
               onClick={e => { e.stopPropagation(); onEditAppointment?.(booking.id); }}
               title="Edit appointment"
-              className={`flex items-center gap-1.5 w-full rounded-lg px-2.5 py-2 transition-colors text-left border ${appointmentToday ? "bg-amber-50/60 border-amber-200/60 hover:bg-amber-50" : "bg-primary/5 border-primary/15 hover:bg-primary/10"}`}
+              className={`flex items-start gap-1.5 w-full rounded-lg px-2.5 py-2 transition-colors text-left border ${appointmentToday ? "bg-amber-50/60 border-amber-200/60 hover:bg-amber-50" : "bg-primary/5 border-primary/15 hover:bg-primary/10"}`}
             >
-              <CalendarDays className={`w-3.5 h-3.5 shrink-0 ${appointmentToday ? "text-amber-600" : "text-primary"}`} />
-              <span className={`text-xs font-medium truncate ${appointmentToday ? "text-amber-700" : "text-primary"}`}>{fmtDateTime(booking.appointment_date)}</span>
-              {appointmentToday && <span className="ml-auto text-xs font-semibold text-amber-600 shrink-0">Today</span>}
+              <CalendarDays className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${appointmentToday ? "text-amber-600" : "text-primary"}`} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs font-semibold leading-tight ${appointmentToday ? "text-amber-700" : "text-primary"}`}>
+                  {new Date(booking.appointment_date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                  {appointmentToday && <span className="ml-1.5 font-bold">· Today</span>}
+                </p>
+                <p className={`text-xs leading-tight mt-0.5 ${appointmentToday ? "text-amber-600" : "text-primary/70"}`}>
+                  {new Date(booking.appointment_date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                </p>
+              </div>
             </button>
-          ) : booking.state === "completed" && appointmentToday ? (
+          ) : booking.state === "completed" ? (
             <div className="flex items-center gap-1.5 rounded-lg bg-surface-container-low border border-outline-variant/20 px-2.5 py-2">
               <CalendarDays className="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0" />
-              <span className="text-xs text-on-surface-variant/70 truncate">{fmtShort(booking.appointment_date)}</span>
-              <span className="ml-auto text-xs font-medium text-on-surface-variant/50 shrink-0">Today</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-on-surface-variant/70">{fmtShort(booking.appointment_date)}</p>
+                <p className="text-xs text-on-surface-variant/50">{new Date(booking.appointment_date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</p>
+              </div>
+              {appointmentToday && <span className="ml-auto text-xs font-medium text-on-surface-variant/50 shrink-0">Today</span>}
             </div>
           ) : (
-            <p className="text-xs text-on-surface-variant/70">{fmtShort(booking.appointment_date)}</p>
+            <div className="flex items-center gap-1.5">
+              <CalendarDays className="w-3 h-3 text-on-surface-variant/50 shrink-0" />
+              <p className="text-xs text-on-surface-variant/70">{fmtDateTime(booking.appointment_date)}</p>
+            </div>
           )
         )}
 
@@ -432,6 +460,32 @@ export function BookingCard({
       <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-between gap-1.5">
         {/* Left: deposit + cal.com automation icons */}
         <div className="flex items-center gap-1">
+          {showDepositBadge && (
+            depositPaid ? (
+              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
+                <Check className="w-3 h-3" /> Deposit paid
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={markingPaid}
+                onClick={async () => {
+                  setMarkingPaid(true);
+                  await fetch(`/api/bookings/${booking.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "mark_deposit_paid" }),
+                  });
+                  setDepositPaid(true);
+                  setMarkingPaid(false);
+                  onDepositPaid?.(booking.id);
+                }}
+                className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                <Check className="w-3 h-3" /> {markingPaid ? "Saving…" : "Mark paid"}
+              </button>
+            )
+          )}
           {showDepositActions && (
             booking.deposit_paid ? (
               <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
@@ -513,14 +567,14 @@ export function BookingCard({
               </Button>
             )
           )}
-          {(onMoveState || onCancel || onOpenEmail) && (
-            <CardOverflowMenu
-              current={booking.state}
-              onMove={onMoveState ? (s) => onMoveState(booking.id, s) : undefined}
-              onCancel={onCancel ? () => onCancel(booking.id) : undefined}
-              onEmail={onOpenEmail ? () => onOpenEmail(booking.id) : undefined}
-            />
-          )}
+          <CardOverflowMenu
+            current={booking.state}
+            bookingId={booking.id}
+            clientName={booking.client_name}
+            onMove={onMoveState ? (s) => onMoveState(booking.id, s) : undefined}
+            onCancel={onCancel ? () => onCancel(booking.id) : undefined}
+            onEmail={onOpenEmail ? () => onOpenEmail(booking.id) : undefined}
+          />
         </div>
       </div>
 

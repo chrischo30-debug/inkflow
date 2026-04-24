@@ -36,12 +36,12 @@ export default async function FormBuilderPreviewPage({
       .single(),
     supabase
       .from("form_fields")
-      .select("field_key, label, enabled, required, sort_order, placeholder, input_type, options")
+      .select("field_key, label, enabled, required, sort_order, placeholder, description, input_type, options")
       .eq("artist_id", user.id)
       .order("sort_order", { ascending: true }),
     supabase
       .from("custom_form_fields")
-      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, options")
+      .select("id, field_key, label, type, enabled, required, sort_order, placeholder, description, options")
       .eq("artist_id", user.id)
       .order("sort_order", { ascending: true }),
   ]);
@@ -76,11 +76,14 @@ export default async function FormBuilderPreviewPage({
         formHeader={(settings.form_header as string) ?? artist.form_header ?? `Book with ${artistName}`}
         formSubtext={(settings.form_subtext as string) ?? artist.form_subtext ?? ""}
         buttonText={(settings.form_button_text as string) ?? artist.form_button_text ?? "Submit Inquiry"}
-        layout={(settings.booking_layout as "centered" | "banner" | "minimal") ?? artist.booking_layout ?? "centered"}
-        font={(settings.booking_font as "sans" | "serif" | "mono") ?? artist.booking_font ?? "sans"}
-        fontScale={(settings.booking_font_scale as "small" | "base" | "large") ?? artist.booking_font_scale ?? "base"}
+        layout={(settings.booking_layout as "centered" | "banner" | "minimal" | "full") ?? artist.booking_layout ?? "centered"}
+        font={(settings.booking_font as string) ?? artist.booking_font ?? "Manrope"}
+        fontScale={(settings.booking_font_scale as string) ?? artist.booking_font_scale ?? "17"}
+        headerSize={(settings.booking_header_size as string) ?? artist.booking_header_size ?? "36"}
+        headerAlign={(settings.booking_header_align as "left" | "center") ?? artist.booking_header_align ?? "left"}
         textColor={(settings.booking_text_color as string) ?? artist.booking_text_color ?? undefined}
         buttonColor={(settings.booking_button_color as string) ?? artist.booking_button_color ?? undefined}
+        labelColor={(settings.booking_label_color as string) ?? artist.booking_label_color ?? undefined}
         bgColor={(settings.booking_bg_color as string) ?? artist.booking_bg_color ?? "#ffffff"}
         bgImageUrl={(settings.booking_bg_image_url as string | null) ?? artist.booking_bg_image_url ?? null}
         logoUrl={(settings.logo_url as string | null) ?? artist.logo_url ?? null}

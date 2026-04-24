@@ -265,7 +265,7 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
 
   return (
     <>
-      <div className="flex h-full w-full overflow-x-auto gap-4 pb-4 snap-x">
+      <div className="flex h-full w-full overflow-x-auto gap-3 pb-4 snap-x">
         {PIPELINE_COLUMNS.map(id => {
           const title = COLUMN_LABELS[id];
           const colBookings = bookings.filter(b => b.state === id);
@@ -277,11 +277,11 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
               onDragOver={e => { e.preventDefault(); setDropTargetId(id); }}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetId(null); }}
               onDrop={() => handleDrop(id)}
-              className={`min-w-[300px] w-[300px] max-w-[300px] shrink-0 snap-start flex flex-col h-full rounded-xl pb-4 transition-colors ${
+              className={`min-w-[260px] w-[260px] md:min-w-[280px] md:w-[280px] xl:min-w-[300px] xl:w-[300px] max-w-[300px] shrink-0 snap-start flex flex-col h-full rounded-xl pb-4 transition-colors ${
                 isDropTarget ? "bg-primary/5 ring-2 ring-primary/30" : "bg-surface-container-low/50"
               }`}
             >
-              <div className={`flex items-center justify-between p-4 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
+              <div className={`flex items-center justify-between px-3 py-3 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
                 <h3 className="font-heading font-semibold text-base text-foreground">{title}</h3>
                 <span className="text-sm bg-surface-container-high text-on-surface-variant px-2.5 py-0.5 rounded-full font-mono">
                   {colBookings.length}

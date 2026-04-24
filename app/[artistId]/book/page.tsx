@@ -36,6 +36,7 @@ export default async function BookPage({
     return (
       <BooksClosedPage
         artistName={artist.name}
+        closedHeader={(artist as Record<string, unknown>).books_closed_header as string ?? null}
         logoUrl={artist.logo_url ?? null}
         message={artist.books_closed_message ?? null}
         websiteUrl={artist.website_url ?? null}
@@ -86,11 +87,14 @@ export default async function BookPage({
       formHeader={artist.form_header || `Book with ${artistName}`}
       formSubtext={artist.form_subtext || `Fill out the form below to request an appointment. ${artistName} will review your idea and get back to you.`}
       buttonText={artist.form_button_text || "Submit Inquiry"}
-      layout={(artist.booking_layout as "centered" | "banner" | "minimal") || "centered"}
-      font={(artist.booking_font as "sans" | "serif" | "mono") || "sans"}
-      fontScale={(artist.booking_font_scale as "small" | "base" | "large") || "base"}
+      layout={(artist.booking_layout as "centered" | "banner" | "minimal" | "full") || "centered"}
+      font={(artist.booking_font as string) || "Manrope"}
+      fontScale={(artist.booking_font_scale as string) || "17"}
+      headerSize={(artist.booking_header_size as string) || "36"}
+      headerAlign={(artist.booking_header_align as "left" | "center") || "left"}
       textColor={(artist.booking_text_color as string) || undefined}
       buttonColor={(artist.booking_button_color as string) || undefined}
+      labelColor={(artist.booking_label_color as string) || undefined}
       bgColor={artist.booking_bg_color || "#ffffff"}
       bgImageUrl={artist.booking_bg_image_url || null}
       logoUrl={artist.logo_url || null}

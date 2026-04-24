@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Link2, Plus, Eye, Pencil } from "lucide-react";
+import { X, Link2, Plus, Eye, Pencil, Braces } from "lucide-react";
 
 export interface ResolvedTemplate {
   id?: string | null;
@@ -115,7 +115,7 @@ function InlineLinkAdder({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border border-dashed border-outline-variant/40 text-on-surface-variant/60 hover:border-primary/40 hover:text-primary/70 transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
       >
         <Plus className="w-3 h-3" />
         {type === "payment" ? "Add payment link" : "Add calendar link"}
@@ -325,6 +325,34 @@ export function EmailComposeModal({
                 <BodyPreview text={body} vars={previewVars} resolved />
               </div>
             )}
+          </div>
+
+          {/* Variable chips */}
+          <div className="px-5 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1 text-xs text-on-surface-variant/70 shrink-0">
+                <Braces className="w-3 h-3" />
+                Variables:
+              </span>
+              {([
+                ["clientFirstName", "First Name"],
+                ["clientName", "Full Name"],
+                ["artistName", "Artist Name"],
+                ["appointmentDate", "Appointment"],
+                ["paymentLink", "Payment Link"],
+                ["calendarLink", "Calendar Link"],
+              ] as [string, string][]).map(([varName, label]) => (
+                <button
+                  key={varName}
+                  type="button"
+                  onClick={() => insertAtCursor(`{${varName}}`)}
+                  className="px-2 py-0.5 text-xs font-mono rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                  title={`Insert {${varName}}`}
+                >
+                  {"{" + label + "}"}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Insert links toolbar */}
