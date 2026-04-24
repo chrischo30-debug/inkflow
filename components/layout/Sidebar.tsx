@@ -1,8 +1,11 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 
 export async function Sidebar() {
   const supabase = await createClient();
+  const cookieStore = await cookies();
+  const initialCollapsed = cookieStore.get("sidebar_collapsed")?.value === "true";
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -31,5 +34,5 @@ export async function Sidebar() {
     }
   }
 
-  return <SidebarNav artistName={artistName} artistSubtitle={artistSubtitle} isSuperUser={adminUser} />;
+  return <SidebarNav artistName={artistName} artistSubtitle={artistSubtitle} isSuperUser={adminUser} initialCollapsed={initialCollapsed} />;
 }

@@ -82,31 +82,24 @@ export function SidebarNav({
   artistName,
   artistSubtitle,
   isSuperUser = false,
+  initialCollapsed = false,
 }: {
   artistName: string;
   artistSubtitle: string;
   isSuperUser?: boolean;
+  initialCollapsed?: boolean;
 }) {
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [collapsed, setCollapsed] = useState(false);
-
-  // Initialise from localStorage; auto-collapse on tablet on first visit
-  useLayoutEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored !== null) {
-        setCollapsed(stored === "true");
-      } else if (window.innerWidth < 1024) {
-        setCollapsed(true);
-      }
-    } catch {}
-  }, []);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
       try { localStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+      // Persist in a cookie too so the server can render the right width
+      // on the next navigation — prevents a flash of the default state.
+      document.cookie = `sidebar_collapsed=${next}; path=/; max-age=${60 * 60 * 24 * 365}; SameSite=Lax`;
       return next;
     });
   };
@@ -137,36 +130,21 @@ export function SidebarNav({
         collapsed ? "w-[58px]" : "w-56"
       } border-r border-outline-variant/20 bg-surface-container-low flex flex-col h-screen sticky top-0 shrink-0 transition-[width] duration-200`}
     >
-      {/* Logo + collapse toggle */}
-      <div className={`flex items-center border-b border-outline-variant/10 shrink-0 h-16 ${collapsed ? "justify-center px-0" : "px-4 justify-between"}`}>
-        {collapsed ? (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title="Expand sidebar"
-            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-surface-container-high transition-colors"
-          >
-            <img src="/logo.png" alt="FlashBooker" className="w-9 h-9 object-contain" />
-          </button>
-        ) : (
-          <>
-            <Link href="/" className="flex items-center gap-2.5 min-w-0 flex-1">
-              <img src="/logo.png" alt="FlashBooker logo" className="w-11 h-11 object-contain shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-heading font-bold tracking-tight text-on-surface truncate leading-tight">{artistName}</p>
-                <p className="text-[11px] text-on-surface-variant truncate leading-tight">{artistSubtitle}</p>
-              </div>
-            </Link>
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              title="Collapse sidebar"
-              className="shrink-0 p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ml-1"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </>
-        )}
+      {/* Logo */}
+      <div className={`flex items-center border-b border-outline-variant/10 shrink-0 h-16 ${collapsed ? "justify-center px-0" : "px-4"}`}>
+        <Link href="/" className={`flex items-center min-w-0 ${collapsed ? "justify-center" : "gap-2.5 flex-1"}`} title="Dashboard">
+          <img
+            src="/logo.png"
+            alt="FlashBooker logo"
+            className={`object-contain shrink-0 ${collapsed ? "w-9 h-9" : "w-11 h-11"}`}
+          />
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="text-sm font-heading font-bold tracking-tight text-on-surface truncate leading-tight">{artistName}</p>
+              <p className="text-[11px] text-on-surface-variant truncate leading-tight">{artistSubtitle}</p>
+            </div>
+          )}
+        </Link>
       </div>
 
       {/* Nav */}
@@ -260,38 +238,36 @@ export function SidebarNav({
       </div>
 
       {/* Sign out + expand toggle when collapsed */}
-      <div className={`border-t border-outline-variant/15 shrink-0 ${collapsed ? "p-2" : "p-3"}`}>
-        {collapsed ? (
-          <div className="flex flex-col gap-1.5">
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              title="Expand sidebar"
-              className="flex items-center justify-center p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-            >
-              <ChevronRight className="w-[18px] h-[18px]" />
-            </button>
-            <form action={signOut}>
-              <button
-                type="submit"
-                title="Sign Out"
-                className="w-full flex items-center justify-center p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-              >
-                <LogOut className="w-[18px] h-[18px]" />
-              </button>
-            </form>
-          </div>
-        ) : (
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-            >
-              <LogOut className="w-[18px] h-[18px] shrink-0" />
-              Sign Out
-            </button>
-          </form>
-        )}
+      <div className={`border-t border-outline-variant/15 shrink-0 flex flex-col gap-1.5 ${collapsed ? "p-2" : "p-3"}`}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={`rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
+            collapsed ? "flex items-center justify-center p-2.5" : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium"
+          }`}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-[18px] h-[18px]" />
+          ) : (
+            <>
+              <ChevronLeft className="w-[18px] h-[18px] shrink-0" />
+              Collapse sidebar
+            </>
+          )}
+        </button>
+        <form action={signOut}>
+          <button
+            type="submit"
+            title={collapsed ? "Sign Out" : undefined}
+            className={`w-full rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
+              collapsed ? "flex items-center justify-center p-2.5" : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium"
+            }`}
+          >
+            <LogOut className="w-[18px] h-[18px] shrink-0" />
+            {!collapsed && "Sign Out"}
+          </button>
+        </form>
       </div>
     </aside>
   );
