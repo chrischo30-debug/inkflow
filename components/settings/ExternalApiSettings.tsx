@@ -121,7 +121,8 @@ const CALCOM_STEPS = [
   "Go to cal.com and create a free account (or log in).",
   "Click Settings in the bottom-right of the sidebar.",
   "In the left menu, go to Developer → API keys.",
-  "Click Add to create a new key — give it any name (e.g. FlashBooker), then Save.",
+  "Click Add to create a new key. Give it any name (e.g. FlashBooker).",
+  "Check the 'Never expires' box so you don't have to reconnect later, then Save.",
   "Copy the key shown — you won't be able to see it again.",
   "Paste it in the field above and click Save.",
 ];
