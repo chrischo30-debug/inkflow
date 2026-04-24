@@ -31,8 +31,6 @@ export interface SettingsShellProps {
   googleConfigured: boolean;
   hasRefreshToken: boolean;
   isCalendarConnected: boolean;
-  isGmailConnected: boolean;
-  gmailAddress: string;
   paymentLinks: PaymentLink[];
   calendarLinks: CalendarLink[];
   stripeApiKey: string;
@@ -92,13 +90,11 @@ export function SettingsShell(props: SettingsShellProps) {
 
           {tab === "integrations" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Integrations" description="Connect external services for email and calendar sync." />
+              <SectionHeading title="Integrations" description="Connect external services for calendar sync and payments." />
               <GoogleIntegrationSettings
                 googleConfigured={props.googleConfigured}
                 hasRefreshToken={props.hasRefreshToken}
                 isCalendarConnected={props.isCalendarConnected}
-                isGmailConnected={props.isGmailConnected}
-                gmailAddress={props.gmailAddress}
               />
               <ExternalApiSettings
                 initialStripeKey={props.stripeApiKey}

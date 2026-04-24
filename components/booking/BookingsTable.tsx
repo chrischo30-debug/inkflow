@@ -5,8 +5,7 @@ import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ExternalLink, ChevronDown, ChevronRight, DollarSign, Calendar, Check, Copy, CalendarDays } from "lucide-react";
-import { gmailThreadUrl } from "@/lib/gmail";
+import { Mail, ChevronDown, ChevronRight, DollarSign, Calendar, Check, Copy, CalendarDays } from "lucide-react";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
@@ -170,19 +169,6 @@ export function BookingsTable({
     return () => document.removeEventListener("mousedown", handler);
   }, [openDropdown]);
 
-  // Sync Gmail reply status on mount
-  useEffect(() => {
-    fetch("/api/bookings/sync-replies", { method: "POST" })
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { statuses?: { bookingId: string; has_unread_reply: boolean }[] } | null) => {
-        if (!data?.statuses?.length) return;
-        setBookings(prev => prev.map(b => {
-          const match = data.statuses!.find(s => s.bookingId === b.id);
-          return match ? { ...b, has_unread_reply: match.has_unread_reply } : b;
-        }));
-      })
-      .catch(() => {});
-  }, []);
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
@@ -280,7 +266,7 @@ export function BookingsTable({
       body: JSON.stringify({ action: "move", target_state: targetState }),
     });
     if (!res.ok) return;
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: targetState, has_unread_reply: false } : b));
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: targetState } : b));
     setOpenDropdown(null);
   };
 
@@ -301,10 +287,10 @@ export function BookingsTable({
     });
     if (!res.ok) return;
     const { newState } = await res.json();
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState, has_unread_reply: false } : b));
+    setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState } : b));
   };
 
-  const handleAcceptSent = (bookingId: string, threadId?: string) => {
+  const handleAcceptSent = (bookingId: string) => {
     const nowIso = new Date().toISOString();
     setBookings(prev => prev.map(b =>
       b.id === bookingId
@@ -312,7 +298,6 @@ export function BookingsTable({
             ...b,
             state: "accepted",
             last_email_sent_at: nowIso,
-            ...(threadId ? { gmail_thread_id: threadId } : {}),
             sent_emails: [...(b.sent_emails ?? []), { label: "Submission Accepted", sent_at: nowIso }],
           }
         : b
@@ -422,8 +407,6 @@ export function BookingsTable({
         ? {
             ...b,
             last_email_sent_at: nowIso,
-            has_unread_reply: false,
-            ...(data.threadId ? { gmail_thread_id: data.threadId } : {}),
             sent_emails: [...(b.sent_emails ?? []), newEntry],
           }
         : b
@@ -443,8 +426,6 @@ export function BookingsTable({
       if (Array.isArray(v)) return v.length > 0;
       return v !== null && String(v).trim() !== "";
     });
-    const showActionDot = booking.has_unread_reply &&
-      (booking.state === "inquiry" || booking.state === "follow_up" || booking.state === "accepted");
     const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) &&
       (booking.state === "confirmed" || booking.state === "completed");
 
@@ -461,12 +442,6 @@ export function BookingsTable({
           <td className="px-4 py-4">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-on-surface">{booking.client_name}</p>
-              {showActionDot && (
-                <span className="relative flex h-2 w-2 shrink-0" title="Client replied">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                </span>
-              )}
               {booking.deposit_paid && (
                 <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md shrink-0">Deposit paid</span>
               )}
@@ -575,11 +550,6 @@ export function BookingsTable({
                 <button type="button" onClick={() => openEmailCompose(booking.id, undefined, true)} title="Send email" disabled={emailLoadingId === booking.id} className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors disabled:opacity-40">
                   <Mail className="w-4 h-4" />
                 </button>
-              )}
-              {booking.gmail_thread_id && (
-                <a href={gmailThreadUrl(booking.gmail_thread_id)} target="_blank" rel="noreferrer" title="View in Gmail" className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
               )}
             </div>
           </td>
@@ -732,18 +702,10 @@ export function BookingsTable({
                           </div>
                         ))}
                       </div>
-                      {booking.gmail_thread_id && (
-                        <a href={gmailThreadUrl(booking.gmail_thread_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2 hover:opacity-70 transition-opacity mt-2">
-                          View thread in Gmail <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
                     </div>
                   ) : booking.last_email_sent_at ? (
                     <div className="border-t border-outline-variant/10 pt-4 flex items-center gap-3 text-xs text-on-surface-variant">
                       <span>Last emailed {fmtDate(booking.last_email_sent_at)}</span>
-                      {booking.gmail_thread_id && (
-                        <a href={gmailThreadUrl(booking.gmail_thread_id)} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 hover:opacity-70">View in Gmail →</a>
-                      )}
                     </div>
                   ) : null}
 
@@ -958,7 +920,7 @@ export function BookingsTable({
       {acceptModal && (
         <AcceptModal
           bookingId={acceptModal.bookingId}
-          onSent={(threadId) => handleAcceptSent(acceptModal.bookingId, threadId)}
+          onSent={() => handleAcceptSent(acceptModal.bookingId)}
           onClose={() => setAcceptModal(null)}
         />
       )}

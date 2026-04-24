@@ -1,6 +1,12 @@
+import { Resend } from 'resend';
 import { BookingState, EmailTemplate } from './types';
 import type { CalendarLink, PaymentLink } from './pipeline-settings';
-import { resolveArtistSender, dispatchEmail, type ArtistRow } from './email-sender';
+
+const resend = new Resend(process.env.RESEND_API_KEY || 're_mock_key');
+
+const SENDING_DOMAIN = process.env.FLASHBOOKER_SENDING_DOMAIN || 'flashbooker.app';
+const SENDING_LOCAL = process.env.FLASHBOOKER_SENDING_LOCAL || 'bookings';
+const APP_NAME = 'FlashBooker';
 
 export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>, { subject: string; body: string }> = {
   inquiry: {
@@ -31,11 +37,11 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
 
 export interface TemplateVars {
   clientFirstName: string;
-  clientName: string;
+  clientName: string;     // kept for backwards compat with existing saved templates
   artistName: string;
-  paymentLink: string;
-  calendarLink: string;
-  calendarLinks: string;
+  paymentLink: string;    // primary payment link URL (or empty)
+  calendarLink: string;   // first calendar link URL (or empty)
+  calendarLinks: string;  // all calendar links formatted as labeled list
   appointmentDate: string;
 }
 
@@ -76,12 +82,16 @@ export function applyPlaceholders(template: string, vars: TemplateVars): string 
     .replace(/\{appointmentDate\}/g, vars.appointmentDate);
 }
 
+function buildFromHeader(artistName: string): string {
+  const cleanedName = (artistName || 'Your Artist').replace(/"/g, '').trim();
+  return `${cleanedName} via ${APP_NAME} <${SENDING_LOCAL}@${SENDING_DOMAIN}>`;
+}
+
 interface SendEmailPayload {
   toEmail: string;
   vars: TemplateVars;
   template: { subject: string; body: string };
-  artist: ArtistRow;
-  bookingId: string;
+  artistReplyTo?: string | null;
 }
 
 interface SendEmailResult {
@@ -90,23 +100,33 @@ interface SendEmailResult {
 }
 
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
-  const { toEmail, vars, template, artist, bookingId } = payload;
+  const { toEmail, vars, template, artistReplyTo } = payload;
 
   const subject = applyPlaceholders(template.subject, vars);
   const text = applyPlaceholders(template.body, vars);
+  const from = buildFromHeader(vars.artistName);
 
-  const sender = resolveArtistSender(artist);
-  const result = await dispatchEmail({
-    sender,
-    to: toEmail,
-    subject,
-    text,
-    bookingId,
-  });
+  if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
+    console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo: artistReplyTo, text });
+    return { subject };
+  }
 
-  return { subject, providerMessageId: result.providerMessageId };
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: [toEmail],
+      subject,
+      text,
+      ...(artistReplyTo ? { replyTo: artistReplyTo } : {}),
+    });
+    return { subject, providerMessageId: result.data?.id };
+  } catch (error) {
+    console.error('Failed to send email via Resend:', error);
+    return { subject };
+  }
 }
 
+// Legacy wrapper used by auto-send on state transitions
 export async function sendStateTransitionEmail(payload: {
   toEmail: string;
   clientName: string;
@@ -117,14 +137,13 @@ export async function sendStateTransitionEmail(payload: {
   primaryPaymentLink?: string;
   appointmentDate?: string;
   template?: EmailTemplate | null;
-  artist: ArtistRow;
-  bookingId: string;
+  artistReplyTo?: string | null;
 }): Promise<SendEmailResult> {
   const { newState } = payload;
   if (newState === 'cancelled') return {};
 
   const defaults = DEFAULT_EMAIL_TEMPLATES[newState as Exclude<BookingState, 'cancelled'>];
-  if (!defaults) return {};
+  if (!defaults) return {}; // no template for this state
 
   const vars = buildTemplateVars({
     clientName: payload.clientName,
@@ -141,7 +160,6 @@ export async function sendStateTransitionEmail(payload: {
     template: payload.template
       ? { subject: payload.template.subject, body: payload.template.body }
       : defaults,
-    artist: payload.artist,
-    bookingId: payload.bookingId,
+    artistReplyTo: payload.artistReplyTo,
   });
 }

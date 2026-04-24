@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { sendEmail, buildTemplateVars } from "@/lib/email";
-import { loadArtistForSending, fallbackArtistRow } from "@/lib/email-sender";
 import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
 import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
@@ -28,7 +27,7 @@ export async function GET(req: Request) {
   // Fetch all artists with reminders enabled
   const { data: artists, error: artistErr } = await supabase
     .from("artists")
-    .select("id, name, payment_links, reminder_hours_before")
+    .select("id, name, email, payment_links, gmail_address, reminder_hours_before")
     .eq("reminder_enabled", true);
 
   if (artistErr || !artists?.length) {
@@ -57,8 +56,7 @@ export async function GET(req: Request) {
 
     const paymentLinksList = normalizePaymentLinks(artist.payment_links) as PaymentLink[];
     const calendarLinksList: CalendarLink[] = [];
-
-    const artistRow = (await loadArtistForSending(supabase, artist.id)) ?? fallbackArtistRow(artist.id, artist.name, null);
+    const artistReplyTo = (artist as { gmail_address?: string | null; email?: string | null }).gmail_address ?? (artist as { email?: string | null }).email ?? null;
 
     for (const booking of bookings) {
       try {
@@ -74,8 +72,7 @@ export async function GET(req: Request) {
           toEmail: booking.client_email,
           vars,
           template: DEFAULT_REMINDER_TEMPLATE,
-          artist: artistRow,
-          bookingId: booking.id,
+          artistReplyTo,
         });
 
         await supabase

@@ -11,7 +11,7 @@ export default async function PastClientsPage() {
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, gmail_thread_id, sent_emails, total_amount, tip_amount, completion_notes, completion_image_urls, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, total_amount, tip_amount, completion_notes, completion_image_urls, created_at, updated_at")
     .eq("artist_id", user.id)
     .order("created_at", { ascending: false });
 

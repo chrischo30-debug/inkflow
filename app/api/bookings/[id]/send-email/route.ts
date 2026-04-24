@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
 import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
-import { loadArtistForSending, fallbackArtistRow } from '@/lib/email-sender';
 import type { CalendarLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
 
@@ -19,7 +18,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const [{ data: artistCore }, { data: artistExtra }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, studio_name, payment_links')
+      .select('name, studio_name, payment_links, gmail_address, email')
       .eq('id', userId)
       .single(),
     supabase
@@ -153,14 +152,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     appointmentDate: booking.appointment_date ?? undefined,
   });
 
-  const artistRow = (await loadArtistForSending(supabase, user.id)) ?? fallbackArtistRow(user.id, artist?.name ?? null, null);
-
   await sendEmail({
     toEmail: booking.client_email,
     vars,
     template: { subject, body },
-    artist: artistRow,
-    bookingId: id,
+    artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
   });
 
   const nowIso = new Date().toISOString();

@@ -59,10 +59,10 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
     setAcceptModal({ bookingId });
   };
 
-  const handleAcceptSent = (bookingId: string, threadId?: string) => {
+  const handleAcceptSent = (bookingId: string) => {
     setBookings(prev => prev.map(b =>
       b.id === bookingId
-        ? { ...b, state: "accepted", last_email_sent_at: new Date().toISOString(), ...(threadId ? { gmail_thread_id: threadId } : {}) }
+        ? { ...b, state: "accepted", last_email_sent_at: new Date().toISOString() }
         : b
     ));
     setAcceptModal(null);
@@ -245,7 +245,6 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
         ? {
             ...b,
             last_email_sent_at: nowIso,
-            ...(data.threadId ? { gmail_thread_id: data.threadId } : {}),
             sent_emails: [...(b.sent_emails ?? []), newEntry],
           }
         : b
@@ -326,7 +325,7 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
       {acceptModal && (
         <AcceptModal
           bookingId={acceptModal.bookingId}
-          onSent={(threadId) => handleAcceptSent(acceptModal.bookingId, threadId)}
+          onSent={() => handleAcceptSent(acceptModal.bookingId)}
           onClose={() => setAcceptModal(null)}
         />
       )}

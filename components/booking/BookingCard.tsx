@@ -243,9 +243,6 @@ export function BookingCard({
   const showDepositActions = hasStripe && (isAccepted || booking.state === "confirmed");
   const showDepositBadge = !hasStripe && booking.state === "confirmed";
 
-  // Notification states
-  const showActionDot = booking.has_unread_reply &&
-    (booking.state === "inquiry" || booking.state === "follow_up" || booking.state === "accepted");
   const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) &&
     (booking.state === "confirmed" || booking.state === "completed");
 
@@ -302,12 +299,6 @@ export function BookingCard({
         <div className="flex justify-between items-start gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <h4 className="font-semibold text-base text-on-surface line-clamp-1 min-w-0">{booking.client_name}</h4>
-            {showActionDot && (
-              <span className="relative flex h-2 w-2 shrink-0" title="Client replied">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-              </span>
-            )}
           </div>
           <StateBadge state={booking.state} />
         </div>
@@ -434,19 +425,6 @@ export function BookingCard({
                     <p className="text-xs text-on-surface-variant/60 whitespace-nowrap shrink-0">{fmtShort(entry.sent_at)}</p>
                   </div>
                 ))}
-              </div>
-            )}
-            {/* Gmail thread link */}
-            {booking.gmail_thread_id && (
-              <div className="pt-1 border-t border-outline-variant/10">
-                <a
-                  href={`https://mail.google.com/mail/u/0/#all/${booking.gmail_thread_id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary underline underline-offset-2 hover:opacity-70 transition-opacity"
-                >
-                  View conversation in Gmail →
-                </a>
               </div>
             )}
             <div className="pt-1 border-t border-outline-variant/10 text-xs text-on-surface-variant/60">

@@ -16,12 +16,11 @@ export default async function CalendarPage({
 
   const { data: artist } = await supabase
     .from("artists")
-    .select("calendar_sync_enabled, google_refresh_token, gmail_connected, gmail_address")
+    .select("calendar_sync_enabled, google_refresh_token")
     .eq("id", user.id)
     .single();
 
   const isCalendarConnected = Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token);
-  const isGmailConnected = Boolean(artist?.gmail_connected && artist?.google_refresh_token);
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -45,10 +44,6 @@ export default async function CalendarPage({
             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${isCalendarConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container-high text-on-surface-variant border border-outline-variant/20"}`}>
               <span className={`w-2 h-2 rounded-full ${isCalendarConnected ? "bg-emerald-500" : "bg-on-surface-variant/40"}`} />
               Calendar {isCalendarConnected ? "syncing" : "not connected"}
-            </span>
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${isGmailConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container-high text-on-surface-variant border border-outline-variant/20"}`}>
-              <span className={`w-2 h-2 rounded-full ${isGmailConnected ? "bg-emerald-500" : "bg-on-surface-variant/40"}`} />
-              Gmail {isGmailConnected ? `sending from ${artist?.gmail_address ?? "your account"}` : "not connected"}
             </span>
           </div>
         </div>

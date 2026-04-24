@@ -236,16 +236,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
 
       const [{ data: artist }, { data: templateRow }] = await Promise.all([
-        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, google_refresh_token").eq("id", booking.artist_id).single(),
+        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email").eq("id", booking.artist_id).single(),
         supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
       ]);
 
       if (!templateRow || templateRow.auto_send) {
         try {
           const { sendStateTransitionEmail } = await import("@/lib/email");
-          const { loadArtistForSending, fallbackArtistRow } = await import("@/lib/email-sender");
           const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-          const artistRow = (await loadArtistForSending(supabase, booking.artist_id)) ?? fallbackArtistRow(booking.artist_id, artist?.name, null);
           const { subject: sentSubject } = await sendStateTransitionEmail({
             toEmail: booking.client_email,
             clientName: booking.client_name,
@@ -254,8 +252,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             paymentLinksList: normalizePaymentLinks(artist?.payment_links),
             calendarLinksList: [],
             template: templateRow ?? null,
-            artist: artistRow,
-            bookingId: id,
+            artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
           });
           await supabase.from("bookings").update({
             last_email_sent_at: new Date().toISOString(),
@@ -275,7 +272,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const [{ data: artist }, { data: templateRow }] = await Promise.all([
-      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, google_refresh_token").eq("id", booking.artist_id).single(),
+      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email").eq("id", booking.artist_id).single(),
       supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
@@ -294,9 +291,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (shouldAutoEmail) {
       try {
         const { sendStateTransitionEmail } = await import("@/lib/email");
-        const { loadArtistForSending, fallbackArtistRow } = await import("@/lib/email-sender");
         const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-        const artistRow = (await loadArtistForSending(supabase, booking.artist_id)) ?? fallbackArtistRow(booking.artist_id, artist?.name, null);
         const { subject: sentSubject } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
@@ -305,8 +300,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           paymentLinksList: normalizePaymentLinks(artist?.payment_links),
           calendarLinksList: [],
           template: templateRow ?? null,
-          artist: artistRow,
-          bookingId: id,
+          artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
         });
         await supabase.from("bookings").update({
           last_email_sent_at: new Date().toISOString(),

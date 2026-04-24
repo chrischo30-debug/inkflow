@@ -13,7 +13,7 @@ export default async function SettingsPage() {
   // Core columns — always exist
   const { data: artist } = await supabase
     .from("artists")
-    .select("name, slug, studio_name, accent_theme, payment_links, calendar_sync_enabled, google_refresh_token, gmail_connected, gmail_address")
+    .select("name, slug, studio_name, accent_theme, payment_links, calendar_sync_enabled, google_refresh_token")
     .eq("id", user.id)
     .single();
 
@@ -55,8 +55,6 @@ export default async function SettingsPage() {
         googleConfigured={googleConfigured}
         hasRefreshToken={hasRefreshToken}
         isCalendarConnected={Boolean(artist?.calendar_sync_enabled && hasRefreshToken)}
-        isGmailConnected={Boolean(artist?.gmail_connected && hasRefreshToken)}
-        gmailAddress={artist?.gmail_address ?? ""}
         paymentLinks={normalizePaymentLinks(artist?.payment_links)}
         calendarLinks={(extended.calendar_links as CalendarLink[]) ?? []}
         stripeApiKey={extended.stripe_api_key ?? ""}

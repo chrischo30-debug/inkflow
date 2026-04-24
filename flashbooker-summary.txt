@@ -1,0 +1,131 @@
+FLASHBOOKER — APPLICATION SUMMARY
+===================================
+
+WHAT IT IS
+----------
+FlashBooker is a web-based booking management platform built for tattoo artists. It handles the full lifecycle of a client booking — from the initial inquiry form the client fills out, through deposit collection and appointment scheduling, to session completion. It also provides tools for client communication, calendar management, and studio administration.
+
+The app has two sides: a public-facing side (booking form, contact form, newsletter signup) that the artist shares with clients, and an internal dashboard the artist uses to manage their business.
+
+
+WHO USES IT
+-----------
+Primary users: tattoo artists running their own studios or freelancing.
+Secondary users: platform superusers (internal admin).
+
+
+PUBLIC PAGES (client-facing)
+-----------------------------
+
+Booking Form — /{slug}/book
+  The artist's intake form. Fully customizable: layout (centered, minimal, or split), accent color, background, logo, and font. Supports custom form fields built in the Form Builder. If the artist has closed their books, this page shows a "books closed" message instead (with optional contact form and newsletter signup embedded below).
+
+Contact Form — /{slug}/contact
+  A standalone contact page separate from the booking form. Fields: name, email, optional phone, and message. Submitting sends an email notification to the artist. Can be toggled on/off independently of the booking form.
+
+Newsletter Signup — /{slug}/newsletter
+  A signup page connected to the artist's Kit (ConvertKit) account. Subscribes the visitor to the artist's Kit form. Can also be toggled on/off.
+
+
+INTERNAL DASHBOARD
+------------------
+
+Dashboard (home)
+  Entry point showing four action cards: new submissions, bookings awaiting deposit, deposit paid (ready to confirm), and today's appointments. Below the cards is the full pipeline board. Also shows a Books Open/Closed toggle.
+
+Pipeline View
+  Kanban-style board with columns for each booking state. Booking cards show client name, project details, deposit status, and available actions. Cards can be dragged between columns or moved via a dropdown menu.
+
+Bookings Table View
+  A tabular alternative to the pipeline. Shows all bookings with state filter tabs. Each row is expandable and supports the same actions as the pipeline (move state, send email, copy scheduling link, etc.).
+
+Booking States (in order):
+  Submission → Reviewed → Deposit Sent → Deposit Paid → Booked → Completed
+  There is also: Rejected, Follow Up, Waitlist, Cancelled.
+
+Per-Booking Actions:
+  - Accept (move to Reviewed)
+  - Send email (compose with templates, sent via artist's Gmail)
+  - Generate Stripe deposit link (copies link to clipboard; webhook auto-marks deposit as paid)
+  - Generate Cal.com scheduling link (pre-filled with client name/email)
+  - Confirm appointment (set date, time, duration — creates Google Calendar event)
+  - Edit appointment (updates existing Google Calendar event)
+  - Move to any state via dropdown
+  - Cancel booking
+
+
+Calendar
+  Monthly calendar grid showing both Google Calendar events and InkFlow appointment events. Artist can create new Google Calendar events directly from the app. Clicking a day shows events for that day. Calendar navigates to a specific month when opened from a booking card.
+
+
+Inbox
+  An in-app Gmail inbox. Shows the artist's Gmail threads in a split-pane view (thread list on the left, thread detail on the right). Supports replying directly from the app, with threading (replies stay in the same Gmail thread). Has a "Tattoo inquiries only" filter that shows only threads matching booking-related keywords. When a contact form submission email arrives, the reply correctly goes to the visitor, not the app's sender address.
+
+
+Analytics
+  A dedicated analytics page (tracks booking funnel and activity metrics).
+
+
+Past Clients
+  A table of clients from completed bookings.
+
+
+ARTIST SETTINGS
+---------------
+
+Booking Page Settings
+  Controls the public booking form's visual theme: background color or image, text color, font, font scale, accent/button color, and layout type.
+
+Form Builder
+  Drag-and-drop builder for custom form fields on the booking form. Supports field types including text inputs, dropdowns, checkboxes, and more. Includes a live preview of the public form.
+
+Email Templates
+  Per-state email templates used when the artist sends emails from booking cards. Templates support variables: {clientFirstName}, {clientLastName}, {clientEmail}, {artistName}, {paymentLinks}, {calendarLinks}. The compose modal shows raw templates with variables highlighted and a preview mode that resolves them with real values.
+
+Payment Links (non-Stripe)
+  A list of named payment links the artist can include in emails (e.g., a Venmo or CashApp link). These are inserted into email body via the {paymentLinks} template variable.
+
+Books Settings
+  Manual open/closed toggle, auto-schedule (set a date/time for books to automatically open or close), and a custom message shown to clients when books are closed.
+
+Reminders
+  Configurable automated reminders sent to clients (e.g., appointment reminders before the session date).
+
+Integrations
+  - Gmail: OAuth connection so emails are sent from the artist's own Gmail address.
+  - Google Calendar: OAuth connection for calendar sync (appointment events created, updated, deleted in the artist's Google Calendar).
+  - Stripe: API key + webhook secret for auto-generating payment links per booking and auto-detecting when a deposit is paid.
+  - Cal.com: API key for generating pre-filled scheduling links per booking.
+  - Kit (ConvertKit): API key + form ID for the newsletter signup feature.
+
+
+SETUP GUIDE
+-----------
+A step-by-step onboarding checklist showing which of five setup steps are complete (booking URL slug, logo uploaded, Gmail connected, payment links added, calendar links added). Includes a progress bar and recommended tools (Cal.com, Stripe, Kit).
+
+
+ACCOUNT & AUTH
+--------------
+Email/password signup and login. Google OAuth used for Gmail and Calendar integration (separate from account login). Forgot password and reset password flows. Onboarding flow for new artists.
+
+
+SUPERUSER / ADMIN PANEL
+-----------------------
+An internal admin panel accessible only to accounts with the superuser flag. Features:
+  - View all artist accounts with a summary of their bookings.
+  - Access Account: log in as any artist account without their password (uses a server-side OTP exchange so the admin sees the artist's full dashboard).
+  - Reset Password: generate a password reset link to send to the artist.
+  - Delete Account: permanently remove an artist and all their data.
+
+
+TECH STACK (brief)
+------------------
+- Framework: Next.js (App Router)
+- Database / Auth: Supabase (PostgreSQL + Supabase Auth)
+- Styling: Tailwind CSS + shadcn/ui components
+- Email sending: Resend (transactional); Gmail API (artist-to-client emails)
+- Payment: Stripe (payment link generation + webhooks)
+- Calendar: Google Calendar API
+- Scheduling links: Cal.com API
+- Newsletter: Kit (ConvertKit) API
+- Deployment: Vercel

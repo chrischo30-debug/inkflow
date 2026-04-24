@@ -90,7 +90,7 @@ export default async function SetupPage({
 
   const { data: artist } = await supabase
     .from("artists")
-    .select("name, slug, logo_url, google_refresh_token, gmail_connected, gmail_address, payment_links, calendar_sync_enabled")
+    .select("name, slug, logo_url, google_refresh_token, payment_links, calendar_sync_enabled")
     .eq("id", user.id)
     .single();
 
@@ -106,7 +106,7 @@ export default async function SetupPage({
   } catch { /* migrations pending */ }
 
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-  const gmailConnected = Boolean(artist?.gmail_connected && artist?.google_refresh_token);
+  const calendarConnected = Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token);
   const paymentLinks = normalizePaymentLinks(artist?.payment_links);
   const calendarLinks = (extended.calendar_links ?? []) as CalendarLink[];
   const hasLogo = Boolean(artist?.logo_url);
@@ -114,7 +114,7 @@ export default async function SetupPage({
   const hasStripe = Boolean(extended.stripe_api_key);
   const hasCalcom = Boolean(extended.calcom_api_key);
 
-  const stepsComplete = [hasSlug, hasLogo, gmailConnected, paymentLinks.length > 0, calendarLinks.length > 0, hasStripe, hasCalcom]
+  const stepsComplete = [hasSlug, hasLogo, calendarConnected, paymentLinks.length > 0, calendarLinks.length > 0, hasStripe, hasCalcom]
     .filter(Boolean).length;
   const totalSteps = 7;
 
@@ -175,11 +175,10 @@ export default async function SetupPage({
               />
 
               <StepCard
-                done={gmailConnected}
-                title="Connect Gmail"
-                description="Send booking emails from your own address and read replies in your inbox."
-                note={gmailConnected ? `Connected as ${artist?.gmail_address}` : undefined}
-                action={googleConfigured ? "Connect Google" : "Configure OAuth first"}
+                done={calendarConnected}
+                title="Connect your calendar"
+                description="Sync confirmed appointments to your Google Calendar. Clients reply to your own email address, so your conversations stay in your inbox."
+                action={googleConfigured ? "Connect Calendar" : "Configure OAuth first"}
                 actionHref={googleConfigured ? "/api/auth/google/connect" : "/settings"}
               />
 

@@ -6,16 +6,14 @@ interface Props {
   googleConfigured: boolean;
   hasRefreshToken: boolean;
   isCalendarConnected: boolean;
-  isGmailConnected: boolean;
-  gmailAddress: string;
 }
 
-export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, isCalendarConnected, isGmailConnected, gmailAddress }: Props) {
+export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, isCalendarConnected }: Props) {
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-on-surface mb-1">Google</h3>
+      <h3 className="text-sm font-semibold text-on-surface mb-1">Google Calendar</h3>
       <p className="text-xs text-on-surface-variant mb-5">
-        Send booking emails from your Gmail address and sync confirmed appointments to your calendar.
+        Sync confirmed appointments to your Google Calendar. Your clients never see this — it just keeps your personal calendar up to date.
       </p>
 
       {!googleConfigured && (
@@ -25,19 +23,20 @@ export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, i
         </div>
       )}
 
-      <div className="space-y-2 mb-5">
-        <StatusRow
-          label="Gmail"
-          connected={isGmailConnected}
-          connectedNote={`Emails sent from ${gmailAddress || "your Gmail"}`}
-          disconnectedNote="Emails will be sent from noreply@flashbook.app"
-        />
-        <StatusRow
-          label="Google Calendar"
-          connected={isCalendarConnected}
-          connectedNote="Confirmed bookings sync automatically"
-          disconnectedNote="Confirmed bookings will not sync to calendar"
-        />
+      <div className="mb-5">
+        <div className="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-on-surface">Google Calendar</p>
+            <p className="text-xs text-on-surface-variant mt-0.5">
+              {isCalendarConnected ? "Confirmed bookings sync automatically." : "Confirmed bookings will not sync to your calendar."}
+            </p>
+          </div>
+          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ml-3 ${
+            isCalendarConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container text-on-surface-variant border border-outline-variant/30"
+          }`}>
+            {isCalendarConnected ? "Connected" : "Not connected"}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -46,11 +45,11 @@ export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, i
             href="/api/auth/google/connect"
             className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
           >
-            {hasRefreshToken ? "Reconnect Google" : "Connect Google"}
+            {hasRefreshToken ? "Reconnect Calendar" : "Connect Calendar"}
           </Link>
         ) : (
           <span className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg bg-surface-container-high text-on-surface-variant cursor-not-allowed">
-            Connect Google
+            Connect Calendar
           </span>
         )}
         {hasRefreshToken && (
@@ -64,24 +63,6 @@ export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, i
           </form>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatusRow({ label, connected, connectedNote, disconnectedNote }: {
-  label: string; connected: boolean; connectedNote: string; disconnectedNote: string;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-on-surface">{label}</p>
-        <p className="text-xs text-on-surface-variant mt-0.5">{connected ? connectedNote : disconnectedNote}</p>
-      </div>
-      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ml-3 ${
-        connected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container text-on-surface-variant border border-outline-variant/30"
-      }`}>
-        {connected ? "Connected" : "Not connected"}
-      </span>
     </div>
   );
 }
