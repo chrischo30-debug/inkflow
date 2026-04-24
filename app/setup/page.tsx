@@ -114,9 +114,18 @@ export default async function SetupPage({
   const hasStripe = Boolean(extended.stripe_api_key);
   const hasCalcom = Boolean(extended.calcom_api_key);
 
-  const stepsComplete = [hasSlug, hasLogo, calendarConnected, paymentLinks.length > 0, calendarLinks.length > 0, hasStripe, hasCalcom]
-    .filter(Boolean).length;
-  const totalSteps = 7;
+  const hasReplyTo = Boolean(artist?.gmail_address ?? user.email);
+
+  const requiredSteps = [hasSlug, hasReplyTo];
+  const recommendedSteps = [paymentLinks.length > 0, calendarLinks.length > 0, hasLogo];
+  const integrationSteps = [calendarConnected, hasStripe, hasCalcom];
+
+  const requiredComplete = requiredSteps.filter(Boolean).length;
+  const recommendedComplete = recommendedSteps.filter(Boolean).length;
+  const integrationsComplete = integrationSteps.filter(Boolean).length;
+  const stepsComplete = requiredComplete + recommendedComplete + integrationsComplete;
+  const totalSteps = requiredSteps.length + recommendedSteps.length + integrationSteps.length;
+  const requiredDone = requiredComplete === requiredSteps.length;
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -137,7 +146,7 @@ export default async function SetupPage({
               </div>
             )}
 
-            {/* How email works — always visible, no setup needed */}
+            {/* How email works — explains the flow, points to the required reply-to step */}
             <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-6">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -145,7 +154,7 @@ export default async function SetupPage({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-on-surface">How email works in FlashBooker</p>
-                  <p className="text-xs text-on-surface-variant mt-0.5">No setup required — it just works out of the box.</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">Two things to confirm below. No SMTP, no Gmail login, no DNS.</p>
                 </div>
               </div>
 
@@ -153,7 +162,7 @@ export default async function SetupPage({
                 <div className="flex gap-3">
                   <span className="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">1</span>
                   <p className="text-on-surface leading-relaxed pt-0.5">
-                    You click <span className="font-medium">Send email</span> on a booking. We send it through our email system so it always gets delivered — spam folders aren&apos;t an issue.
+                    You click <span className="font-medium">Send email</span> on a booking. FlashBooker sends it for you — no third-party tools to connect.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -177,7 +186,7 @@ export default async function SetupPage({
                       {artist?.gmail_address || user.email}
                     </p>
                     <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
-                      You can reply from Gmail, Outlook, your phone — wherever. FlashBooker doesn&apos;t need to be open for you to keep talking to clients.{" "}
+                      You reply from Gmail, Outlook, your phone — wherever. FlashBooker doesn&apos;t need to be open for you to keep talking to clients.{" "}
                       <a href="/settings" className="text-primary hover:underline">Change this address →</a>
                     </p>
                   </div>
@@ -189,6 +198,9 @@ export default async function SetupPage({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-on-surface">{stepsComplete} of {totalSteps} steps complete</p>
+                {requiredDone && stepsComplete < totalSteps && (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">Required done — keep going!</span>
+                )}
                 {stepsComplete === totalSteps && (
                   <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">All set!</span>
                 )}
@@ -201,57 +213,80 @@ export default async function SetupPage({
               </div>
             </div>
 
-            {/* Setup steps */}
+            {/* REQUIRED — bare minimum to accept bookings */}
             <section className="space-y-3">
-              <h2 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Setup steps</h2>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Required</h2>
+                <span className="text-[10px] font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Bare minimum</span>
+              </div>
+              <p className="text-xs text-on-surface-variant -mt-1 mb-2">These two make the app work. Everything else is optional.</p>
 
               <StepCard
-                done={Boolean(artist?.slug)}
+                done={hasSlug}
                 title="Set your booking URL"
-                description="Choose a unique slug so clients can find your booking form."
-                note={artist?.slug ? `inkflow.app/${artist.slug}/book` : undefined}
+                description="The link you share with clients so they can submit inquiries. Without this, nothing else matters."
+                note={artist?.slug ? `flashbooker.app/${artist.slug}/book` : undefined}
                 action="Set URL"
                 actionHref="/settings"
               />
 
               <StepCard
-                done={hasLogo}
-                title="Add your logo"
-                description="Upload your studio logo — it appears on the booking form and emails."
-                action="Upload logo"
+                done={hasReplyTo}
+                title="Set your reply-to email"
+                description="Where client replies land. Usually your Gmail, Outlook, or whatever you check most often."
+                note={hasReplyTo ? (artist?.gmail_address || user.email) : undefined}
+                action="Set reply-to"
                 actionHref="/settings"
               />
+            </section>
 
-              <StepCard
-                done={calendarConnected}
-                title="Connect your calendar"
-                description="Sync confirmed appointments to your Google Calendar. Clients reply to your own email address, so your conversations stay in your inbox."
-                action={googleConfigured ? "Connect Calendar" : "Configure OAuth first"}
-                actionHref={googleConfigured ? "/api/auth/google/connect" : "/settings"}
-              />
+            {/* RECOMMENDED — flows assume these are set */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Recommended</h2>
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Best experience</span>
+              </div>
+              <p className="text-xs text-on-surface-variant -mt-1 mb-2">These make your booking flow feel finished. Add them when you&apos;re ready.</p>
 
               <StepCard
                 done={paymentLinks.length > 0}
                 title="Add payment links"
-                description="Add your Stripe, Venmo, or Cash App links — sent automatically when requesting deposits."
+                description="Stripe, Venmo, or Cash App. Sent to the client automatically when you accept a booking and request a deposit."
                 note={paymentLinks.length > 0 ? `${paymentLinks.length} link${paymentLinks.length !== 1 ? "s" : ""} saved` : undefined}
-                action="Add payment links"
-                actionHref="/settings"
+                action="Add links"
+                actionHref="/payment-links"
               />
 
               <StepCard
                 done={calendarLinks.length > 0}
-                title="Add calendar links"
-                description="Add your Cal.com or Calendly links — included automatically when sending the calendar link email."
+                title="Add scheduling links"
+                description="Your Cal.com or Calendly link. Sent automatically once a client pays their deposit so they can pick a time."
                 note={calendarLinks.length > 0 ? `${calendarLinks.length} link${calendarLinks.length !== 1 ? "s" : ""} saved` : undefined}
-                action="Add calendar links"
+                action="Add links"
                 actionHref="/settings"
               />
 
               <StepCard
+                done={hasLogo}
+                title="Upload your logo"
+                description="Shown on your booking form and at the top of client emails. Makes your bookings feel on-brand."
+                action="Upload logo"
+                actionHref="/settings"
+              />
+            </section>
+
+            {/* POWER INTEGRATIONS — save time with automations */}
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Power integrations</h2>
+                <span className="text-[10px] font-semibold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full uppercase tracking-wide">Optional</span>
+              </div>
+              <p className="text-xs text-on-surface-variant -mt-1 mb-2">Connect API keys to automate the boring parts — no more copy-pasting deposit amounts or creating calendar events.</p>
+
+              <StepCard
                 done={hasStripe}
-                title="Connect Stripe API"
-                description="Generate payment links directly from bookings — no need to leave the dashboard to create a Stripe link."
+                title="Connect Stripe for automated deposits"
+                description="Generate per-booking payment links without leaving the dashboard. We auto-mark bookings as paid when your client pays."
                 note={hasStripe ? "Stripe API key saved" : undefined}
                 action="Add Stripe key"
                 actionHref="/settings?tab=integrations"
@@ -259,11 +294,19 @@ export default async function SetupPage({
 
               <StepCard
                 done={hasCalcom}
-                title="Connect Cal.com API"
-                description="Create booking slots and send calendar invites directly from confirmed appointments."
+                title="Connect Cal.com for one-click scheduling"
+                description="Pre-fills the client&apos;s name and email in the Cal.com link — they just pick a time. Skip the copy-paste dance."
                 note={hasCalcom ? "Cal.com API key saved" : undefined}
                 action="Add Cal.com key"
                 actionHref="/settings?tab=integrations"
+              />
+
+              <StepCard
+                done={calendarConnected}
+                title="Sync appointments to Google Calendar"
+                description="Confirmed bookings show up on your personal Google Calendar automatically. Skip if you use a different calendar — you can still use FlashBooker&apos;s built-in calendar view."
+                action={googleConfigured ? "Connect Calendar" : "Not configured"}
+                actionHref={googleConfigured ? "/api/auth/google/connect" : "/settings"}
               />
             </section>
 

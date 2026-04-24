@@ -277,7 +277,7 @@ export default async function OnboardingPage({
 
           <div className="mb-8">
             <h2 className="text-3xl font-heading tracking-tight mb-2">How email works</h2>
-            <p className="text-on-surface-variant">Here&apos;s what happens when you send a client an email through FlashBooker — no setup needed.</p>
+            <p className="text-on-surface-variant">Here&apos;s what happens when you send a client an email — confirm your reply-to address below to finish.</p>
           </div>
 
           {/* Visual explainer */}
