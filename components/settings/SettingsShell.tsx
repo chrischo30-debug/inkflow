@@ -19,7 +19,7 @@ const TABS = [
   { id: "reminders",    label: "Reminders",    icon: Bell },
 ] as const;
 
-type TabId = typeof TABS[number]["id"];
+export type TabId = typeof TABS[number]["id"];
 
 export interface SettingsShellProps {
   artistId: string;
@@ -40,10 +40,11 @@ export interface SettingsShellProps {
   kitFormId: string;
   reminderEnabled: boolean;
   reminderHoursBefore: number;
+  initialTab?: TabId;
 }
 
 export function SettingsShell(props: SettingsShellProps) {
-  const [tab, setTab] = useState<TabId>("profile");
+  const [tab, setTab] = useState<TabId>(props.initialTab ?? "profile");
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">

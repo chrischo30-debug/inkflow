@@ -119,10 +119,9 @@ const STRIPE_STEPS = [
 
 const CALCOM_STEPS = [
   "Go to cal.com and create a free account (or log in).",
-  "Click your avatar or profile picture in the top right, then select Settings.",
-  "In the left menu, click Security.",
-  "Scroll down to API keys and click Add.",
-  "Give the key any name (e.g. FlashBooker), then click Save.",
+  "Click Settings in the bottom-right of the sidebar.",
+  "In the left menu, go to Developer → API keys.",
+  "Click Add to create a new key — give it any name (e.g. FlashBooker), then Save.",
   "Copy the key shown — you won't be able to see it again.",
   "Paste it in the field above and click Save.",
 ];

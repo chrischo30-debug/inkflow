@@ -1,11 +1,20 @@
 import { Sidebar } from "@/components/layout/Sidebar";
-import { SettingsShell } from "@/components/settings/SettingsShell";
+import { SettingsShell, type TabId } from "@/components/settings/SettingsShell";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
 
-export default async function SettingsPage() {
+const ALLOWED_TABS: TabId[] = ["profile", "integrations", "webhooks", "emails", "reminders"];
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
+  const initialTab = ALLOWED_TABS.includes(params.tab as TabId) ? (params.tab as TabId) : undefined;
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return redirect("/login");
@@ -64,6 +73,7 @@ export default async function SettingsPage() {
         kitFormId={extended.kit_form_id ?? ""}
         reminderEnabled={extended.reminder_enabled ?? false}
         reminderHoursBefore={extended.reminder_hours_before ?? 24}
+        initialTab={initialTab}
       />
     </div>
   );
