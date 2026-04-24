@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { GripVertical, Trash2, Plus, X } from "lucide-react";
 import {
   BaseFieldInputType,
   CustomFieldType,
@@ -60,6 +61,44 @@ const baseRef = (key: FormFieldKey) => `base:${key}`;
 const customRef = (key: string) => `custom:${key}`;
 type ItemRef = string;
 
+type EditDraft =
+  | {
+      kind: "base";
+      key: FormFieldKey;
+      label: string;
+      placeholder: string;
+      description: string;
+      input_type: BaseFieldInputType;
+      options: string[];
+      required: boolean;
+    }
+  | {
+      kind: "custom";
+      key: string;
+      label: string;
+      type: CustomFieldType;
+      placeholder: string;
+      description: string;
+      options: string[];
+      required: boolean;
+    };
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      className={`relative flex w-9 h-5 rounded-full transition-colors shrink-0 cursor-pointer ${on ? "bg-primary" : "bg-outline-variant/35"}`}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${on ? "translate-x-4" : ""}`} />
+    </button>
+  );
+}
+
+const inputCls = "w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary";
+const labelHeadingCls = "block text-xs font-semibold text-on-surface-variant uppercase tracking-wide";
 
 export function FormBuilderSettings({
   initialFields,
@@ -95,6 +134,7 @@ export function FormBuilderSettings({
   const [isSaving, setIsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [draggingRef, setDraggingRef] = useState<ItemRef | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const openPreviewRef = useRef<() => void>(() => {});
   const openPreview = () => {
     const state = { form_header: formHeader, form_subtext: formSubtext, form_button_text: formButtonText, form_confirmation_message: confirmationMessage, form_success_redirect_url: successRedirectUrl };
@@ -103,8 +143,6 @@ export function FormBuilderSettings({
   openPreviewRef.current = openPreview;
   useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
   const [showAddComposer, setShowAddComposer] = useState(false);
-  const [expandedBaseKey, setExpandedBaseKey] = useState<FormFieldKey | null>(null);
-  const [expandedCustomKey, setExpandedCustomKey] = useState<string | null>(null);
 
   const [draftField, setDraftField] = useState<CustomFormFieldConfig>({
     field_key: "",
@@ -205,19 +243,6 @@ export function FormBuilderSettings({
     setEnabledRef(fromRef, enabled);
   };
 
-  const toggleRequiredRef = (ref: ItemRef) => {
-    const [kind, key] = ref.split(":");
-    if (kind === "base") {
-      const field = baseMap.get(key as FormFieldKey);
-      if (!field || !field.enabled) return;
-      updateField(field.field_key, { required: !field.required });
-      return;
-    }
-    const field = customMap.get(key);
-    if (!field || !field.enabled) return;
-    updateCustom(field.field_key, { required: !field.required });
-  };
-
   const confirmRemoveFromForm = (label: string) =>
     window.confirm(`Remove "${label}" from the form? You can add it back from Inactive Fields.`);
 
@@ -227,108 +252,87 @@ export function FormBuilderSettings({
   const removeCustom = (key: string) => {
     setCustomFields((prev) => prev.filter((field) => field.field_key !== key));
     setFieldOrder((prev) => prev.filter((ref) => ref !== customRef(key)));
-    if (expandedCustomKey === key) setExpandedCustomKey(null);
+    if (editDraft?.kind === "custom" && editDraft.key === key) setEditDraft(null);
   };
 
-  const addOption = (key: string) => {
-    setCustomFields((prev) =>
-      prev.map((field) =>
-        field.field_key === key
-          ? { ...field, options: [...(field.options ?? []), `Option ${(field.options?.length ?? 0) + 1}`] }
-          : field
-      )
-    );
+  const openEdit = (ref: ItemRef) => {
+    const [kind, key] = ref.split(":");
+    if (kind === "base") {
+      const field = baseMap.get(key as FormFieldKey);
+      if (!field) return;
+      setEditDraft({
+        kind: "base",
+        key: key as FormFieldKey,
+        label: field.label,
+        placeholder: field.placeholder ?? "",
+        description: field.description ?? "",
+        input_type: field.input_type,
+        options: [...(field.options ?? [])],
+        required: field.required,
+      });
+    } else {
+      const field = customMap.get(key);
+      if (!field) return;
+      setEditDraft({
+        kind: "custom",
+        key,
+        label: field.label,
+        type: field.type,
+        placeholder: field.placeholder ?? "",
+        description: field.description ?? "",
+        options: [...(field.options ?? [])],
+        required: field.required,
+      });
+    }
   };
 
-  const updateOption = (key: string, index: number, value: string) => {
-    setCustomFields((prev) =>
-      prev.map((field) => {
-        if (field.field_key !== key) return field;
-        const options = [...(field.options ?? [])];
-        options[index] = value;
-        return { ...field, options };
-      })
-    );
+  const cancelEdit = () => setEditDraft(null);
+
+  const saveEdit = () => {
+    if (!editDraft) return;
+    if (editDraft.kind === "base") {
+      updateField(editDraft.key, {
+        label: editDraft.label,
+        placeholder: editDraft.placeholder,
+        description: editDraft.description,
+        input_type: editDraft.input_type,
+        options: editDraft.options,
+        required: editDraft.required,
+      });
+    } else {
+      updateCustom(editDraft.key, {
+        label: editDraft.label,
+        type: editDraft.type,
+        placeholder: editDraft.placeholder,
+        description: editDraft.description,
+        options: editDraft.options,
+        required: editDraft.required,
+      });
+    }
+    setEditDraft(null);
   };
 
-  const removeOption = (key: string, index: number) => {
-    setCustomFields((prev) =>
-      prev.map((field) => {
-        if (field.field_key !== key) return field;
-        const options = [...(field.options ?? [])];
-        options.splice(index, 1);
-        return { ...field, options };
-      })
-    );
-  };
+  const patchDraft = (patch: Partial<EditDraft>) =>
+    setEditDraft((prev) => (prev ? { ...prev, ...patch } as EditDraft : null));
 
-  const addBaseOption = (key: FormFieldKey) => {
-    setFields((prev) =>
-      prev.map((field) =>
-        field.field_key === key
-          ? { ...field, options: [...(field.options ?? []), `Option ${(field.options?.length ?? 0) + 1}`] }
-          : field
-      )
-    );
-  };
+  const addDraftOption = () =>
+    setEditDraft((prev) => prev ? { ...prev, options: [...prev.options, `Option ${prev.options.length + 1}`] } : null);
 
-  const updateBaseOption = (key: FormFieldKey, index: number, value: string) => {
-    setFields((prev) =>
-      prev.map((field) => {
-        if (field.field_key !== key) return field;
-        const options = [...(field.options ?? [])];
-        options[index] = value;
-        return { ...field, options };
-      })
-    );
-  };
-
-  const removeBaseOption = (key: FormFieldKey, index: number) => {
-    setFields((prev) =>
-      prev.map((field) => {
-        if (field.field_key !== key) return field;
-        const options = [...(field.options ?? [])];
-        options.splice(index, 1);
-        return { ...field, options };
-      })
-    );
-  };
-
-  const addDraftOption = () => {
-    setDraftField((prev) => ({
-      ...prev,
-      options: [...(prev.options ?? []), `Option ${(prev.options?.length ?? 0) + 1}`],
-    }));
-  };
-
-  const updateDraftOption = (index: number, value: string) => {
-    setDraftField((prev) => {
-      const options = [...(prev.options ?? [])];
+  const updateDraftOption = (index: number, value: string) =>
+    setEditDraft((prev) => {
+      if (!prev) return null;
+      const options = [...prev.options];
       options[index] = value;
       return { ...prev, options };
     });
-  };
 
-  const removeDraftOption = (index: number) => {
-    setDraftField((prev) => {
-      const options = [...(prev.options ?? [])];
+  const removeDraftOption = (index: number) =>
+    setEditDraft((prev) => {
+      if (!prev) return null;
+      const options = [...prev.options];
       options.splice(index, 1);
       return { ...prev, options };
     });
-  };
-
-  const resetDraftField = () => {
-    setDraftField({
-      field_key: "",
-      label: "",
-      type: "text",
-      enabled: true,
-      required: false,
-      sort_order: 0,
-      placeholder: "",
-      options: [],
-    });
-  };
 
   const addCustomFieldToForm = () => {
     const label = draftField.label.trim();
@@ -363,6 +367,10 @@ export function FormBuilderSettings({
     setShowAddComposer(false);
     resetDraftField();
     setMessage("Custom field added. Drag to reorder, then Save Form Builder.");
+  };
+
+  const resetDraftField = () => {
+    setDraftField({ field_key: "", label: "", type: "text", enabled: true, required: false, sort_order: 0, placeholder: "", options: [] });
   };
 
   const save = async () => {
@@ -434,163 +442,152 @@ export function FormBuilderSettings({
     window.setTimeout(() => setJustSaved(false), 1800);
   };
 
-  const renderFieldCard = (ref: ItemRef, index: number) => {
+  const renderFieldCard = (ref: ItemRef) => {
     const [kind, key] = ref.split(":");
+    const isEditing = editDraft !== null && (
+      (editDraft.kind === "base" && kind === "base" && editDraft.key === key) ||
+      (editDraft.kind === "custom" && kind === "custom" && editDraft.key === key)
+    );
 
     if (kind === "base") {
       const field = baseMap.get(key as FormFieldKey);
       if (!field) return null;
       const isEmailField = field.field_key === "email";
-      const isPhoneField = field.field_key === "phone";
-      const isLockedContactField = isEmailField || isPhoneField;
+      const isLockedContactField = isEmailField || field.field_key === "phone";
       const baseTypeOptions = BASE_INPUT_TYPES.filter(
         (type) => type !== "file_or_link" || field.field_key === "reference_images"
       );
-      const isExpanded = expandedBaseKey === field.field_key;
+      const isActive = field.enabled;
+
       return (
         <div
           key={ref}
           draggable
           onDragStart={() => setDraggingRef(ref)}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
-            if (draggingRef) moveRef(draggingRef, ref, field.enabled);
-            setDraggingRef(null);
-          }}
+          onDrop={() => { if (draggingRef) moveRef(draggingRef, ref, field.enabled); setDraggingRef(null); }}
           onDragEnd={() => setDraggingRef(null)}
-          className={`rounded-lg border p-3 cursor-move ${
+          className={`rounded-xl border transition-all ${
             draggingRef === ref
-              ? "border-primary/60 bg-surface-container-high"
-              : "border-outline-variant/20 bg-surface-container-low"
+              ? "border-primary/60 bg-primary/5 shadow-md"
+              : isActive
+              ? "border-outline-variant/25 bg-surface-container-low"
+              : "border-outline-variant/15 bg-surface-container-lowest"
           }`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <p className="font-semibold text-on-surface">{field.label || FIELD_LABELS[field.field_key]}</p>
-            <p className="text-xs text-on-surface-variant">#{index + 1}</p>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {field.enabled && !isEmailField && (
-                <Button
-                  type="button"
-                  size="lg"
-                  variant={field.required ? "default" : "outline"}
-                  onClick={() => toggleRequiredRef(ref)}
-                >
-                  {field.required ? "Required: On" : "Required: Off"}
-                </Button>
-              )}
-              {isEmailField && (
-                <span className="text-xs font-medium text-on-surface-variant">
-                  Always required
-                </span>
-              )}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  setExpandedBaseKey((prev) =>
-                    prev === field.field_key ? null : field.field_key
-                  )
-                }
-              >
-                {isExpanded ? "Done" : "Edit"}
-              </Button>
+          {/* Header row — click to expand */}
+          <div
+            className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none ${isEditing ? "border-b border-outline-variant/15" : ""}`}
+            onClick={() => isEditing ? cancelEdit() : openEdit(ref)}
+          >
+            <GripVertical
+              className="w-4 h-4 text-outline-variant/35 shrink-0 cursor-grab"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <span className={`text-sm font-semibold truncate ${isActive ? "text-on-surface" : "text-on-surface-variant"}`}>
+                {field.label || FIELD_LABELS[field.field_key]}
+              </span>
+              <span className="text-[10px] font-medium text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded-full border border-outline-variant/15 shrink-0 hidden sm:inline">
+                {BASE_INPUT_TYPE_LABELS[field.input_type] ?? field.input_type}
+              </span>
             </div>
-            <Button
-              type="button"
-              size="lg"
-              variant={field.enabled ? "destructive" : "secondary"}
-              disabled={isEmailField}
-              onClick={() => {
-                if (field.enabled && !confirmRemoveFromForm(FIELD_LABELS[field.field_key])) return;
-                moveRefToSectionEnd(ref, !field.enabled);
-              }}
-            >
-              {field.enabled ? "Remove from Form" : "Add to Form"}
-            </Button>
+            {!isEmailField && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <Toggle
+                  on={isActive}
+                  onChange={(v) => {
+                    if (!v && !confirmRemoveFromForm(FIELD_LABELS[field.field_key])) return;
+                    if (isEditing) cancelEdit();
+                    moveRefToSectionEnd(ref, v);
+                  }}
+                />
+              </div>
+            )}
           </div>
 
-          {isExpanded && (
-            <div className="pt-2 mt-3 border-t border-outline-variant/20 space-y-3">
-              <label className="text-sm font-semibold text-on-surface block">
+          {/* Expanded edit panel */}
+          {isEditing && editDraft.kind === "base" && (
+            <div className="px-4 py-4 space-y-3">
+              <label className={labelHeadingCls}>
                 Label
-                <input
-                  className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                  value={field.label}
-                  onChange={(e) =>
-                    updateField(field.field_key, { label: e.target.value })
-                  }
+                <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                  value={editDraft.label}
+                  onChange={(e) => patchDraft({ label: e.target.value })}
                 />
               </label>
               {isLockedContactField ? (
-                <p className="text-sm text-on-surface-variant rounded-md border border-outline-variant/20 bg-surface-container px-3 py-2">
+                <p className="text-xs text-on-surface-variant rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2">
                   Built-in validation is always enabled for this field type.
                 </p>
               ) : (
                 <>
-                  <label className="text-sm font-semibold text-on-surface block">
+                  <label className={labelHeadingCls}>
                     Placeholder
-                    <input
-                      className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                      value={field.placeholder ?? ""}
-                      onChange={(e) =>
-                        updateField(field.field_key, { placeholder: e.target.value })
-                      }
+                    <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                      value={editDraft.placeholder}
+                      onChange={(e) => patchDraft({ placeholder: e.target.value })}
                       placeholder="Optional hint for clients"
                     />
                   </label>
-                  <label className="text-sm font-semibold text-on-surface block">
+                  <label className={labelHeadingCls}>
+                    Description
+                    <textarea className={`${inputCls} mt-1 font-normal normal-case tracking-normal resize-none`}
+                      rows={2}
+                      value={editDraft.description}
+                      onChange={(e) => patchDraft({ description: e.target.value })}
+                      placeholder="Optional subtext shown below the label"
+                    />
+                  </label>
+                  <label className={labelHeadingCls}>
                     Field Type
-                    <select
-                      className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                      value={field.input_type}
-                      onChange={(e) =>
-                        updateField(field.field_key, {
-                          input_type: e.target.value as BaseFieldInputType,
-                          options: e.target.value === "select" ? field.options ?? [] : [],
-                        })
-                      }
-                    >
+                    <select className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                      value={editDraft.input_type}
+                      onChange={(e) => patchDraft({
+                        input_type: e.target.value as BaseFieldInputType,
+                        options: e.target.value === "select" ? editDraft.options : [],
+                      })}>
                       {baseTypeOptions.map((type) => (
-                        <option key={type} value={type}>
-                          {BASE_INPUT_TYPE_LABELS[type]}
-                        </option>
+                        <option key={type} value={type}>{BASE_INPUT_TYPE_LABELS[type]}</option>
                       ))}
                     </select>
                   </label>
                 </>
               )}
-              {!isLockedContactField && field.input_type === "select" && (
+              {!isLockedContactField && editDraft.input_type === "select" && (
                 <div className="space-y-2">
-                  <p className="text-sm font-semibold text-on-surface">Dropdown Choices</p>
-                  {(field.options ?? []).map((option, optionIndex) => (
-                    <div key={`${field.field_key}-base-opt-${optionIndex}`} className="flex items-center gap-2">
-                      <input
-                        className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                        value={option}
-                        onChange={(e) =>
-                          updateBaseOption(field.field_key, optionIndex, e.target.value)
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => removeBaseOption(field.field_key, optionIndex)}
-                      >
-                        Remove
-                      </Button>
+                  <p className={labelHeadingCls}>Dropdown Choices</p>
+                  {editDraft.options.map((option, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input className={inputCls} value={option} onChange={(e) => updateDraftOption(i, e.target.value)} />
+                      <button type="button" onClick={() => removeDraftOption(i)}
+                        className="p-1.5 rounded-lg text-on-surface-variant hover:text-destructive hover:bg-destructive/10 transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => addBaseOption(field.field_key)}
-                  >
-                    Add Choice
-                  </Button>
+                  <button type="button" onClick={addDraftOption}
+                    className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> Add choice
+                  </button>
                 </div>
               )}
+              {!isEmailField && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <Toggle on={editDraft.required} onChange={(v) => patchDraft({ required: v })} />
+                  <span className="text-sm text-on-surface-variant">Required</span>
+                </label>
+              )}
+              <div className="flex justify-end gap-2 pt-1 border-t border-outline-variant/15">
+                <button type="button" onClick={cancelEdit}
+                  className="px-3 py-1.5 rounded-lg text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+                  Cancel
+                </button>
+                <button type="button" onClick={saveEdit}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity">
+                  Save
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -599,7 +596,7 @@ export function FormBuilderSettings({
 
     const field = customMap.get(key);
     if (!field) return null;
-    const isExpanded = expandedCustomKey === field.field_key;
+    const isActive = field.enabled;
 
     return (
       <div
@@ -607,124 +604,130 @@ export function FormBuilderSettings({
         draggable
         onDragStart={() => setDraggingRef(ref)}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={() => {
-          if (draggingRef) moveRef(draggingRef, ref, field.enabled);
-          setDraggingRef(null);
-        }}
+        onDrop={() => { if (draggingRef) moveRef(draggingRef, ref, field.enabled); setDraggingRef(null); }}
         onDragEnd={() => setDraggingRef(null)}
-        className={`rounded-lg border p-4 cursor-move space-y-3 ${
+        className={`rounded-xl border transition-all ${
           draggingRef === ref
-            ? "border-primary/60 bg-surface-container-high"
-            : "border-outline-variant/20 bg-surface-container-low"
+            ? "border-primary/60 bg-primary/5 shadow-md"
+            : isActive
+            ? "border-outline-variant/25 bg-surface-container-low"
+            : "border-outline-variant/15 bg-surface-container-lowest"
         }`}
       >
-        <div className="flex items-center justify-between">
-          <p className="font-semibold text-on-surface">Custom: {field.label}</p>
-          <p className="text-xs text-on-surface-variant">#{index + 1}</p>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {field.enabled && (
-              <Button
-                type="button"
-                size="lg"
-                variant={field.required ? "default" : "outline"}
-                onClick={() => toggleRequiredRef(ref)}
-              >
-                {field.required ? "Required: On" : "Required: Off"}
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setExpandedCustomKey((prev) => (prev === field.field_key ? null : field.field_key))}
-            >
-              {isExpanded ? "Done" : "Edit"}
-            </Button>
+        {/* Header row — click to expand */}
+        <div
+          className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none ${isEditing ? "border-b border-outline-variant/15" : ""}`}
+          onClick={() => isEditing ? cancelEdit() : openEdit(ref)}
+        >
+          <GripVertical
+            className="w-4 h-4 text-outline-variant/35 shrink-0 cursor-grab"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            <span className={`text-sm font-semibold truncate ${isActive ? "text-on-surface" : "text-on-surface-variant"}`}>
+              {field.label}
+            </span>
+            <span className="text-[10px] font-medium text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded-full border border-outline-variant/15 shrink-0 hidden sm:inline">
+              custom
+            </span>
+            <span className="text-[10px] font-medium text-on-surface-variant/60 bg-surface-container px-1.5 py-0.5 rounded-full border border-outline-variant/15 shrink-0 hidden md:inline">
+              {CUSTOM_TYPE_LABELS[field.type]}
+            </span>
           </div>
-          <Button
-            type="button"
-            size="lg"
-            variant={field.enabled ? "destructive" : "secondary"}
-            onClick={() => {
-              if (field.enabled && !confirmRemoveFromForm(field.label)) return;
-              moveRefToSectionEnd(ref, !field.enabled);
-            }}
-          >
-            {field.enabled ? "Remove from Form" : "Add to Form"}
-          </Button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <Toggle
+              on={isActive}
+              onChange={(v) => {
+                if (!v && !confirmRemoveFromForm(field.label)) return;
+                if (isEditing) cancelEdit();
+                moveRefToSectionEnd(ref, v);
+              }}
+            />
+          </div>
         </div>
 
-        {isExpanded && (
-          <div className="pt-2 border-t border-outline-variant/20 space-y-3">
-            <p className="text-sm font-semibold text-on-surface">Custom Field Editor</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="text-sm font-semibold text-on-surface">
+        {/* Expanded edit panel */}
+        {isEditing && editDraft.kind === "custom" && (
+          <div className="px-4 py-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <label className={labelHeadingCls}>
                 Label
-                <input
-                  className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                  value={field.label}
-                  onChange={(e) => updateCustom(field.field_key, { label: e.target.value })}
+                <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                  value={editDraft.label}
+                  onChange={(e) => patchDraft({ label: e.target.value })}
                 />
               </label>
-              <label className="text-sm font-semibold text-on-surface">
+              <label className={labelHeadingCls}>
                 Type
-                <select
-                  className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                  value={field.type}
-                  onChange={(e) => updateCustom(field.field_key, { type: e.target.value as CustomFieldType })}
-                >
+                <select className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                  value={editDraft.type}
+                  onChange={(e) => patchDraft({
+                    type: e.target.value as CustomFieldType,
+                    options: e.target.value === "select" ? editDraft.options : [],
+                  })}>
                   {CUSTOM_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {CUSTOM_TYPE_LABELS[type]}
-                    </option>
+                    <option key={type} value={type}>{CUSTOM_TYPE_LABELS[type]}</option>
                   ))}
                 </select>
               </label>
             </div>
-
-            <label className="text-sm font-semibold text-on-surface block">
+            <label className={labelHeadingCls}>
               Placeholder
-              <input
-                className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                value={field.placeholder ?? ""}
-                onChange={(e) => updateCustom(field.field_key, { placeholder: e.target.value })}
+              <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                value={editDraft.placeholder}
+                onChange={(e) => patchDraft({ placeholder: e.target.value })}
                 placeholder="Optional hint for clients"
               />
             </label>
-
-            {field.type === "select" && (
+            <label className={labelHeadingCls}>
+              Description
+              <textarea className={`${inputCls} mt-1 font-normal normal-case tracking-normal resize-none`}
+                rows={2}
+                value={editDraft.description}
+                onChange={(e) => patchDraft({ description: e.target.value })}
+                placeholder="Optional subtext shown below the label"
+              />
+            </label>
+            {editDraft.type === "select" && (
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-on-surface">Dropdown Choices</p>
-                {(field.options ?? []).map((option, optionIndex) => (
-                  <div key={`${field.field_key}-opt-${optionIndex}`} className="flex items-center gap-2">
-                    <input
-                      className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                      value={option}
-                      onChange={(e) => updateOption(field.field_key, optionIndex, e.target.value)}
-                    />
-                    <Button type="button" variant="destructive" onClick={() => removeOption(field.field_key, optionIndex)}>
-                      Remove
-                    </Button>
+                <p className={labelHeadingCls}>Dropdown Choices</p>
+                {editDraft.options.map((option, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input className={inputCls} value={option} onChange={(e) => updateDraftOption(i, e.target.value)} />
+                    <button type="button" onClick={() => removeDraftOption(i)}
+                      className="p-1.5 rounded-lg text-on-surface-variant hover:text-destructive hover:bg-destructive/10 transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
-                <Button type="button" variant="secondary" onClick={() => addOption(field.field_key)}>
-                  Add Choice
-                </Button>
+                <button type="button" onClick={addDraftOption}
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add choice
+                </button>
               </div>
             )}
-
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                if (!confirmDeleteCustomField(field.label)) return;
-                removeCustom(field.field_key);
-              }}
-            >
-              Delete Field
-            </Button>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <Toggle on={editDraft.required} onChange={(v) => patchDraft({ required: v })} />
+              <span className="text-sm text-on-surface-variant">Required</span>
+            </label>
+            <div className="flex items-center justify-between pt-1 border-t border-outline-variant/15">
+              <button type="button"
+                onClick={() => { if (!confirmDeleteCustomField(field.label)) return; removeCustom(field.field_key); }}
+                className="flex items-center gap-1.5 text-xs text-destructive/70 hover:text-destructive transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete field
+              </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={cancelEdit}
+                  className="px-3 py-1.5 rounded-lg text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+                  Cancel
+                </button>
+                <button type="button" onClick={saveEdit}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity">
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -735,234 +738,199 @@ export function FormBuilderSettings({
   const inactiveRefs = fieldOrder.filter((ref) => !isEnabledRef(ref));
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm">
-      <h3 className="text-lg font-heading font-semibold mb-2 text-on-surface">Public Form Builder</h3>
-      <p className="text-sm text-on-surface-variant mb-8 w-full leading-relaxed">
-        Toggle which fields appear on your public booking form and choose which ones are required.
-      </p>
-
-      <div className="mb-8 space-y-4 rounded-lg border border-outline-variant/20 bg-surface-container-low p-4">
-        <h4 className="font-heading font-semibold text-on-surface">Form Appearance</h4>
-        <label className="text-sm font-semibold text-on-surface block">
-          Header
-          <input
-            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-            value={formHeader}
-            onChange={(e) => setFormHeader(e.target.value)}
-            placeholder="Book with {your name}"
-          />
-        </label>
-        <label className="text-sm font-semibold text-on-surface block">
-          Subtext
-          <textarea
-            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 min-h-[64px] resize-y"
-            value={formSubtext}
-            onChange={(e) => setFormSubtext(e.target.value)}
-            placeholder="Fill out the form below to request an appointment..."
-          />
-        </label>
-        <label className="text-sm font-semibold text-on-surface block">
-          Submit Button Text
-          <input
-            className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-            value={formButtonText}
-            onChange={(e) => setFormButtonText(e.target.value)}
-            placeholder="Submit Inquiry"
-          />
-        </label>
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-on-surface">After Submission</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setAfterSubmit("message")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "message" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}
-            >
-              Show message
-            </button>
-            <button
-              type="button"
-              onClick={() => setAfterSubmit("redirect")}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "redirect" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}
-            >
-              Redirect to URL
-            </button>
-          </div>
-          {afterSubmit === "message" ? (
-            <textarea
-              className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 min-h-[64px] resize-y text-sm"
-              value={confirmationMessage}
-              onChange={(e) => setConfirmationMessage(e.target.value)}
-              placeholder="Thanks for reaching out! I'll review your request and get back to you shortly."
-            />
-          ) : (
-            <input
-              className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1 text-sm"
-              value={successRedirectUrl}
-              onChange={(e) => setSuccessRedirectUrl(e.target.value)}
-              placeholder="https://yourwebsite.com/thank-you"
-              type="url"
-            />
-          )}
-        </div>
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm space-y-8">
+      <div>
+        <h3 className="text-lg font-heading font-semibold mb-1 text-on-surface">Public Form Builder</h3>
+        <p className="text-sm text-on-surface-variant leading-relaxed">
+          Toggle which fields appear on your public booking form and choose which ones are required.
+        </p>
       </div>
 
-      <div className="space-y-3 mb-6">
-        <h4 className="font-heading font-semibold text-on-surface">Active Fields</h4>
+      {/* Form Appearance */}
+      <section className="space-y-3">
+        <h4 className="text-sm font-semibold text-on-surface">Form Appearance</h4>
+        <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low overflow-hidden divide-y divide-outline-variant/15">
+          <div className="p-4 space-y-1.5">
+            <label className={labelHeadingCls}>Header</label>
+            <input className={inputCls} value={formHeader} onChange={(e) => setFormHeader(e.target.value)}
+              placeholder="Book with {your name}" />
+          </div>
+          <div className="p-4 space-y-1.5">
+            <label className={labelHeadingCls}>Subtext</label>
+            <textarea className={`${inputCls} min-h-[64px] resize-y`}
+              value={formSubtext} onChange={(e) => setFormSubtext(e.target.value)}
+              placeholder="Fill out the form below to request an appointment..." />
+          </div>
+          <div className="p-4 space-y-1.5">
+            <label className={labelHeadingCls}>Submit Button Text</label>
+            <input className={inputCls} value={formButtonText} onChange={(e) => setFormButtonText(e.target.value)}
+              placeholder="Submit Inquiry" />
+          </div>
+          <div className="p-4 space-y-3">
+            <p className={labelHeadingCls}>After Submission</p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setAfterSubmit("message")}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "message" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}>
+                Show message
+              </button>
+              <button type="button" onClick={() => setAfterSubmit("redirect")}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${afterSubmit === "redirect" ? "border-primary/60 bg-primary/5 text-on-surface" : "border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60"}`}>
+                Redirect to URL
+              </button>
+            </div>
+            {afterSubmit === "message" ? (
+              <textarea className={`${inputCls} min-h-[64px] resize-y`}
+                value={confirmationMessage} onChange={(e) => setConfirmationMessage(e.target.value)}
+                placeholder="Thanks for reaching out! I'll review your request and get back to you shortly." />
+            ) : (
+              <input className={inputCls} value={successRedirectUrl} onChange={(e) => setSuccessRedirectUrl(e.target.value)}
+                placeholder="https://yourwebsite.com/thank-you" type="url" />
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Active Fields */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-on-surface">Active Fields</h4>
+          <span className="text-xs text-on-surface-variant">{activeRefs.length} field{activeRefs.length !== 1 ? "s" : ""}</span>
+        </div>
         <div
-          className="space-y-3 rounded-lg border border-dashed border-outline-variant/30 p-3"
+          className="space-y-2 min-h-[48px]"
           onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
-            if (draggingRef) moveRefToSectionEnd(draggingRef, true);
-            setDraggingRef(null);
-          }}
+          onDrop={() => { if (draggingRef) moveRefToSectionEnd(draggingRef, true); setDraggingRef(null); }}
         >
           {activeRefs.length > 0 ? (
-            activeRefs.map((ref, index) => renderFieldCard(ref, index))
+            activeRefs.map((ref) => renderFieldCard(ref))
           ) : (
-            <p className="text-sm text-on-surface-variant">No active fields.</p>
+            <div className="flex items-center justify-center h-12 rounded-xl border-2 border-dashed border-outline-variant/20 text-sm text-on-surface-variant">
+              No active fields — toggle the switch on a field below.
+            </div>
           )}
         </div>
-      </div>
+      </section>
 
+      {/* Add Custom Field */}
       {!showAddComposer ? (
-        <Button
-          type="button"
-          onClick={() => {
-            setShowAddComposer(true);
-            setMessage("");
-          }}
-          variant="outline"
-          className="mb-6 w-full h-auto py-4 bg-transparent border-primary text-primary hover:bg-primary/10"
-        >
-          Add Custom Field
-        </Button>
+        <button type="button"
+          onClick={() => { setShowAddComposer(true); setMessage(""); }}
+          className="flex items-center gap-2 w-full justify-center px-4 py-3 rounded-xl border border-dashed border-outline-variant/30 hover:border-outline-variant/60 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+          <Plus className="w-4 h-4" />
+          Add custom field
+        </button>
       ) : (
-        <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-4 space-y-3 mb-6">
-          <p className="font-heading font-semibold text-on-surface">New Custom Field</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="text-sm font-semibold text-on-surface">
-              Label
-              <input
-                className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                value={draftField.label}
-                onChange={(e) => setDraftField((prev) => ({ ...prev, label: e.target.value }))}
-                placeholder="Field label"
-              />
-            </label>
-            <label className="text-sm font-semibold text-on-surface">
-              Type
-              <select
-                className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                value={draftField.type}
-                onChange={(e) =>
-                  setDraftField((prev) => ({
+        <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15">
+            <p className="text-sm font-semibold text-on-surface">New Custom Field</p>
+            <button type="button" onClick={() => { setShowAddComposer(false); resetDraftField(); }}
+              className="p-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <label className={labelHeadingCls}>
+                Label
+                <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                  value={draftField.label}
+                  onChange={(e) => setDraftField((prev) => ({ ...prev, label: e.target.value }))}
+                  placeholder="Field label" />
+              </label>
+              <label className={labelHeadingCls}>
+                Type
+                <select className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                  value={draftField.type}
+                  onChange={(e) => setDraftField((prev) => ({
                     ...prev,
                     type: e.target.value as CustomFieldType,
                     options: e.target.value === "select" ? prev.options : [],
-                  }))
-                }
-              >
-                {CUSTOM_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {CUSTOM_TYPE_LABELS[type]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="text-sm font-semibold text-on-surface block">
-            Placeholder
-            <input
-              className="mt-1 w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-              value={draftField.placeholder ?? ""}
-              onChange={(e) => setDraftField((prev) => ({ ...prev, placeholder: e.target.value }))}
-              placeholder="Optional hint for clients"
-            />
-          </label>
-          {draftField.type === "select" && (
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-on-surface">Dropdown Choices</p>
-              {(draftField.options ?? []).map((option, optionIndex) => (
-                <div key={`draft-opt-${optionIndex}`} className="flex items-center gap-2">
-                  <input
-                    className="w-full rounded border border-outline-variant/40 bg-surface px-2 py-1"
-                    value={option}
-                    onChange={(e) => updateDraftOption(optionIndex, e.target.value)}
-                  />
-                  <Button type="button" variant="destructive" onClick={() => removeDraftOption(optionIndex)}>
-                    Remove
-                  </Button>
-                </div>
-              ))}
-              <Button type="button" variant="secondary" onClick={addDraftOption}>
-                Add Choice
-              </Button>
+                  }))}>
+                  {CUSTOM_TYPES.map((type) => (
+                    <option key={type} value={type}>{CUSTOM_TYPE_LABELS[type]}</option>
+                  ))}
+                </select>
+              </label>
             </div>
-          )}
-          <label className="inline-flex items-center gap-2 text-sm text-on-surface-variant">
-            <input
-              type="checkbox"
-              checked={draftField.required}
-              onChange={(e) => setDraftField((prev) => ({ ...prev, required: e.target.checked }))}
-            />
-            Required
-          </label>
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setShowAddComposer(false);
-                resetDraftField();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={addCustomFieldToForm}>
-              Add to Form
-            </Button>
+            <label className={labelHeadingCls}>
+              Placeholder
+              <input className={`${inputCls} mt-1 font-normal normal-case tracking-normal`}
+                value={draftField.placeholder ?? ""}
+                onChange={(e) => setDraftField((prev) => ({ ...prev, placeholder: e.target.value }))}
+                placeholder="Optional hint for clients" />
+            </label>
+            {draftField.type === "select" && (
+              <div className="space-y-2">
+                <p className={labelHeadingCls}>Dropdown Choices</p>
+                {(draftField.options ?? []).map((option, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input className={inputCls} value={option}
+                      onChange={(e) => {
+                        const opts = [...(draftField.options ?? [])];
+                        opts[i] = e.target.value;
+                        setDraftField((prev) => ({ ...prev, options: opts }));
+                      }} />
+                    <button type="button"
+                      onClick={() => setDraftField((prev) => ({ ...prev, options: (prev.options ?? []).filter((_, idx) => idx !== i) }))}
+                      className="p-1.5 rounded-lg text-on-surface-variant hover:text-destructive hover:bg-destructive/10 transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={() => setDraftField((prev) => ({ ...prev, options: [...(prev.options ?? []), `Option ${(prev.options?.length ?? 0) + 1}`] }))}
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Add choice
+                </button>
+              </div>
+            )}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <Toggle on={draftField.required} onChange={(v) => setDraftField((prev) => ({ ...prev, required: v }))} />
+              <span className="text-sm text-on-surface-variant">Required</span>
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => { setShowAddComposer(false); resetDraftField(); }}
+                className="px-3 py-1.5 rounded-lg text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={addCustomFieldToForm}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity">
+                Add to Form
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="space-y-3">
-        <h4 className="font-heading font-semibold text-on-surface">Inactive Fields</h4>
-        <div
-          className="space-y-3 rounded-lg border border-dashed border-outline-variant/30 p-3"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => {
-            if (draggingRef) moveRefToSectionEnd(draggingRef, false);
-            setDraggingRef(null);
-          }}
-        >
-          {inactiveRefs.length > 0 ? (
-            inactiveRefs.map((ref, index) => renderFieldCard(ref, activeRefs.length + index))
-          ) : (
-            <p className="text-sm text-on-surface-variant">No inactive fields.</p>
-          )}
-        </div>
-      </div>
+      {/* Inactive Fields */}
+      {inactiveRefs.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-on-surface-variant">Inactive Fields</h4>
+            <span className="text-xs text-on-surface-variant">{inactiveRefs.length} field{inactiveRefs.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div
+            className="space-y-2"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (draggingRef) moveRefToSectionEnd(draggingRef, false); setDraggingRef(null); }}
+          >
+            {inactiveRefs.map((ref) => renderFieldCard(ref))}
+          </div>
+        </section>
+      )}
 
       {message && (
-        <div
-          className={`mt-5 rounded-lg border px-3 py-2 text-sm font-medium ${
-            messageType === "success"
-              ? "border-emerald-300/40 bg-emerald-500/10 text-emerald-700"
-              : "border-destructive/30 bg-destructive/10 text-destructive"
-          }`}
-          role="status"
-          aria-live="polite"
-        >
+        <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+          messageType === "success"
+            ? "border-emerald-300/40 bg-emerald-500/10 text-emerald-700"
+            : "border-destructive/30 bg-destructive/10 text-destructive"
+        }`} role="status" aria-live="polite">
           {message}
         </div>
       )}
-      <Button
-        type="button"
-        onClick={save}
-        disabled={isSaving}
-        className="mt-5 w-full h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
-      >
+
+      <Button type="button" onClick={save} disabled={isSaving}
+        className="w-full h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity">
         {isSaving ? "Saving..." : justSaved ? "Saved" : "Save Form Builder"}
       </Button>
     </div>

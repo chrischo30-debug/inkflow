@@ -75,6 +75,11 @@
 - Both integrations are fully opt-in — dashboard works identically without them.
 - New columns: `artists.stripe_webhook_secret`, `bookings.stripe_payment_link_url` (migration `20260424_stripe_deposit.sql`).
 
+### Session — Form Builder & Booking Page Settings Polish (2026-04-24)
+- **FormBuilderSettings redesign**: field cards replaced three-row Button block (Required: On/Off, Edit/Done, Remove from Form) with a compact header row — drag handle icon + field name + type badge + single active/inactive toggle
+- **Draft-based field editing**: clicking a card row snapshots field state into `editDraft`; edits are local until Save or discarded on Cancel. Required toggle moved inside the expanded panel. Clicking the row again cancels.
+- **BookingPageSettings**: "Show links" checkbox replaced with toggle switch; website/social inputs upgraded to consistent `rounded-lg` with focus ring
+
 ### Session — Bug Fixes & Calendar UX (2026-04-23)
 - **Bookings page default tab**: changed from "Booked" (confirmed) to "All" — submissions were hidden on landing
 - **Dashboard / Bookings empty data bug**: Dashboard and Bookings queries silently returned null when DB columns didn't exist (`stripe_payment_link_url`, `deposit_paid`, `has_unread_reply`, `sent_emails`); Clients query didn't select those columns so it still worked. Fix: run migrations `20260422_sent_emails.sql`, `20260423_booking_notifications.sql`, `20260424_stripe_deposit.sql` in Supabase SQL editor.
