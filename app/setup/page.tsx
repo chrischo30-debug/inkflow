@@ -90,7 +90,7 @@ export default async function SetupPage({
 
   const { data: artist } = await supabase
     .from("artists")
-    .select("name, slug, logo_url, google_refresh_token, payment_links, calendar_sync_enabled")
+    .select("name, slug, logo_url, google_refresh_token, payment_links, calendar_sync_enabled, gmail_address")
     .eq("id", user.id)
     .single();
 
@@ -136,6 +136,54 @@ export default async function SetupPage({
                 <p className="text-sm text-emerald-700/80 mt-1">Complete the steps below to unlock the full FlashBooker workflow. You can always come back to this page from the sidebar.</p>
               </div>
             )}
+
+            {/* How email works — always visible, no setup needed */}
+            <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <span className="text-lg">✉️</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-on-surface">How email works in FlashBooker</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">No setup required — it just works out of the box.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <div className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">1</span>
+                  <p className="text-on-surface leading-relaxed pt-0.5">
+                    You click <span className="font-medium">Send email</span> on a booking. We send it through our email system so it always gets delivered — spam folders aren&apos;t an issue.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                  <div className="flex-1 pt-0.5">
+                    <p className="text-on-surface leading-relaxed">
+                      Your client sees the email from: <span className="font-semibold">{artist?.name || "You"} via FlashBooker</span>.
+                    </p>
+                    <p className="text-xs text-on-surface-variant mt-1">
+                      It feels personal because your name is on it, but the delivery is handled by us.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">3</span>
+                  <div className="flex-1 pt-0.5">
+                    <p className="text-on-surface leading-relaxed">
+                      When the client replies, it goes <span className="font-semibold">straight to your personal inbox</span>:
+                    </p>
+                    <p className="text-xs font-mono text-on-surface mt-1 bg-surface px-2.5 py-1.5 rounded border border-outline-variant/20 inline-block">
+                      {artist?.gmail_address || user.email}
+                    </p>
+                    <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
+                      You can reply from Gmail, Outlook, your phone — wherever. FlashBooker doesn&apos;t need to be open for you to keep talking to clients.{" "}
+                      <a href="/settings" className="text-primary hover:underline">Change this address →</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Progress */}
             <div>

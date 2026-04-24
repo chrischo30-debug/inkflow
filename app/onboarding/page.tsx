@@ -8,32 +8,34 @@ import { DepositSelector } from "@/components/onboarding/DepositSelector"
 import { SlugInput } from "@/components/onboarding/SlugInput"
 import type { DepositPolicy, DepositPolicyType } from "@/lib/types"
 
-function StepBar({ step }: { step: 1 | 2 }) {
+function StepBar({ step }: { step: 1 | 2 | 3 }) {
+  const labels = ["Profile", "Preferences", "Email"]
   return (
     <div className="flex items-center gap-3 mb-10">
-      <div className="flex items-center gap-2">
-        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-          step === 1 ? "bg-on-surface text-surface" : "bg-emerald-500 text-white"
-        }`}>
-          {step > 1 ? "✓" : "1"}
-        </span>
-        <span className={`text-sm font-medium ${step === 1 ? "text-on-surface" : "text-on-surface-variant"}`}>
-          Profile
-        </span>
-      </div>
-      <div className={`h-px flex-1 ${step > 1 ? "bg-emerald-400" : "bg-outline-variant/30"}`} />
-      <div className="flex items-center gap-2">
-        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-          step === 2
-            ? "bg-on-surface text-surface"
-            : "bg-surface-container border border-outline-variant/30 text-on-surface-variant/40"
-        }`}>
-          2
-        </span>
-        <span className={`text-sm font-medium ${step === 2 ? "text-on-surface" : "text-on-surface-variant/40"}`}>
-          Preferences
-        </span>
-      </div>
+      {labels.map((label, i) => {
+        const n = (i + 1) as 1 | 2 | 3
+        const isActive = step === n
+        const isDone = step > n
+        return (
+          <div key={label} className="flex items-center gap-2 flex-1">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+              isDone ? "bg-emerald-500 text-white"
+                : isActive ? "bg-on-surface text-surface"
+                : "bg-surface-container border border-outline-variant/30 text-on-surface-variant/40"
+            }`}>
+              {isDone ? "✓" : n}
+            </span>
+            <span className={`text-sm font-medium ${
+              isActive ? "text-on-surface" : isDone ? "text-on-surface-variant" : "text-on-surface-variant/40"
+            }`}>
+              {label}
+            </span>
+            {i < labels.length - 1 && (
+              <div className={`h-px flex-1 ml-1 ${isDone ? "bg-emerald-400" : "bg-outline-variant/30"}`} />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -44,7 +46,7 @@ export default async function OnboardingPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const params = await searchParams
-  const step = params.step === "2" ? 2 : 1
+  const step: 1 | 2 | 3 = params.step === "3" ? 3 : params.step === "2" ? 2 : 1
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -153,6 +155,31 @@ export default async function OnboardingPage({
       return redirect(`/onboarding?${rp.toString()}`)
     }
 
+    return redirect("/onboarding?step=3")
+  }
+
+  const saveStep3 = async (formData: FormData) => {
+    "use server"
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return redirect("/login")
+
+    const replyToRaw = (formData.get("reply_to_email") as string | null)?.trim() ?? ""
+    const replyTo = replyToRaw.toLowerCase()
+
+    if (!replyTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
+      return redirect(`/onboarding?step=3&error=${encodeURIComponent("Enter a valid email address for client replies.")}`)
+    }
+
+    const { error } = await supabase
+      .from("artists")
+      .update({ gmail_address: replyTo })
+      .eq("id", user.id)
+
+    if (error) {
+      return redirect(`/onboarding?step=3&error=${encodeURIComponent(error.message)}`)
+    }
+
     return redirect("/setup?new=1")
   }
 
@@ -238,6 +265,86 @@ export default async function OnboardingPage({
     )
   }
 
+  if (step === 3) {
+    const defaultReplyTo = artist?.gmail_address ?? user.email ?? ""
+    const displayName = artist?.name || artist?.studio_name || "Your Name"
+
+    return (
+      <div className="min-h-screen bg-surface">
+        {header}
+        <div className="max-w-xl mx-auto px-6 py-12">
+          <StepBar step={3} />
+
+          <div className="mb-8">
+            <h2 className="text-3xl font-heading tracking-tight mb-2">How email works</h2>
+            <p className="text-on-surface-variant">Here&apos;s what happens when you send a client an email through FlashBooker — no setup needed.</p>
+          </div>
+
+          {/* Visual explainer */}
+          <div className="bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 mb-6 space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">1. You send a message</p>
+              <p className="text-sm text-on-surface leading-relaxed">
+                You click <span className="font-medium">Send email</span> on a booking. We send it for you — you don&apos;t need to log into Gmail or anything else.
+              </p>
+            </div>
+
+            <div className="border-t border-outline-variant/15 pt-4">
+              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">2. Your client sees</p>
+              <div className="bg-surface rounded-lg border border-outline-variant/20 p-3 font-mono text-xs">
+                <p className="text-on-surface-variant/70">From:</p>
+                <p className="text-on-surface font-semibold">{displayName} via FlashBooker</p>
+                <p className="text-on-surface-variant mt-0.5">&lt;bookings@flashbooker.app&gt;</p>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">
+                Your name is on the email, so it feels personal — but it&apos;s sent from our system so it always gets delivered.
+              </p>
+            </div>
+
+            <div className="border-t border-outline-variant/15 pt-4">
+              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">3. When they reply</p>
+              <p className="text-sm text-on-surface leading-relaxed">
+                Their reply goes <span className="font-semibold">straight to your personal email below</span> — just like a normal email. You can reply from your inbox, phone, wherever. FlashBooker isn&apos;t in the middle of your conversations.
+              </p>
+            </div>
+          </div>
+
+          <form className="flex flex-col w-full gap-5" action={saveStep3}>
+            <div className="flex flex-col gap-2">
+              <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="reply_to_email">
+                Your email (where client replies will land) <span className="text-error">*</span>
+              </Label>
+              <Input
+                id="reply_to_email"
+                name="reply_to_email"
+                type="email"
+                required
+                defaultValue={defaultReplyTo}
+                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
+              />
+              <p className="text-xs text-on-surface-variant/70">
+                Usually your Gmail, Outlook, or whatever email you check most. You can change this later in Settings.
+              </p>
+              {params.error && <p className="text-xs text-error">{params.error}</p>}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <Link href="/onboarding?step=2" className="text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+                ← Back
+              </Link>
+              <Button
+                type="submit"
+                className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
+              >
+                Finish setup →
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
   // Step 2
   const artistDepositType = artist?.deposit_policy?.type ?? "fixed"
   const defaultStyleTags = params.style_tags ?? (Array.isArray(artist?.style_tags) ? artist.style_tags.join(", ") : "")
@@ -302,7 +409,7 @@ export default async function OnboardingPage({
               type="submit"
               className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
             >
-              Finish Setup
+              Continue →
             </Button>
           </div>
 
