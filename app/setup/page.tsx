@@ -173,7 +173,7 @@ export default async function SetupPage({
                 <div className="flex gap-3">
                   <span className="w-6 h-6 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold flex items-center justify-center shrink-0">1</span>
                   <p className="text-on-surface leading-relaxed pt-0.5">
-                    You click <span className="font-medium">Send email</span> on a booking. FlashBooker sends it for you — no third-party tools to connect.
+                    You click <span className="font-medium">Send email</span>{" "}on a booking. FlashBooker sends it for you — no third-party tools to connect.
                   </p>
                 </div>
                 <div className="flex gap-3">

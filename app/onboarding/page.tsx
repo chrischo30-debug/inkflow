@@ -4,12 +4,11 @@ import { Label } from "@/components/ui/label"
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { DepositSelector } from "@/components/onboarding/DepositSelector"
 import { SlugInput } from "@/components/onboarding/SlugInput"
-import type { DepositPolicy, DepositPolicyType } from "@/lib/types"
+import type { DepositPolicy } from "@/lib/types"
 
 function StepBar({ step }: { step: 1 | 2 | 3 }) {
-  const labels = ["Profile", "Preferences", "Email"]
+  const labels = ["Profile", "Deposit", "Email"]
   return (
     <div className="flex items-center gap-3 mb-10">
       {labels.map((label, i) => {
@@ -104,34 +103,17 @@ export default async function OnboardingPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return redirect("/login")
 
-    const styleTagsRaw = (formData.get("style_tags") as string | null)?.trim() ?? ""
-    const style_tags = styleTagsRaw.split(",").map((t) => t.trim()).filter(Boolean)
-    const depositTypeRaw = formData.get("deposit_type") as string | null
-    const depositType: DepositPolicyType = (
-      depositTypeRaw === "fixed" || depositTypeRaw === "percentage" || depositTypeRaw === "custom"
-    ) ? depositTypeRaw : "fixed"
     const depositAmountRaw = (formData.get("deposit_amount") as string | null)?.trim() ?? ""
-    const depositPercentageRaw = (formData.get("deposit_percentage") as string | null)?.trim() ?? ""
-    const depositNoteRaw = (formData.get("deposit_note") as string | null)?.trim() ?? ""
 
     const rp = new URLSearchParams({
       step: "2",
-      style_tags: styleTagsRaw,
-      deposit_type: depositType,
       deposit_amount: depositAmountRaw,
-      deposit_percentage: depositPercentageRaw,
-      deposit_note: depositNoteRaw,
     })
 
     const errors: Record<string, string> = {}
-    if (depositType === "fixed") {
-      const amount = Number(depositAmountRaw)
-      if (!depositAmountRaw || isNaN(amount) || amount < 0) errors.deposit_amount = "Enter a valid deposit amount."
-    } else if (depositType === "percentage") {
-      const value = Number(depositPercentageRaw)
-      if (!depositPercentageRaw || isNaN(value) || value < 1 || value > 100) errors.deposit_percentage = "Enter a percentage between 1 and 100."
-    } else if (!depositNoteRaw) {
-      errors.deposit_note = "Add a short note describing your deposit policy."
+    const amount = Number(depositAmountRaw)
+    if (!depositAmountRaw || isNaN(amount) || amount < 0) {
+      errors.deposit_amount = "Enter a valid deposit amount."
     }
 
     if (Object.keys(errors).length > 0) {
@@ -140,16 +122,9 @@ export default async function OnboardingPage({
       return redirect(`/onboarding?${rp.toString()}`)
     }
 
-    let deposit_policy: DepositPolicy
-    if (depositType === "percentage") {
-      deposit_policy = { type: "percentage", value: Number(depositPercentageRaw) }
-    } else if (depositType === "custom") {
-      deposit_policy = { type: "custom", note: depositNoteRaw }
-    } else {
-      deposit_policy = { type: "fixed", amount: Number(depositAmountRaw) }
-    }
+    const deposit_policy: DepositPolicy = { type: "fixed", amount }
 
-    const { error } = await supabase.from("artists").update({ style_tags, deposit_policy }).eq("id", user.id)
+    const { error } = await supabase.from("artists").update({ deposit_policy }).eq("id", user.id)
     if (error) {
       rp.set("message", `Could not save: ${error.message}`)
       return redirect(`/onboarding?${rp.toString()}`)
@@ -285,7 +260,7 @@ export default async function OnboardingPage({
             <div>
               <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">1. You send a message</p>
               <p className="text-sm text-on-surface leading-relaxed">
-                You click <span className="font-medium">Send email</span> on a booking. We send it for you — you don&apos;t need to log into Gmail or anything else.
+                You click <span className="font-medium">Send email</span>{" "}on a booking. We send it for you — you don&apos;t need to log into Gmail or anything else.
               </p>
             </div>
 
@@ -347,13 +322,7 @@ export default async function OnboardingPage({
 
   // Step 2
   const artistDepositType = artist?.deposit_policy?.type ?? "fixed"
-  const defaultStyleTags = params.style_tags ?? (Array.isArray(artist?.style_tags) ? artist.style_tags.join(", ") : "")
-  const defaultDepositType = (
-    params.deposit_type === "fixed" || params.deposit_type === "percentage" || params.deposit_type === "custom"
-  ) ? params.deposit_type : artistDepositType
   const defaultDepositAmount = params.deposit_amount ?? (artistDepositType === "fixed" ? String(artist?.deposit_policy?.amount ?? 0) : "")
-  const defaultDepositPercentage = params.deposit_percentage ?? (artistDepositType === "percentage" ? String(artist?.deposit_policy?.value ?? 25) : "")
-  const defaultDepositNote = params.deposit_note ?? (artistDepositType === "custom" ? artist?.deposit_policy?.note ?? "" : "")
 
   return (
     <div className="min-h-screen bg-surface">
@@ -362,40 +331,31 @@ export default async function OnboardingPage({
         <StepBar step={2} />
 
         <div className="mb-10">
-          <h2 className="text-3xl font-heading tracking-tight mb-2">Booking preferences</h2>
-          <p className="text-on-surface-variant">Your style and deposit policy — shown to clients on your booking page.</p>
+          <h2 className="text-3xl font-heading tracking-tight mb-2">Deposit policy</h2>
+          <p className="text-on-surface-variant">The deposit amount you&apos;ll request once a booking is accepted.</p>
         </div>
 
         <form className="flex flex-col w-full gap-8" action={saveStep2}>
           <div className="flex flex-col gap-2">
-            <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="style_tags">
-              Style Tags <span className="text-on-surface-variant/40 text-xs">(optional)</span>
+            <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="deposit_amount">
+              Deposit amount <span className="text-error">*</span>
             </Label>
-            <Input
-              id="style_tags"
-              name="style_tags"
-              defaultValue={defaultStyleTags}
-              placeholder="blackwork, realism, fineline"
-              className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
-            />
-            <p className="text-xs text-on-surface-variant/60">Comma-separated. Shown on your public booking page.</p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <Label className="text-sm font-sans tracking-wide text-on-surface-variant">
-              Deposit Policy
-            </Label>
-            <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant p-4">
-              <DepositSelector
-                defaultType={defaultDepositType as DepositPolicyType}
-                defaultAmount={defaultDepositAmount ? Number(defaultDepositAmount) : 0}
-                defaultValue={defaultDepositPercentage ? Number(defaultDepositPercentage) : 25}
-                defaultNote={defaultDepositNote}
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">$</span>
+              <Input
+                id="deposit_amount"
+                name="deposit_amount"
+                type="number"
+                min="0"
+                step="1"
+                required
+                defaultValue={defaultDepositAmount}
+                placeholder="100"
+                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none pl-8 pr-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
               />
             </div>
+            <p className="text-xs text-on-surface-variant/60">A flat amount in US dollars. You can change it per booking later.</p>
             {params.error_deposit_amount && <p className="text-xs text-error">{params.error_deposit_amount}</p>}
-            {params.error_deposit_percentage && <p className="text-xs text-error">{params.error_deposit_percentage}</p>}
-            {params.error_deposit_note && <p className="text-xs text-error">{params.error_deposit_note}</p>}
           </div>
 
           <div className="flex items-center justify-between pt-2">
