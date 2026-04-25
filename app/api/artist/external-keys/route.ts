@@ -7,7 +7,7 @@ export async function PUT(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const allowed = ["stripe_api_key", "calcom_api_key", "stripe_webhook_secret"] as const;
+  const allowed = ["stripe_api_key", "stripe_webhook_secret"] as const;
   type AllowedKey = typeof allowed[number];
 
   const update: Partial<Record<AllowedKey, string>> = {};

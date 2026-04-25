@@ -1,7 +1,7 @@
 "use client";
 
 import { Booking, BookingState } from "@/lib/types";
-import { BookingCard, type CalcomData } from "./BookingCard";
+import { BookingCard } from "./BookingCard";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { PIPELINE_COLUMNS, COLUMN_LABELS } from "@/lib/pipeline-settings";
@@ -14,7 +14,6 @@ interface PipelineViewProps {
   fieldLabelMap?: Record<string, string>;
   calendarSyncEnabled?: boolean;
   hasStripe?: boolean;
-  calcomData?: CalcomData | null;
 }
 
 type EmailCompose = {
@@ -31,7 +30,7 @@ type EmailCompose = {
 
 type CompletionModal = { bookingId: string };
 
-export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSyncEnabled = false, hasStripe = false, calcomData = null }: PipelineViewProps) {
+export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSyncEnabled = false, hasStripe = false }: PipelineViewProps) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<BookingState | null>(null);
@@ -307,7 +306,7 @@ export function PipelineView({ initialBookings, fieldLabelMap = {}, calendarSync
                     dragging={draggingId === booking.id}
                     onDragStart={setDraggingId}
                     hasStripe={hasStripe}
-                    calcomData={calcomData}
+
                   />
                 ))}
                 {colBookings.length === 0 && (

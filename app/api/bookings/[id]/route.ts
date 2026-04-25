@@ -5,7 +5,7 @@ import {
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
   updateGoogleCalendarEvent,
-  refreshGoogleAccessToken,
+  getGoogleAccessToken,
 } from "@/lib/google-calendar";
 
 const STATE_FLOW: Partial<Record<BookingState, BookingState>> = {
@@ -118,8 +118,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           if (googleEventId) {
             const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled").eq("id", user.id).single();
             if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-              const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-              await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
+              const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+              if (accessToken) await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
             }
           }
         } catch (e) { console.error("Calendar delete on move-to-cancelled failed:", e); }
@@ -137,8 +137,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (googleEventId) {
           const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled").eq("id", user.id).single();
           if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-            const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-            await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
+            const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+            if (accessToken) await deleteGoogleCalendarEvent({ accessToken, eventId: googleEventId });
           }
         }
       } catch (e) { console.error("Calendar event deletion failed:", e); }
@@ -159,7 +159,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const { googleEventId } = await getExtraBookingFields();
           const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
           if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-            const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+            const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+            if (!accessToken) return;
             const endDate = new Date(new Date(newDate).getTime() + durationMinutes * 60 * 1000).toISOString();
             if (googleEventId) {
               await updateGoogleCalendarEvent({
@@ -208,17 +209,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           .eq("id", user.id)
           .single();
         if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
-          const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-          const endDate = new Date(new Date(appointmentDate).getTime() + durationMinutes * 60 * 1000).toISOString();
-          newEventId = await createGoogleCalendarEvent({
-            accessToken,
-            summary: `${booking.client_name} appointment`,
-            description: booking.description ?? undefined,
-            startDateTime: appointmentDate,
-            endDateTime: endDate,
-          });
-          if (newEventId) {
-            await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+          const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+          if (accessToken) {
+            const endDate = new Date(new Date(appointmentDate).getTime() + durationMinutes * 60 * 1000).toISOString();
+            newEventId = await createGoogleCalendarEvent({
+              accessToken,
+              summary: `${booking.client_name} appointment`,
+              description: booking.description ?? undefined,
+              startDateTime: appointmentDate,
+              endDateTime: endDate,
+            });
+            if (newEventId) {
+              await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+            }
           }
         }
       } catch (e) { console.error("Google Calendar sync on confirm failed:", e); }

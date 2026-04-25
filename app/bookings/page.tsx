@@ -5,7 +5,6 @@ import { BookingsTable } from "@/components/booking/BookingsTable";
 import { CopyFormLinkButton } from "@/components/booking/CopyFormLinkButton";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import type { Booking } from "@/lib/types";
-import type { CalcomData } from "@/components/booking/BookingCard";
 
 export default async function BookingsPage({
   searchParams,
@@ -28,33 +27,10 @@ export default async function BookingsPage({
       .order("created_at", { ascending: false }),
     supabase.from("form_fields").select("field_key, label").eq("artist_id", user.id),
     supabase.from("custom_form_fields").select("field_key, label").eq("artist_id", user.id),
-    supabase.from("artists").select("calendar_sync_enabled, slug, stripe_api_key, calcom_api_key, name, studio_name").eq("id", user.id).single(),
+    supabase.from("artists").select("calendar_sync_enabled, slug, stripe_api_key, name, studio_name").eq("id", user.id).single(),
   ]);
 
   const hasStripe = Boolean((artistData as Record<string, unknown>)?.stripe_api_key);
-
-  let calcomData: CalcomData | null = null;
-  const calcomApiKey = (artistData as Record<string, unknown>)?.calcom_api_key as string | undefined;
-  if (calcomApiKey) {
-    try {
-      const calHeaders = { "Authorization": `Bearer ${calcomApiKey}`, "cal-api-version": "2024-08-13" };
-      const [meRes, evRes] = await Promise.all([
-        fetch("https://api.cal.com/v2/me", { headers: calHeaders }),
-        fetch("https://api.cal.com/v2/event-types", { headers: calHeaders }),
-      ]);
-      if (meRes.ok) {
-        const me = await meRes.json();
-        const username: string = me.data?.username ?? "";
-        let events: CalcomData["events"] = [];
-        if (evRes.ok) {
-          const evData = await evRes.json();
-          const raw: { slug?: string; title?: string }[] = evData.data?.eventTypeGroups?.[0]?.eventTypes ?? evData.data ?? [];
-          events = raw.filter(e => e.slug && e.title).map(e => ({ slug: e.slug!, title: e.title! }));
-        }
-        if (username) calcomData = { username, events };
-      }
-    } catch { /* Cal.com unavailable */ }
-  }
 
   const bookings: Booking[] = (bookingsData ?? []) as Booking[];
   const fieldLabelMap: Record<string, string> = {};
@@ -73,7 +49,7 @@ export default async function BookingsPage({
           </div>
         </header>
         <div className="flex-1 overflow-hidden">
-          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} initialExpandId={initialExpandId} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} hasStripe={hasStripe} calcomData={calcomData} artistName={(artistData as Record<string,unknown>)?.name as string ?? (artistData as Record<string,unknown>)?.studio_name as string ?? ""} />
+          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} initialExpandId={initialExpandId} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} hasStripe={hasStripe} artistName={(artistData as Record<string,unknown>)?.name as string ?? (artistData as Record<string,unknown>)?.studio_name as string ?? ""} />
         </div>
       </main>
     </div>

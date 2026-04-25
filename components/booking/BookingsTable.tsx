@@ -5,11 +5,10 @@ import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ChevronDown, ChevronRight, DollarSign, Calendar, Check, Copy, CalendarDays } from "lucide-react";
+import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays } from "lucide-react";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
-import type { CalcomData } from "./BookingCard";
 
 const STATE_TABS: { value: string; label: string }[] = [
   { value: "all",       label: "All" },
@@ -122,7 +121,6 @@ export function BookingsTable({
   initialExpandId = null,
   calendarSyncEnabled = false,
   hasStripe = false,
-  calcomData = null,
   artistName = "",
 }: {
   bookings: Booking[];
@@ -131,7 +129,6 @@ export function BookingsTable({
   initialExpandId?: string | null;
   calendarSyncEnabled?: boolean;
   hasStripe?: boolean;
-  calcomData?: CalcomData | null;
   artistName?: string;
 }) {
   const [bookings, setBookings] = useState(initialBookings);
@@ -205,15 +202,6 @@ export function BookingsTable({
     } finally {
       setDepositLoading(false);
     }
-  };
-
-  const copySchedulingLink = (booking: Booking, eventSlug: string) => {
-    if (!calcomData?.username) return;
-    const url = `https://cal.com/${calcomData.username}/${eventSlug}?name=${encodeURIComponent(booking.client_name)}&email=${encodeURIComponent(booking.client_email)}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopiedLink(`calcom-${booking.id}`);
-      setTimeout(() => setCopiedLink(null), 2000);
-    });
   };
 
   const q = search.trim().toLowerCase();
@@ -501,23 +489,6 @@ export function BookingsTable({
                     <DollarSign className="w-4 h-4" />
                   </button>
                 )
-              )}
-              {/* Cal.com scheduling link */}
-              {calcomData && (booking.state === "accepted" || booking.state === "confirmed") && (
-                <button
-                  type="button"
-                  title="Copy scheduling link"
-                  onClick={() => {
-                    if (calcomData.events.length === 1) {
-                      copySchedulingLink(booking, calcomData.events[0].slug);
-                    } else if (calcomData.events.length > 1) {
-                      copySchedulingLink(booking, calcomData.events[0].slug);
-                    }
-                  }}
-                  className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-                >
-                  {copiedLink === `calcom-${booking.id}` ? <Check className="w-4 h-4 text-emerald-500" /> : <Calendar className="w-4 h-4" />}
-                </button>
               )}
               {isInquiry ? (
                 <>

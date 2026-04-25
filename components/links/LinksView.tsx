@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Trash2, Copy, Check, ExternalLink, CalendarPlus } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, Copy, Check, ExternalLink } from "lucide-react";
 import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
-
-interface CalcomEvent { slug: string; title: string }
-interface CalcomProfile { username: string; events: CalcomEvent[] }
 
 function isValidUrl(val: string): boolean {
   try { const u = new URL(val); return u.protocol === "https:" || u.protocol === "http:"; }
@@ -149,32 +146,12 @@ function detectService(url: string) {
   return KNOWN_SERVICES.find(s => url.includes(s.pattern))?.label ?? null;
 }
 
-function CalendarLinksSection({ initialLinks, calcomConnected }: { initialLinks: CalendarLink[]; calcomConnected: boolean }) {
+function CalendarLinksSection({ initialLinks }: { initialLinks: CalendarLink[] }) {
   const [links, setLinks] = useState<CalendarLink[]>(initialLinks);
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [status, setStatus] = useState<SaveStatus>("idle");
-  const [calcom, setCalcom] = useState<CalcomProfile | null>(null);
-  const [calcomLoading, setCalcomLoading] = useState(false);
-  const [calcomError, setCalcomError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!calcomConnected) return;
-    let cancelled = false;
-    setCalcomLoading(true);
-    setCalcomError(null);
-    fetch("/api/artist/calcom-events")
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (res.ok) setCalcom(body as CalcomProfile);
-        else setCalcomError(body?.error ?? "Could not load Cal.com events");
-      })
-      .catch(() => { if (!cancelled) setCalcomError("Could not load Cal.com events"); })
-      .finally(() => { if (!cancelled) setCalcomLoading(false); });
-    return () => { cancelled = true; };
-  }, [calcomConnected]);
 
   const save = async (updated: CalendarLink[]) => {
     setStatus("saving");
@@ -185,15 +162,6 @@ function CalendarLinksSection({ initialLinks, calcomConnected }: { initialLinks:
     });
     setStatus(res.ok ? "saved" : "error");
     if (res.ok) setTimeout(() => setStatus("idle"), 2000);
-  };
-
-  const addCalcomEvent = (event: CalcomEvent) => {
-    if (!calcom?.username) return;
-    const url = `https://cal.com/${calcom.username}/${event.slug}`;
-    if (links.some((l) => l.url === url)) return; // already added
-    const updated = [...links, { label: event.title, url }];
-    setLinks(updated);
-    save(updated);
   };
 
   const addLink = () => {
@@ -225,68 +193,6 @@ function CalendarLinksSection({ initialLinks, calcomConnected }: { initialLinks:
         </div>
         <StatusBadge status={status} />
       </div>
-
-      {calcomConnected && (
-        <div className="rounded-xl border border-emerald-300/60 bg-emerald-50/40 p-4">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold text-on-surface">Your Cal.com event types</p>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                  <Check className="w-3 h-3" /> Connected
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Click an event to add it as a scheduling link, or create a new one in Cal.com.
-              </p>
-            </div>
-            <a
-              href="https://app.cal.com/event-types"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" /> Create new in Cal.com
-            </a>
-          </div>
-
-          {calcomLoading && (
-            <p className="text-xs text-on-surface-variant py-1">Loading event types…</p>
-          )}
-          {calcomError && (
-            <p className="text-xs text-destructive py-1">{calcomError}</p>
-          )}
-          {!calcomLoading && !calcomError && calcom && calcom.events.length === 0 && (
-            <p className="text-xs text-on-surface-variant/70 py-1">
-              No event types in Cal.com yet. Create one and refresh this page.
-            </p>
-          )}
-          {!calcomLoading && !calcomError && calcom && calcom.events.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {calcom.events.map((ev) => {
-                const url = `https://cal.com/${calcom.username}/${ev.slug}`;
-                const alreadyAdded = links.some((l) => l.url === url);
-                return (
-                  <button
-                    key={ev.slug}
-                    type="button"
-                    onClick={() => addCalcomEvent(ev)}
-                    disabled={alreadyAdded}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                      alreadyAdded
-                        ? "border-emerald-300/60 bg-emerald-100/60 text-emerald-700 cursor-default"
-                        : "border-outline-variant/40 bg-surface text-on-surface hover:bg-surface-container-high"
-                    }`}
-                  >
-                    {alreadyAdded ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                    {ev.title}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="space-y-2">
         {links.length === 0 && !adding && (
@@ -354,16 +260,14 @@ function StatusBadge({ status }: { status: SaveStatus }) {
 export function LinksView({
   initialPaymentLinks,
   initialCalendarLinks,
-  calcomConnected = false,
 }: {
   initialPaymentLinks: PaymentLink[];
   initialCalendarLinks: CalendarLink[];
-  calcomConnected?: boolean;
 }) {
   return (
     <div className="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
       <PaymentLinksSection initialLinks={initialPaymentLinks} />
-      <CalendarLinksSection initialLinks={initialCalendarLinks} calcomConnected={calcomConnected} />
+      <CalendarLinksSection initialLinks={initialCalendarLinks} />
     </div>
   );
 }

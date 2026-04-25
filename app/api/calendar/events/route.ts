@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { createGoogleCalendarEvent, listAllGoogleCalendarEvents, refreshGoogleAccessToken, updateGoogleCalendarEvent } from "@/lib/google-calendar";
+import { createGoogleCalendarEvent, listAllGoogleCalendarEvents, getGoogleAccessToken, updateGoogleCalendarEvent } from "@/lib/google-calendar";
 import type { Booking } from "@/lib/types";
 
 type CalendarEvent = {
@@ -59,12 +59,13 @@ export async function GET(request: Request) {
     let googleSyncError = "";
     if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
       try {
-        const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
-        const rows = await listAllGoogleCalendarEvents({
+        const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+        if (!accessToken) { googleSyncError = "Google Calendar disconnected. Please reconnect."; }
+        const rows = accessToken ? await listAllGoogleCalendarEvents({
           accessToken,
           timeMin: start,
           timeMax: end,
-        });
+        }) : [];
         googleEvents = rows
           .filter((event) => Boolean(event.id && (event.start?.dateTime || event.start?.date)))
           .map((event) => ({
@@ -120,7 +121,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Google Calendar is not connected. Connect it in Settings first." }, { status: 400 });
     }
 
-    const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+    const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+    if (!accessToken) return NextResponse.json({ error: "Google Calendar disconnected. Please reconnect." }, { status: 400 });
     const eventId = await createGoogleCalendarEvent({ accessToken, summary: title, description, startDateTime, endDateTime });
 
     return NextResponse.json({ success: true, eventId });
@@ -158,7 +160,8 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Google Calendar is not connected." }, { status: 400 });
     }
 
-    const accessToken = await refreshGoogleAccessToken(artist.google_refresh_token);
+    const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
+    if (!accessToken) return NextResponse.json({ error: "Google Calendar disconnected. Please reconnect." }, { status: 400 });
     await updateGoogleCalendarEvent({ accessToken, eventId: googleEventId, summary: title, description, startDateTime, endDateTime });
 
     return NextResponse.json({ success: true });

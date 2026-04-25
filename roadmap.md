@@ -96,6 +96,15 @@
 - **Draft-based field editing**: clicking a card row snapshots field state into `editDraft`; edits are local until Save or discarded on Cancel. Required toggle moved inside the expanded panel. Clicking the row again cancels.
 - **BookingPageSettings**: "Show links" checkbox replaced with toggle switch; website/social inputs upgraded to consistent `rounded-lg` with focus ring
 
+### Session — Calendar Redesign, Google Token Security & Cal.com Removal (2026-04-24)
+- **Google OAuth token security**: AES-256-CBC encryption for refresh tokens at rest (`GOOGLE_TOKEN_ENCRYPTION_KEY` env var, 64-char hex). `encryptToken` / `decryptToken` in `lib/google-calendar.ts`; backward-compatible (plain-text tokens still work until artist reconnects). `InvalidGrantError` class — revoked tokens auto-disconnect the artist in the DB instead of crashing. All 4 call sites in bookings/[id] and calendar/events routes updated to `getGoogleAccessToken()`.
+- **Cal.com fully removed**: v1 API decommissioned (410 error), v2 requires OAuth not personal keys. Deleted webhook route, calcom-events route, calcom-secret route, migration file. Removed CalcomData type, Schedule button, and picker portal from BookingCard/BookingsTable/PipelineView. Removed Cal.com card from ExternalApiSettings and step from setup guide. Scheduling links step now says "Calendly or other scheduling link."
+- **Calendar week view**: replaced month grid (too cramped to read) with week view as default. 7-day columns on a shared time grid, events show full title + time. Clicking a day header drills to single-day timeline. Day view has back arrow returning to week.
+- **Calendar UX**: Today button on far right; stronger `border-r-2` day separators; month picker popover (calendar icon, top-right) — clicking a day stays in week view and highlights the selected day column instead of drilling to day view; month picker icon visible on both week and day views. Event fetch anchored to today → 12 months forward, expanding dynamically when user navigates past that range (never replaces data with a narrower range).
+- **Dashboard "All bookings" link** → now routes to `/bookings?state=confirmed` (booked view) instead of all bookings.
+- **Setup guide**: removed Cal.com from Recommended Tools grid; updated scheduling links step description.
+- **Bug fix**: `.env` had `GOOGLE_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY` concatenated on one line (missing newline), causing `invalid_client` errors from Google OAuth.
+
 ### Session — Bug Fixes & Calendar UX (2026-04-23)
 - **Bookings page default tab**: changed from "Booked" (confirmed) to "All" — submissions were hidden on landing
 - **Dashboard / Bookings empty data bug**: Dashboard and Bookings queries silently returned null when DB columns didn't exist (`stripe_payment_link_url`, `deposit_paid`, `has_unread_reply`, `sent_emails`); Clients query didn't select those columns so it still worked. Fix: run migrations `20260422_sent_emails.sql`, `20260423_booking_notifications.sql`, `20260424_stripe_deposit.sql` in Supabase SQL editor.

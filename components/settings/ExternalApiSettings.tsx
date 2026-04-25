@@ -152,16 +152,6 @@ const STRIPE_STEPS = [
   "Paste it in the field above and click Save.",
 ];
 
-const CALCOM_STEPS = [
-  "Go to cal.com and create a free account (or log in).",
-  "Click Settings in the bottom-right of the sidebar.",
-  "In the left menu, go to Developer → API keys.",
-  "Click Add to create a new key. Give it any name (e.g. FlashBooker).",
-  "Check the 'Never expires' box so you don't have to reconnect later, then Save.",
-  "Copy the key shown — you won't be able to see it again.",
-  "Paste it in the field above and click Save.",
-];
-
 const KIT_API_KEY_STEPS = [
   "Go to kit.com and log in (or create a free account).",
   "Click your name in the top right, then select Settings.",
@@ -182,14 +172,12 @@ const KIT_FORM_ID_STEPS = [
 export function ExternalApiSettings({
   initialStripeKey,
   initialStripeWebhookSecret,
-  initialCalcomKey,
   initialKitApiKey,
   initialKitFormId,
   artistId,
 }: {
   initialStripeKey: string;
   initialStripeWebhookSecret: string;
-  initialCalcomKey: string;
   initialKitApiKey: string;
   initialKitFormId: string;
   artistId: string;
@@ -198,8 +186,6 @@ export function ExternalApiSettings({
   const [savedStripeKey, setSavedStripeKey] = useState(initialStripeKey);
   const [stripeWebhookSecret, setStripeWebhookSecret] = useState(initialStripeWebhookSecret);
   const [savedStripeWebhookSecret, setSavedStripeWebhookSecret] = useState(initialStripeWebhookSecret);
-  const [calcomKey, setCalcomKey] = useState(initialCalcomKey);
-  const [savedCalcomKey, setSavedCalcomKey] = useState(initialCalcomKey);
   const [kitApiKey, setKitApiKey] = useState(initialKitApiKey);
   const [savedKitApiKey, setSavedKitApiKey] = useState(initialKitApiKey);
   const [kitFormId, setKitFormId] = useState(initialKitFormId);
@@ -208,8 +194,6 @@ export function ExternalApiSettings({
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeWebhookStatus, setStripeWebhookStatus] = useState<SaveStatus>("idle");
   const [stripeWebhookError, setStripeWebhookError] = useState<string | null>(null);
-  const [calcomStatus, setCalcomStatus] = useState<SaveStatus>("idle");
-  const [calcomError, setCalcomError] = useState<string | null>(null);
   const [kitApiStatus, setKitApiStatus] = useState<SaveStatus>("idle");
   const [kitFormStatus, setKitFormStatus] = useState<SaveStatus>("idle");
   const [webhookUrlCopied, setWebhookUrlCopied] = useState(false);
@@ -224,7 +208,7 @@ export function ExternalApiSettings({
   };
 
   const saveExternalKey = async (
-    field: "stripe_api_key" | "calcom_api_key" | "stripe_webhook_secret",
+    field: "stripe_api_key" | "stripe_webhook_secret",
     value: string,
     setStatus: (s: SaveStatus) => void,
     setError?: (e: string | null) => void,
@@ -341,20 +325,6 @@ export function ExternalApiSettings({
             />
           </div>
         )}
-        <ApiKeyField
-          label="Cal.com"
-          description="Create booking links and send calendar invites directly from confirmed appointments."
-          value={calcomKey}
-          onChange={setCalcomKey}
-          placeholder="cal_live_..."
-          signupUrl="https://cal.com/signup"
-          signupLabel="Create Cal.com account"
-          savedValue={savedCalcomKey}
-          onSave={() => saveExternalKey("calcom_api_key", calcomKey, setCalcomStatus, setCalcomError, setSavedCalcomKey)}
-          status={calcomStatus}
-          errorMessage={calcomError}
-          howToSteps={CALCOM_STEPS}
-        />
       </div>
 
       <div className="space-y-4">

@@ -95,16 +95,17 @@ export default async function SetupPage({
     .eq("id", user.id)
     .single();
 
-  type Extended = { calendar_links?: CalendarLink[]; stripe_api_key?: string; calcom_api_key?: string };
+  type Extended = { calendar_links?: CalendarLink[]; stripe_api_key?: string };
+  // select(*) so a single missing column doesn't blank out the rest of the row
   let extended: Extended = {};
-  try {
-    const { data } = await supabase
-      .from("artists")
-      .select("calendar_links, stripe_api_key, calcom_api_key")
-      .eq("id", user.id)
-      .single();
-    extended = (data as Extended) ?? {};
-  } catch { /* migrations pending */ }
+  const { data: extData, error: extErr } = await supabase
+    .from("artists")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+  if (!extErr && extData) {
+    extended = extData as Extended;
+  }
 
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   const calendarConnected = Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token);
@@ -113,13 +114,11 @@ export default async function SetupPage({
   const hasLogo = Boolean(artist?.logo_url);
   const hasSlug = Boolean(artist?.slug);
   const hasStripe = Boolean(extended.stripe_api_key);
-  const hasCalcom = Boolean(extended.calcom_api_key);
-
   const hasReplyTo = Boolean(artist?.gmail_address ?? user.email);
 
   const requiredSteps = [hasSlug, hasReplyTo];
   const recommendedSteps = [paymentLinks.length > 0, calendarLinks.length > 0, hasLogo];
-  const integrationSteps = [calendarConnected, hasStripe, hasCalcom];
+  const integrationSteps = [calendarConnected, hasStripe];
 
   const requiredComplete = requiredSteps.filter(Boolean).length;
   const recommendedComplete = recommendedSteps.filter(Boolean).length;
@@ -271,7 +270,7 @@ export default async function SetupPage({
               <StepCard
                 done={calendarLinks.length > 0}
                 title="Add scheduling links"
-                description="Your Cal.com or Calendly link. Sent automatically once a client pays their deposit so they can pick a time."
+                description="Your Calendly or other scheduling link. Sent automatically once a client pays their deposit so they can pick a time."
                 note={calendarLinks.length > 0 ? `${calendarLinks.length} link${calendarLinks.length !== 1 ? "s" : ""} saved` : undefined}
                 action="Add links"
                 actionHref="/settings"
@@ -304,15 +303,6 @@ export default async function SetupPage({
               />
 
               <StepCard
-                done={hasCalcom}
-                title="Connect Cal.com for one-click scheduling"
-                description="Pre-fills the client&apos;s name and email in the Cal.com link — they just pick a time. Skip the copy-paste dance."
-                note={hasCalcom ? "Cal.com API key saved" : undefined}
-                action="Add Cal.com key"
-                actionHref="/settings?tab=integrations"
-              />
-
-              <StepCard
                 done={calendarConnected}
                 title="Sync appointments to Google Calendar"
                 description="Confirmed bookings show up on your personal Google Calendar automatically. Skip if you use a different calendar — you can still use FlashBooker&apos;s built-in calendar view."
@@ -325,12 +315,6 @@ export default async function SetupPage({
             <section className="space-y-3">
               <h2 className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Recommended tools</h2>
               <div className="grid grid-cols-2 gap-3">
-                <ToolCard
-                  name="Cal.com"
-                  description="Free scheduling tool. Clients book a time slot — paste your Cal link into the calendar email template."
-                  url="https://cal.com"
-                  tag="Free"
-                />
                 <ToolCard
                   name="Stripe"
                   description="Accept credit card payments online. Generate a payment link for each deposit request."

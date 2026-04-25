@@ -32,21 +32,22 @@ export default async function SettingsPage({
     calendar_links?: CalendarLink[];
     stripe_api_key?: string;
     stripe_webhook_secret?: string;
-    calcom_api_key?: string;
     kit_api_key?: string;
     kit_form_id?: string;
     reminder_enabled?: boolean;
     reminder_hours_before?: number;
   };
+  // Use select(*) so a single missing column (e.g. unrun migration) doesn't
+  // wipe out the entire row — we still get every other field that exists.
   let extended: ExtendedArtist = {};
-  try {
-    const { data } = await supabase
-      .from("artists")
-      .select("pipeline_settings, calendar_links, stripe_api_key, stripe_webhook_secret, calcom_api_key, kit_api_key, kit_form_id, reminder_enabled, reminder_hours_before")
-      .eq("id", user.id)
-      .single();
-    extended = (data as ExtendedArtist) ?? {};
-  } catch { /* migrations not yet applied */ }
+  const { data: extData, error: extErr } = await supabase
+    .from("artists")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+  if (!extErr && extData) {
+    extended = extData as ExtendedArtist;
+  }
 
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   const hasRefreshToken = Boolean(artist?.google_refresh_token);
@@ -68,7 +69,7 @@ export default async function SettingsPage({
         calendarLinks={(extended.calendar_links as CalendarLink[]) ?? []}
         stripeApiKey={extended.stripe_api_key ?? ""}
         stripeWebhookSecret={extended.stripe_webhook_secret ?? ""}
-        calcomApiKey={extended.calcom_api_key ?? ""}
+
         kitApiKey={extended.kit_api_key ?? ""}
         kitFormId={extended.kit_form_id ?? ""}
         reminderEnabled={extended.reminder_enabled ?? false}

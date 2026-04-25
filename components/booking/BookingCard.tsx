@@ -3,15 +3,10 @@
 import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, Calendar, ExternalLink } from "lucide-react";
+import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, ExternalLink } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ALL_BOOKING_STATES } from "@/lib/pipeline-settings";
-
-export interface CalcomData {
-  username: string;
-  events: { slug: string; title: string }[];
-}
 
 const STATE_LABELS: Record<BookingState, string> = {
   inquiry:   "Submission",
@@ -40,7 +35,6 @@ interface BookingCardProps {
   dragging?: boolean;
   onDragStart?: (bookingId: string) => void;
   hasStripe?: boolean;
-  calcomData?: CalcomData | null;
 }
 
 function CopyButton({ value }: { value: string }) {
@@ -208,7 +202,6 @@ export function BookingCard({
   dragging,
   onDragStart,
   hasStripe = false,
-  calcomData = null,
 }: BookingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [depositModal, setDepositModal] = useState(false);
@@ -219,20 +212,6 @@ export function BookingCard({
   const [depositCopied, setDepositCopied] = useState(false);
   const [depositPaid, setDepositPaid] = useState(booking.deposit_paid ?? false);
   const [markingPaid, setMarkingPaid] = useState(false);
-  const [calcomMenu, setCalcomMenu] = useState<DOMRect | null>(null);
-  const calcomMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!calcomMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (calcomMenuRef.current && !calcomMenuRef.current.contains(e.target as Node)) {
-        setCalcomMenu(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [calcomMenu]);
-
   const customEntries = Object.entries(booking.custom_answers ?? {}).filter(([, value]) => {
     if (Array.isArray(value)) return value.length > 0;
     return value !== null && String(value).trim() !== "";
@@ -276,14 +255,6 @@ export function BookingCard({
     navigator.clipboard.writeText(depositLinkUrl).then(() => {
       setDepositCopied(true);
       setTimeout(() => setDepositCopied(false), 2000);
-    });
-  };
-
-  const copySchedulingLink = (eventSlug: string) => {
-    if (!calcomData?.username) return;
-    const url = `https://cal.com/${calcomData.username}/${eventSlug}?name=${encodeURIComponent(booking.client_name)}&email=${encodeURIComponent(booking.client_email)}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCalcomMenu(null);
     });
   };
 
@@ -494,22 +465,6 @@ export function BookingCard({
               </button>
             )
           )}
-          {calcomData && (isAccepted || booking.state === "confirmed") && (
-            <button
-              type="button"
-              title="Copy scheduling link"
-              onClick={(e) => {
-                if (calcomData.events.length === 1) {
-                  copySchedulingLink(calcomData.events[0].slug);
-                } else {
-                  setCalcomMenu(e.currentTarget.getBoundingClientRect());
-                }
-              }}
-              className="flex items-center gap-1 h-7 px-2 text-xs rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-            >
-              <Calendar className="w-3 h-3" /> Schedule
-            </button>
-          )}
         </div>
 
         {/* Right: primary action + overflow */}
@@ -595,31 +550,6 @@ export function BookingCard({
         document.body
       )}
 
-      {/* Cal.com event type picker */}
-      {calcomMenu && calcomData && createPortal(
-        <div
-          ref={calcomMenuRef}
-          style={{
-            position: "fixed",
-            bottom: window.innerHeight - calcomMenu.top + 4,
-            left: calcomMenu.left,
-          }}
-          className="z-[9999] min-w-40 bg-surface-container-lowest border border-primary/20 rounded-xl shadow-lg py-1 overflow-hidden"
-        >
-          <p className="px-3 py-1.5 text-xs font-medium text-on-surface-variant/60 uppercase tracking-wide">Pick event type</p>
-          {calcomData.events.map(ev => (
-            <button
-              key={ev.slug}
-              type="button"
-              className="w-full text-left px-3 py-2 text-sm text-on-surface-variant hover:bg-primary/5 hover:text-on-surface transition-colors"
-              onClick={() => copySchedulingLink(ev.slug)}
-            >
-              {ev.title}
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

@@ -10,13 +10,13 @@ export default async function LinksPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return redirect("/login");
 
-  const [{ data: artist }, { data: extended }] = await Promise.all([
-    supabase.from("artists").select("payment_links").eq("id", user.id).single(),
-    supabase.from("artists").select("calendar_links, calcom_api_key").eq("id", user.id).single(),
-  ]);
+  const { data: artistRow } = await supabase
+    .from("artists")
+    .select("*")
+    .eq("id", user.id)
+    .single();
 
-  const ext = (extended as { calendar_links?: CalendarLink[]; calcom_api_key?: string } | null);
-  const calcomConnected = Boolean(ext?.calcom_api_key);
+  const row = artistRow as { payment_links?: unknown; calendar_links?: CalendarLink[] } | null;
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -27,9 +27,8 @@ export default async function LinksPage() {
         </header>
         <div className="flex-1 overflow-y-auto p-8">
           <LinksView
-            initialPaymentLinks={normalizePaymentLinks(artist?.payment_links)}
-            initialCalendarLinks={(ext?.calendar_links ?? [])}
-            calcomConnected={calcomConnected}
+            initialPaymentLinks={normalizePaymentLinks(row?.payment_links)}
+            initialCalendarLinks={row?.calendar_links ?? []}
           />
         </div>
       </main>

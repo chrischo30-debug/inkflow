@@ -35,7 +35,6 @@ export interface SettingsShellProps {
   calendarLinks: CalendarLink[];
   stripeApiKey: string;
   stripeWebhookSecret: string;
-  calcomApiKey: string;
   kitApiKey: string;
   kitFormId: string;
   reminderEnabled: boolean;
@@ -100,7 +99,7 @@ export function SettingsShell(props: SettingsShellProps) {
               <ExternalApiSettings
                 initialStripeKey={props.stripeApiKey}
                 initialStripeWebhookSecret={props.stripeWebhookSecret}
-                initialCalcomKey={props.calcomApiKey}
+
                 initialKitApiKey={props.kitApiKey}
                 initialKitFormId={props.kitFormId}
                 artistId={props.artistId}
@@ -121,7 +120,10 @@ export function SettingsShell(props: SettingsShellProps) {
           {tab === "emails" && (
             <div className="max-w-2xl space-y-6">
               <SectionHeading title="Email Templates" description="Customize messages sent at each stage. Toggle auto-send to control whether emails go out automatically." />
-              <EmailTemplatesSettings />
+              <EmailTemplatesSettings
+                paymentLinks={props.paymentLinks}
+                calendarLinks={props.calendarLinks}
+              />
             </div>
           )}
 

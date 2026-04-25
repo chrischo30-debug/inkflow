@@ -30,7 +30,7 @@ interface Props {
   onClose: () => void;
 }
 
-const VAR_RE = /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|calendarLinks|appointmentDate)\}/g;
+const VAR_RE = /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|appointmentDate)(?::[^}]+)?\}/g;
 const TODO_RE = /✏️ REPLACE THIS:[^\n]*/g;
 
 function BodyPreview({ text, vars, resolved, compact }: { text: string; vars?: Record<string, string>; resolved?: boolean; compact?: boolean }) {

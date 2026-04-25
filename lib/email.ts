@@ -19,7 +19,7 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
   },
   accepted: {
     subject: `You're in! Next steps from {artistName}`,
-    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit:\n{paymentLink}\n\nOnce your deposit is received, use this link to book your appointment time:\n{calendarLinks}\n\nThanks,\n{artistName}`,
+    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit:\n{paymentLink}\n\nOnce your deposit is received, use this link to book your appointment time:\n{calendarLink}\n\nThanks,\n{artistName}`,
   },
   confirmed: {
     subject: `Appointment Booked – {artistName}`,
@@ -37,12 +37,15 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
 
 export interface TemplateVars {
   clientFirstName: string;
-  clientName: string;     // kept for backwards compat with existing saved templates
+  clientName: string;       // kept for backwards compat with existing saved templates
   artistName: string;
-  paymentLink: string;    // primary payment link URL (or empty)
-  calendarLink: string;   // first calendar link URL (or empty)
-  calendarLinks: string;  // all calendar links formatted as labeled list
+  paymentLink: string;      // primary payment link URL (or empty)
+  calendarLink: string;     // first calendar link URL (or empty)
   appointmentDate: string;
+  // Full link lists used by the {paymentLink:Label} and {calendarLink:Label}
+  // placeholder resolver. Not meant to be inserted as a single token.
+  paymentLinksList: PaymentLink[];
+  calendarLinksList: CalendarLink[];
 }
 
 export function buildTemplateVars(opts: {
@@ -54,11 +57,7 @@ export function buildTemplateVars(opts: {
   primaryPaymentLink?: string;
 }): TemplateVars {
   const paymentLink = opts.primaryPaymentLink || opts.paymentLinksList[0]?.url || '';
-
   const calendarLink = opts.calendarLinksList[0]?.url || '';
-  const calendarLinks = opts.calendarLinksList.length
-    ? opts.calendarLinksList.map(l => `${l.label}: ${l.url}`).join('\n')
-    : calendarLink;
 
   return {
     clientFirstName: opts.clientName.split(' ')[0],
@@ -66,19 +65,31 @@ export function buildTemplateVars(opts: {
     artistName: opts.artistName,
     paymentLink,
     calendarLink,
-    calendarLinks,
     appointmentDate: opts.appointmentDate ?? '',
+    paymentLinksList: opts.paymentLinksList,
+    calendarLinksList: opts.calendarLinksList,
   };
+}
+
+function findLinkByLabel(links: { label: string; url: string }[], label: string): string | null {
+  const target = label.trim().toLowerCase();
+  return links.find((l) => l.label.trim().toLowerCase() === target)?.url ?? null;
 }
 
 export function applyPlaceholders(template: string, vars: TemplateVars): string {
   return template
+    // Labeled link variables: {paymentLink:Label} / {calendarLink:Label}
+    .replace(/\{paymentLink:([^}]+)\}/g, (_match, rawLabel: string) => {
+      return findLinkByLabel(vars.paymentLinksList, rawLabel) ?? vars.paymentLink;
+    })
+    .replace(/\{calendarLink:([^}]+)\}/g, (_match, rawLabel: string) => {
+      return findLinkByLabel(vars.calendarLinksList, rawLabel) ?? vars.calendarLink;
+    })
     .replace(/\{clientFirstName\}/g, vars.clientFirstName)
     .replace(/\{clientName\}/g, vars.clientName)
     .replace(/\{artistName\}/g, vars.artistName)
     .replace(/\{paymentLink\}/g, vars.paymentLink)
     .replace(/\{calendarLink\}/g, vars.calendarLink)
-    .replace(/\{calendarLinks\}/g, vars.calendarLinks)
     .replace(/\{appointmentDate\}/g, vars.appointmentDate);
 }
 

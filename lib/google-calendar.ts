@@ -1,3 +1,69 @@
+import crypto from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// ── Token encryption ──────────────────────────────────────────────────────────
+// Set GOOGLE_TOKEN_ENCRYPTION_KEY to a 64-char hex string (32 random bytes).
+// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+// Tokens that pre-date encryption are stored plain-text and still work until
+// the artist reconnects, at which point they get re-saved encrypted.
+
+function getEncKey(): Buffer | null {
+  const k = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY;
+  if (!k) return null;
+  const buf = Buffer.from(k, "hex");
+  return buf.length === 32 ? buf : null;
+}
+
+export function encryptToken(text: string): string {
+  const key = getEncKey();
+  if (!key) return text;
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", key, iv);
+  const enc = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
+  return `${iv.toString("hex")}:${enc.toString("hex")}`;
+}
+
+export function decryptToken(text: string): string {
+  const key = getEncKey();
+  if (!key || !text.includes(":")) return text; // plain-text fallback
+  try {
+    const [ivHex, encHex] = text.split(":", 2);
+    const iv = Buffer.from(ivHex, "hex");
+    const enc = Buffer.from(encHex, "hex");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+  } catch {
+    return text; // not actually encrypted — return as-is
+  }
+}
+
+export class InvalidGrantError extends Error {
+  constructor() { super("Google refresh token revoked"); this.name = "InvalidGrantError"; }
+}
+
+// Decrypt the stored refresh token, exchange it for a fresh access token, and
+// handle revocation by marking the artist as disconnected in the DB.
+export async function getGoogleAccessToken(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  artistId: string,
+  encryptedRefreshToken: string,
+): Promise<string | null> {
+  const refreshToken = decryptToken(encryptedRefreshToken);
+  try {
+    return await refreshGoogleAccessToken(refreshToken);
+  } catch (err) {
+    if (err instanceof InvalidGrantError) {
+      await supabase
+        .from("artists")
+        .update({ calendar_sync_enabled: false, google_refresh_token: null })
+        .eq("id", artistId);
+      return null;
+    }
+    throw err;
+  }
+}
+
 interface GoogleTokenResponse {
   access_token: string;
   expires_in: number;
@@ -97,8 +163,9 @@ export async function refreshGoogleAccessToken(refreshToken: string) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Google access token refresh failed: ${text}`);
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    if (body.error === "invalid_grant") throw new InvalidGrantError();
+    throw new Error(`Google access token refresh failed: ${JSON.stringify(body)}`);
   }
 
   const data = (await res.json()) as GoogleTokenResponse;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
-import { exchangeGoogleCodeForTokens, getGoogleRedirectUri } from "@/lib/google-calendar";
+import { exchangeGoogleCodeForTokens, encryptToken, getGoogleRedirectUri } from "@/lib/google-calendar";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -43,15 +43,15 @@ export async function GET(request: Request) {
       .eq("id", user.id)
       .single();
 
-    const refreshTokenToSave = tokens.refresh_token || artist?.google_refresh_token;
-    if (!refreshTokenToSave) {
+    const rawRefreshToken = tokens.refresh_token || artist?.google_refresh_token;
+    if (!rawRefreshToken) {
       return redirectToCalendar("Google did not return a refresh token. Disconnect app access in your Google account settings and reconnect.");
     }
 
     const { error } = await supabase
       .from("artists")
       .update({
-        google_refresh_token: refreshTokenToSave,
+        google_refresh_token: encryptToken(rawRefreshToken),
         calendar_sync_enabled: true,
       })
       .eq("id", user.id);
