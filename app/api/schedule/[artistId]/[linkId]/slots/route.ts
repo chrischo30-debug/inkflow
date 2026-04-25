@@ -103,27 +103,73 @@ export async function GET(
     }
   }
 
-  // Generate all candidate slots (30-min increments, duration must fit before end_hour)
-  const candidates: Array<{ hour: number; minute: number }> = [];
-  let h = link.start_hour;
-  let m = 0;
-  while (true) {
-    const endMinutes = h * 60 + m + link.duration_minutes;
-    if (endMinutes > link.end_hour * 60) break;
-    candidates.push({ hour: h, minute: m });
-    m += 30;
-    if (m >= 60) { h++; m = 0; }
+  const buffer = Math.max(0, link.buffer_minutes ?? 0);
+  const startMin = link.start_hour * 60;
+  const endMin = link.end_hour * 60;
+
+  // Generate all candidate slots. For half-day links, that's the half-day slot
+  // at start_hour PLUS optional follow-up slots after (half_day + buffer).
+  // Each candidate carries its own duration so half-day + follow-ups can coexist.
+  const candidates: Array<{ minute: number; duration: number }> = [];
+
+  if (link.is_half_day) {
+    const halfDay = link.half_day_minutes ?? 240;
+    if (startMin + halfDay <= endMin) {
+      candidates.push({ minute: startMin, duration: halfDay });
+    }
+    const followups = link.half_day_followup_minutes ?? [];
+    if (followups.length > 0) {
+      const followupStart = startMin + halfDay + buffer;
+      for (const dur of followups) {
+        // 30-min increments from the earliest follow-up slot
+        for (let m = followupStart; m + dur <= endMin; m += 30) {
+          candidates.push({ minute: m, duration: dur });
+        }
+      }
+    }
+  } else {
+    for (let m = startMin; m + link.duration_minutes <= endMin; m += 30) {
+      candidates.push({ minute: m, duration: link.duration_minutes });
+    }
   }
 
-  // If no calendar connected, return all candidate slots
+  const minutesToHHMM = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+  // Pull existing FlashBooker bookings for this date — they should block slots
+  // even if the artist isn't syncing them to Google. Use scheduled appointments
+  // and treat them as busy [start, start + duration]. Without a per-booking
+  // duration column, fall back to the link's primary duration.
+  const dayStartISO = `${date}T00:00:00.000Z`;
+  const nextDate = new Date(date); nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  const dayEndISO = `${nextDate.toISOString().slice(0, 10)}T00:00:00.000Z`;
+  const { data: dayBookings } = await admin
+    .from("bookings")
+    .select("appointment_date")
+    .eq("artist_id", artistId)
+    .not("state", "in", '("cancelled","rejected")')
+    .gte("appointment_date", dayStartISO)
+    .lt("appointment_date", dayEndISO);
+  const fallbackDuration = link.is_half_day ? (link.half_day_minutes ?? 240) : link.duration_minutes;
+  const bookingBusy: Array<{ start: Date; end: Date }> = (dayBookings ?? [])
+    .filter(b => b.appointment_date)
+    .map(b => {
+      const start = new Date(b.appointment_date as string);
+      return { start, end: new Date(start.getTime() + fallbackDuration * 60000) };
+    });
+
+  // If no calendar connected, only DB bookings + buffer block slots
   if (!artist.google_refresh_token || !artist.calendar_sync_enabled) {
+    const inflated = bookingBusy.map(b => ({ start: b.start, end: new Date(b.end.getTime() + buffer * 60000) }));
+    const available = candidates.filter(c => {
+      const slotStart = toUTCDate(date, Math.floor(c.minute / 60), c.minute % 60, link.timezone);
+      const slotEnd = new Date(slotStart.getTime() + c.duration * 60000);
+      return !inflated.some(b => overlaps(slotStart, slotEnd, b.start, b.end));
+    });
     return NextResponse.json({
-      slots: candidates.map(c => ({
-        start: `${String(c.hour).padStart(2, "0")}:${String(c.minute).padStart(2, "0")}`,
-        end: (() => {
-          const em = c.hour * 60 + c.minute + link.duration_minutes;
-          return `${String(Math.floor(em / 60)).padStart(2, "0")}:${String(em % 60).padStart(2, "0")}`;
-        })(),
+      slots: available.map(c => ({
+        start: minutesToHHMM(c.minute),
+        end: minutesToHHMM(c.minute + c.duration),
       })),
     });
   }
@@ -149,25 +195,23 @@ export async function GET(
     // If calendar checks fail, return all candidates
   }
 
-  const busy = busyPeriods.map(b => ({
-    start: new Date(b.start),
-    end: new Date(b.end),
-  }));
+  // Combine Google freeBusy + FlashBooker DB bookings, then inflate the end
+  // of each busy block by buffer_minutes so subsequent slots get a gap after.
+  const busy = [
+    ...busyPeriods.map(b => ({ start: new Date(b.start), end: new Date(b.end) })),
+    ...bookingBusy,
+  ].map(b => ({ start: b.start, end: new Date(b.end.getTime() + buffer * 60000) }));
 
   const available = candidates.filter(c => {
-    const slotStart = toUTCDate(date, c.hour, c.minute, link.timezone);
-    const endMinutes = c.hour * 60 + c.minute + link.duration_minutes;
-    const slotEnd = toUTCDate(date, Math.floor(endMinutes / 60), endMinutes % 60, link.timezone);
+    const slotStart = toUTCDate(date, Math.floor(c.minute / 60), c.minute % 60, link.timezone);
+    const slotEnd = new Date(slotStart.getTime() + c.duration * 60000);
     return !busy.some(b => overlaps(slotStart, slotEnd, b.start, b.end));
   });
 
   return NextResponse.json({
     slots: available.map(c => ({
-      start: `${String(c.hour).padStart(2, "0")}:${String(c.minute).padStart(2, "0")}`,
-      end: (() => {
-        const em = c.hour * 60 + c.minute + link.duration_minutes;
-        return `${String(Math.floor(em / 60)).padStart(2, "0")}:${String(em % 60).padStart(2, "0")}`;
-      })(),
+      start: minutesToHHMM(c.minute),
+      end: minutesToHHMM(c.minute + c.duration),
     })),
   });
 }

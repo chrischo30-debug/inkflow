@@ -21,7 +21,14 @@ export interface SchedulingLink {
   calendar_ids?: string[]; // which Google calendars to check; empty/undefined = all
   block_full_day?: boolean; // if true, once any booking exists for a day, block all slots
   confirmation_message?: string; // shown to client after they confirm a slot
+  buffer_minutes?: number; // 0 | 15 | 30 — gap added after each booked/busy block
+  is_half_day?: boolean;   // when true, link offers a half-day session
+  half_day_minutes?: number; // duration of the half-day session
+  half_day_followup_minutes?: number[]; // allowed durations after a half-day; [] = none
 }
+
+export const DEFAULT_CONFIRMATION_MESSAGE =
+  "Thanks — you're booked. I'll send a reminder closer to the date. Reply to this email if anything changes.";
 
 export function normalizeSchedulingLinks(raw: unknown): SchedulingLink[] {
   if (Array.isArray(raw)) return raw as SchedulingLink[];
