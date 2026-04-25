@@ -23,7 +23,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
       .single(),
     supabase
       .from('artists')
-      .select('calendar_links')
+      .select('calendar_links, logo_url, email_logo_enabled, email_logo_bg')
       .eq('id', userId)
       .single(),
     supabase
@@ -35,6 +35,9 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const artist = artistCore ? {
     ...artistCore,
     calendar_links: artistExtra?.calendar_links ?? [],
+    logo_url: (artistExtra as { logo_url?: string | null } | null)?.logo_url ?? null,
+    email_logo_enabled: (artistExtra as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false,
+    email_logo_bg: ((artistExtra as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark",
   } : null;
 
   return { booking, artist, templateRows: templateRows ?? [] };
@@ -157,6 +160,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     vars,
     template: { subject, body },
     artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
+    branding: { logoUrl: artist?.logo_url ?? null, logoEnabled: artist?.email_logo_enabled !== false, logoBg: artist?.email_logo_bg ?? "light" },
   });
 
   const nowIso = new Date().toISOString();

@@ -10,40 +10,40 @@ const APP_NAME = 'FlashBooker';
 
 export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>, { subject: string; body: string }> = {
   inquiry: {
-    subject: `Submission Received – {artistName}`,
-    body: `Hi {clientFirstName},\n\nWe received your submission. {artistName} is reviewing it and will get back to you shortly.\n\nThanks,\n{artistName}`,
+    subject: `Got your submission`,
+    body: `Hi {clientFirstName},\n\nGot your submission. I'll take a look and get back to you soon.\n\n{artistName}`,
   },
   follow_up: {
-    subject: `Following up on your tattoo request – {artistName}`,
-    body: `Hi {clientFirstName},\n\nThank you for reaching out! I had a few questions about your tattoo idea before moving forward:\n\n✏️ REPLACE THIS: Add your questions here\n\nLooking forward to hearing from you!\n\nThanks,\n{artistName}`,
+    subject: `Quick question about your tattoo idea`,
+    body: `Hi {clientFirstName},\n\nThanks for sending this over. Before I can quote it, a few quick questions:\n\nREPLACE THIS with your questions\n\nReply whenever you can.\n\n{artistName}`,
   },
   accepted: {
-    subject: `You're in! Next steps from {artistName}`,
-    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit using the link below:\n{paymentLink}\n\nThanks,\n{artistName}`,
+    subject: `Ready to book`,
+    body: `Hi {clientFirstName},\n\nI'd like to do this one. To save your spot, send the deposit here:\n{paymentLink}\n\nOnce that's in I'll send a link to pick your appointment time.\n\n{artistName}`,
   },
   sent_deposit: {
-    subject: `Deposit reminder – {artistName}`,
-    body: `Hi {clientFirstName},\n\nJust a reminder to send your deposit to secure your spot:\n{paymentLink}\n\nThanks,\n{artistName}`,
+    subject: `Deposit reminder`,
+    body: `Hi {clientFirstName},\n\nQuick reminder to send the deposit so I can lock in your spot:\n{paymentLink}\n\n{artistName}`,
   },
   sent_calendar: {
-    subject: `Pick your appointment time – {artistName}`,
-    body: `Hi {clientFirstName},\n\nYour deposit is confirmed! Use the link below to pick your appointment time:\n{schedulingLink}\n\nThanks,\n{artistName}`,
+    subject: `Pick your appointment time`,
+    body: `Hi {clientFirstName},\n\nDeposit is in, thanks. Pick a time that works for you:\n{schedulingLink}\n\n{artistName}`,
   },
   booked: {
-    subject: `Appointment Booked – {artistName}`,
-    body: `Hi {clientFirstName},\n\nYou're locked in! See you on {appointmentDate}.\n\nThanks,\n{artistName}`,
+    subject: `You're booked`,
+    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}. See you then.\n\n{artistName}`,
   },
   confirmed: {
-    subject: `Appointment Booked – {artistName}`,
-    body: `Hi {clientFirstName},\n\nYou're locked in! See you on {appointmentDate}.\n\nThanks,\n{artistName}`,
+    subject: `You're booked`,
+    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}. See you then.\n\n{artistName}`,
   },
   completed: {
-    subject: `Thanks for coming in – {artistName}`,
-    body: `Hi {clientFirstName},\n\nIt was a pleasure working with you. Take care of your new tattoo!\n\nThanks,\n{artistName}`,
+    subject: `Thanks for coming in`,
+    body: `Hi {clientFirstName},\n\nThanks for coming in today. Take care of the tattoo and let me know if anything looks off during the heal.\n\n{artistName}`,
   },
   rejected: {
-    subject: `Update on your tattoo request – {artistName}`,
-    body: `Hi {clientFirstName},\n\nThank you so much for your interest. Unfortunately, I'm unable to take on this project at this time.\n\nI hope you find the perfect artist for your vision!\n\nThanks,\n{artistName}`,
+    subject: `About your tattoo request`,
+    body: `Hi {clientFirstName},\n\nThanks for reaching out. I'm not able to take this one on, but I appreciate you considering me. Good luck with the project.\n\n{artistName}`,
   },
 };
 
@@ -91,8 +91,38 @@ function findLinkByLabel(links: { label: string; url: string }[], label: string)
   return links.find((l) => l.label.trim().toLowerCase() === target)?.url ?? null;
 }
 
-export function applyPlaceholders(template: string, vars: TemplateVars): string {
+// Strip lines whose placeholders would resolve to empty strings — keeps blank
+// values from rendering as awkward sentences ("See you on .") in client emails.
+function stripLinesWithEmptyPlaceholders(template: string, vars: TemplateVars): string {
+  const empty: string[] = [];
+  if (!vars.paymentLink) empty.push("paymentLink");
+  if (!vars.calendarLink) empty.push("calendarLink");
+  if (!vars.appointmentDate) empty.push("appointmentDate");
+  if (!vars.stripePaymentLink) empty.push("stripePaymentLink");
+  if (empty.length === 0) return template;
+
   return template
+    .split("\n")
+    .filter(line => {
+      for (const key of empty) {
+        if (line.includes(`{${key}}`)) return false;
+        // Labeled variants: {paymentLink:Foo} / {calendarLink:Foo}
+        if ((key === "paymentLink" || key === "calendarLink") && line.includes(`{${key}:`)) {
+          // Only drop if the label-resolved url is also empty — handled by the
+          // resolver's own fallback; here we conservatively keep the line and
+          // let the resolver fall through to the (empty) default.
+          // To avoid leaking an empty url, drop the line in that case too:
+          return false;
+        }
+      }
+      return true;
+    })
+    .join("\n");
+}
+
+export function applyPlaceholders(template: string, vars: TemplateVars): string {
+  const cleaned = stripLinesWithEmptyPlaceholders(template, vars);
+  return cleaned
     // Labeled link variables: {paymentLink:Label} / {calendarLink:Label}
     .replace(/\{paymentLink:([^}]+)\}/g, (_match, rawLabel: string) => {
       return findLinkByLabel(vars.paymentLinksList, rawLabel) ?? vars.paymentLink;
@@ -114,11 +144,18 @@ function buildFromHeader(artistName: string): string {
   return `${cleanedName} via ${APP_NAME} <${SENDING_LOCAL}@${SENDING_DOMAIN}>`;
 }
 
+export interface EmailBranding {
+  logoUrl?: string | null;
+  logoEnabled?: boolean;
+  logoBg?: "light" | "dark";
+}
+
 interface SendEmailPayload {
   toEmail: string;
   vars: TemplateVars;
   template: { subject: string; body: string };
   artistReplyTo?: string | null;
+  branding?: EmailBranding;
 }
 
 interface SendEmailResult {
@@ -126,12 +163,53 @@ interface SendEmailResult {
   providerMessageId?: string;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Convert a plain-text body into safe HTML: escape, then linkify URLs and
+// preserve line breaks. Used for the HTML version when a logo header is shown.
+function textToHtmlBody(text: string): string {
+  const escaped = escapeHtml(text);
+  const linkified = escaped.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" style="color:#2563eb;text-decoration:underline;word-break:break-all">$1</a>',
+  );
+  return linkified.replace(/\n/g, '<br>');
+}
+
+function buildHtmlEmail(bodyText: string, branding?: EmailBranding): string {
+  const showLogo = Boolean(branding?.logoEnabled && branding?.logoUrl);
+  const isDark = branding?.logoBg === "dark";
+  const headerBg = isDark ? "#111111" : "#ffffff";
+  const headerBorder = isDark ? "#111111" : "#f3f4f6";
+  const logoBlock = showLogo
+    ? `<tr><td align="center" style="background:${headerBg};border-top-left-radius:12px;border-top-right-radius:12px;border-bottom:1px solid ${headerBorder};padding:24px 16px"><img src="${escapeHtml(
+        branding!.logoUrl!,
+      )}" alt="" style="max-height:64px;max-width:200px;height:auto;width:auto;display:block" /></td></tr>`
+    : '';
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden">
+${logoBlock}
+<tr><td style="padding:24px 32px 32px;color:#111827;font-size:15px;line-height:1.6">${textToHtmlBody(bodyText)}</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
+
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
-  const { toEmail, vars, template, artistReplyTo } = payload;
+  const { toEmail, vars, template, artistReplyTo, branding } = payload;
 
   const subject = applyPlaceholders(template.subject, vars);
   const text = applyPlaceholders(template.body, vars);
   const from = buildFromHeader(vars.artistName);
+  const html = buildHtmlEmail(text, branding);
 
   if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
     console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo: artistReplyTo, text });
@@ -144,6 +222,7 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
       to: [toEmail],
       subject,
       text,
+      html,
       ...(artistReplyTo ? { replyTo: artistReplyTo } : {}),
     });
     return { subject, providerMessageId: result.data?.id };
@@ -165,6 +244,7 @@ export async function sendStateTransitionEmail(payload: {
   appointmentDate?: string;
   template?: EmailTemplate | null;
   artistReplyTo?: string | null;
+  branding?: EmailBranding;
 }): Promise<SendEmailResult> {
   const { newState } = payload;
   if (newState === 'cancelled') return {};
@@ -188,5 +268,6 @@ export async function sendStateTransitionEmail(payload: {
       ? { subject: payload.template.subject, body: payload.template.body }
       : defaults,
     artistReplyTo: payload.artistReplyTo,
+    branding: payload.branding,
   });
 }

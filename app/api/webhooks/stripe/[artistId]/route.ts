@@ -5,26 +5,20 @@ import { sendEmail, buildTemplateVars } from "@/lib/email";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 
 const CALENDAR_EMAIL_TEMPLATE = {
-  subject: `Your deposit is confirmed — book your appointment with {artistName}`,
+  subject: `Deposit received, pick your time`,
   body: `Hi {clientFirstName},
 
-Your deposit has been received — you're locked in!
-
-Use this link to pick your appointment time:
+Got your deposit, thanks. Pick a time that works for you here:
 {schedulingLink}
-
-Looking forward to working with you.
 
 {artistName}`,
 };
 
 const CALENDAR_EMAIL_NO_LINK_TEMPLATE = {
-  subject: `Deposit confirmed — {artistName}`,
+  subject: `Deposit received`,
   body: `Hi {clientFirstName},
 
-Your deposit has been received — you're all set!
-
-{artistName} will be in touch shortly to confirm your appointment time.
+Got your deposit, thanks. I'll reach out shortly to lock in a time.
 
 {artistName}`,
 };
@@ -42,7 +36,7 @@ export async function POST(
   const supabase = createAdminClient();
   const { data: artist } = await supabase
     .from("artists")
-    .select("stripe_webhook_secret, stripe_api_key, name, scheduling_links, gmail_address, email")
+    .select("stripe_webhook_secret, stripe_api_key, name, scheduling_links, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
     .eq("id", artistId)
     .single();
 
@@ -100,16 +94,22 @@ export async function POST(
         ? `${appOrigin}/schedule/${artistId}/${schedulingLink.id}?bid=${bookingId}`
         : null;
 
-      if (clientEmail && clientName) {
+      const autoEmailsOn = (artist as { auto_emails_enabled?: boolean | null }).auto_emails_enabled !== false;
+      if (clientEmail && clientName && autoEmailsOn) {
+        const branding = {
+          logoUrl: (artist as { logo_url?: string | null }).logo_url ?? null,
+          logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
+          logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
+        };
         if (schedulingUrl) {
           const vars = {
             ...buildTemplateVars({ clientName, artistName, paymentLinksList: [], calendarLinksList: [] }),
             schedulingLink: schedulingUrl,
           };
-          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_TEMPLATE, artistReplyTo });
+          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_TEMPLATE, artistReplyTo, branding });
         } else {
           const vars = buildTemplateVars({ clientName, artistName, paymentLinksList: [], calendarLinksList: [] });
-          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_NO_LINK_TEMPLATE, artistReplyTo });
+          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_NO_LINK_TEMPLATE, artistReplyTo, branding });
         }
       }
 

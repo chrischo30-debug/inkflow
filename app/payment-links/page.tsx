@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { normalizePaymentLinks, normalizeSchedulingLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 export default async function LinksPage() {
   const supabase = await createClient();
@@ -31,7 +32,17 @@ export default async function LinksPage() {
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Links</h1>
+          <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-links">Links</h1>
+          <CoachmarkSequence tips={[{
+            id: "page.links.intro",
+            anchorSelector: '[data-coachmark="page-links"]',
+            title: "All your links live here",
+            body: <>
+              <p>Three kinds of links: payment, calendar (Google Cal style invites), and scheduling.</p>
+              <p>You can drop these into emails using <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{paymentLink}"}</code> or <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{schedulingLink}"}</code> placeholders.</p>
+              <p>Or just copy and paste any link manually whenever you need it.</p>
+            </>,
+          }]} />
         </header>
         <div className="flex-1 overflow-y-auto p-8">
           <LinksView

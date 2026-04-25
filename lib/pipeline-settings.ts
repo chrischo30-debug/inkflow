@@ -20,6 +20,7 @@ export interface SchedulingLink {
   timezone: string;      // IANA tz identifier
   calendar_ids?: string[]; // which Google calendars to check; empty/undefined = all
   block_full_day?: boolean; // if true, once any booking exists for a day, block all slots
+  confirmation_message?: string; // shown to client after they confirm a slot
 }
 
 export function normalizeSchedulingLinks(raw: unknown): SchedulingLink[] {

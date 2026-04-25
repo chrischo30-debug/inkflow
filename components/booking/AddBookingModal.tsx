@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Ban } from "lucide-react";
 
 const BOOKING_STATES = [
   { value: "inquiry",   label: "Submission" },
@@ -30,11 +30,18 @@ const MONTH_NAMES = [
 ];
 const WEEKDAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
 
-type CalEvent = { id: string; title: string; start: string; source: "google" | "flashbook" };
+type BusyInterval = { start: string; end: string; source: "google" | "flashbook" };
 
 function toLocalDateKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatTimeRange(startISO: string, endISO: string): string {
+  const s = new Date(startISO);
+  const e = new Date(endISO);
+  const fmt = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${fmt(s)} – ${fmt(e)}`;
 }
 
 function AppointmentDatePicker({
@@ -53,22 +60,29 @@ function AppointmentDatePicker({
   const seed = date ? new Date(date + "T12:00:00") : today;
   const [viewYear, setViewYear] = useState(seed.getFullYear());
   const [viewMonth, setViewMonth] = useState(seed.getMonth());
-  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [busy, setBusy] = useState<BusyInterval[]>([]);
+  const [blockedDates, setBlockedDates] = useState<Set<string>>(new Set());
+  const [calendarConnected, setCalendarConnected] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(true);
 
-  const fetchEvents = useCallback(async (y: number, m: number) => {
+  const fetchAvailability = useCallback(async (y: number, m: number) => {
     setLoadingEvents(true);
     const start = new Date(y, m, 1).toISOString();
     const end = new Date(y, m + 1, 0, 23, 59, 59).toISOString();
     try {
-      const res = await fetch(`/api/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+      const res = await fetch(`/api/calendar/availability?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
       const body = await res.json();
-      setEvents(body.events ?? []);
-    } catch { setEvents([]); }
-    finally { setLoadingEvents(false); }
+      setBusy(Array.isArray(body.busy) ? body.busy : []);
+      setBlockedDates(new Set(Array.isArray(body.blockedDates) ? body.blockedDates : []));
+      setCalendarConnected(Boolean(body.connected));
+    } catch {
+      setBusy([]);
+      setBlockedDates(new Set());
+      setCalendarConnected(false);
+    } finally { setLoadingEvents(false); }
   }, []);
 
-  useEffect(() => { fetchEvents(viewYear, viewMonth); }, [viewYear, viewMonth, fetchEvents]);
+  useEffect(() => { fetchAvailability(viewYear, viewMonth); }, [viewYear, viewMonth, fetchAvailability]);
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
@@ -80,6 +94,7 @@ function AppointmentDatePicker({
   };
 
   const selectDate = (key: string) => {
+    if (blockedDates.has(key)) return;
     setDate(key);
     const iso = new Date(`${key}T${time}:00`).toISOString();
     onChange(iso);
@@ -89,6 +104,18 @@ function AppointmentDatePicker({
     setTime(t);
     if (date) onChange(new Date(`${date}T${t}:00`).toISOString());
   };
+
+  // Check if the currently picked date+time+duration overlaps any busy interval.
+  const conflict = (() => {
+    if (!date) return null;
+    const slotStart = new Date(`${date}T${time}:00`);
+    const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
+    return busy.find(b => {
+      const bs = new Date(b.start);
+      const be = new Date(b.end);
+      return slotStart < be && slotEnd > bs;
+    }) ?? null;
+  })();
 
   // Build grid
   type Cell = { day: number; currentMonth: boolean; dateKey: string };
@@ -112,15 +139,15 @@ function AppointmentDatePicker({
     cells.push({ day: d, currentMonth: false, dateKey: `${ny}-${String(nm + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}` });
   }
 
-  const eventsByDay = new Map<string, CalEvent[]>();
-  for (const ev of events) {
-    const key = toLocalDateKey(ev.start);
-    if (!eventsByDay.has(key)) eventsByDay.set(key, []);
-    eventsByDay.get(key)!.push(ev);
+  const busyByDay = new Map<string, BusyInterval[]>();
+  for (const b of busy) {
+    const key = toLocalDateKey(b.start);
+    if (!busyByDay.has(key)) busyByDay.set(key, []);
+    busyByDay.get(key)!.push(b);
   }
 
   const todayKey = toLocalDateKey(today.toISOString());
-  const selectedDayEvents = date ? (eventsByDay.get(date) ?? []) : [];
+  const selectedDayBusy = date ? (busyByDay.get(date) ?? []) : [];
 
   return (
     <div className="border border-outline-variant/30 rounded-xl overflow-hidden">
@@ -152,34 +179,39 @@ function AppointmentDatePicker({
       ) : (
         <div className="grid grid-cols-7">
           {cells.map((cell, i) => {
-            const cellEvents = eventsByDay.get(cell.dateKey) ?? [];
+            const cellBusy = busyByDay.get(cell.dateKey) ?? [];
             const isToday = cell.dateKey === todayKey;
             const isSelected = cell.dateKey === date;
+            const isBlocked = blockedDates.has(cell.dateKey);
             return (
               <button
                 key={`${cell.dateKey}-${i}`}
                 type="button"
                 onClick={() => selectDate(cell.dateKey)}
+                disabled={isBlocked}
+                title={isBlocked ? "Blocked date" : undefined}
                 className={`
-                  p-1 flex flex-col items-center gap-0.5 transition-colors min-h-[36px]
+                  p-1 flex flex-col items-center gap-0.5 transition-colors min-h-[36px] relative
                   ${i % 7 !== 6 ? "border-r border-outline-variant/10" : ""}
                   ${i < 35 ? "border-b border-outline-variant/10" : ""}
-                  ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/40" : "hover:bg-surface-container-low"}
-                  ${!cell.currentMonth && !isSelected ? "bg-surface-container/20" : ""}
+                  ${isBlocked ? "bg-surface-container/40 cursor-not-allowed" : ""}
+                  ${isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/40" : !isBlocked ? "hover:bg-surface-container-low" : ""}
+                  ${!cell.currentMonth && !isSelected && !isBlocked ? "bg-surface-container/20" : ""}
                 `}
               >
                 <span className={`
                   text-[10px] font-medium w-5 h-5 flex items-center justify-center rounded-full leading-none
-                  ${isToday ? "bg-primary text-on-primary font-bold" : ""}
+                  ${isToday && !isBlocked ? "bg-primary text-on-primary font-bold" : ""}
                   ${isSelected && !isToday ? "ring-2 ring-primary text-primary" : ""}
-                  ${!isToday && !isSelected ? (cell.currentMonth ? "text-on-surface" : "text-on-surface-variant/40") : ""}
+                  ${isBlocked ? "text-on-surface-variant/40 line-through" : ""}
+                  ${!isToday && !isSelected && !isBlocked ? (cell.currentMonth ? "text-on-surface" : "text-on-surface-variant/40") : ""}
                 `}>
                   {cell.day}
                 </span>
-                {cellEvents.length > 0 && (
+                {!isBlocked && cellBusy.length > 0 && (
                   <div className="flex gap-0.5">
-                    {cellEvents.slice(0, 2).map(ev => (
-                      <span key={ev.id} className={`w-1 h-1 rounded-full ${ev.source === "google" ? "bg-blue-500" : "bg-amber-500"}`} />
+                    {cellBusy.slice(0, 2).map((b, idx) => (
+                      <span key={idx} className={`w-1 h-1 rounded-full ${b.source === "google" ? "bg-blue-500" : "bg-amber-500"}`} />
                     ))}
                   </div>
                 )}
@@ -195,6 +227,11 @@ function AppointmentDatePicker({
           <p className="text-xs font-semibold text-on-surface flex items-center gap-1.5">
             <CalendarDays className="w-3.5 h-3.5 text-on-surface-variant" />
             {new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric" })}
+            {blockedDates.has(date) && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-medium text-on-surface-variant">
+                <Ban className="w-3 h-3" /> Blocked
+              </span>
+            )}
           </p>
         ) : (
           <p className="text-xs text-on-surface-variant/60 flex items-center gap-1.5">
@@ -203,24 +240,30 @@ function AppointmentDatePicker({
           </p>
         )}
 
-        {selectedDayEvents.length > 0 && (
+        {selectedDayBusy.length > 0 && (
           <div className="space-y-1">
-            {selectedDayEvents.map(ev => {
-              const isAllDay = !ev.start.includes("T");
-              const timeStr = isAllDay
-                ? "All day"
-                : new Date(ev.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-              return (
-                <div key={ev.id} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
-                  <span className="font-medium text-amber-800 shrink-0 w-16">{timeStr}</span>
-                  <span className="text-amber-700 truncate">{ev.title.replace(/^Appointment:\s*/, "")}</span>
-                  <span className={`shrink-0 ml-auto text-[10px] px-1.5 py-px rounded font-medium ${ev.source === "google" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`}>
-                    {ev.source === "google" ? "Google" : "FB"}
-                  </span>
-                </div>
-              );
-            })}
+            {selectedDayBusy.map((b, idx) => (
+              <div key={idx} className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
+                <span className="font-medium text-amber-800 shrink-0">{formatTimeRange(b.start, b.end)}</span>
+                <span className={`shrink-0 ml-auto text-[10px] px-1.5 py-px rounded font-medium ${b.source === "google" ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600"}`}>
+                  {b.source === "google" ? "Google · busy" : "Booking"}
+                </span>
+              </div>
+            ))}
           </div>
+        )}
+
+        {conflict && (
+          <div className="flex items-start gap-1.5 text-xs px-2 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+            <span>This time overlaps a busy interval ({formatTimeRange(conflict.start, conflict.end)}).</span>
+          </div>
+        )}
+
+        {!calendarConnected && !loadingEvents && (
+          <p className="text-[10px] text-on-surface-variant/60">
+            Connect Google Calendar in Settings to see real-time conflicts.
+          </p>
         )}
 
         <div className="flex items-end gap-3">
@@ -516,6 +559,7 @@ export function AddBookingModal() {
       <button
         type="button"
         onClick={() => setOpen(true)}
+        data-coachmark="dashboard-add-booking"
         className="px-3.5 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
       >
         + Add booking

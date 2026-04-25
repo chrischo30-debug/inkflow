@@ -160,38 +160,110 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       await supabase.from("bookings").update({ appointment_date: newDate }).eq("id", id);
 
-      if (booking.state === "booked" || booking.state === "confirmed") {
+      const oldDate = booking.appointment_date;
+      const dateChanged = oldDate && new Date(oldDate).getTime() !== new Date(newDate).getTime();
+      const isBookedState = booking.state === "booked" || booking.state === "confirmed";
+
+      if (isBookedState) {
         try {
           const { googleEventId } = await getExtraBookingFields();
           const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
           if (artist?.calendar_sync_enabled && artist.google_refresh_token) {
             const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
-            if (!accessToken) return;
-            const endDate = new Date(new Date(newDate).getTime() + durationMinutes * 60 * 1000).toISOString();
-            if (googleEventId) {
-              await updateGoogleCalendarEvent({
-                accessToken,
-                eventId: googleEventId,
-                summary: `${booking.client_name} appointment`,
-                description: booking.description ?? undefined,
-                startDateTime: newDate,
-                endDateTime: endDate,
-              });
-            } else {
-              // No existing event — create one
-              const newEventId = await createGoogleCalendarEvent({
-                accessToken,
-                summary: `${booking.client_name} appointment`,
-                description: booking.description ?? undefined,
-                startDateTime: newDate,
-                endDateTime: endDate,
-              });
-              if (newEventId) {
-                await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+            if (accessToken) {
+              const endDate = new Date(new Date(newDate).getTime() + durationMinutes * 60 * 1000).toISOString();
+              if (googleEventId) {
+                await updateGoogleCalendarEvent({
+                  accessToken,
+                  eventId: googleEventId,
+                  summary: `${booking.client_name} appointment`,
+                  description: booking.description ?? undefined,
+                  startDateTime: newDate,
+                  endDateTime: endDate,
+                });
+              } else {
+                // No existing event — create one
+                const newEventId = await createGoogleCalendarEvent({
+                  accessToken,
+                  summary: `${booking.client_name} appointment`,
+                  description: booking.description ?? undefined,
+                  startDateTime: newDate,
+                  endDateTime: endDate,
+                });
+                if (newEventId) {
+                  await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+                }
               }
             }
           }
         } catch (e) { console.error("Calendar event update failed:", e); }
+      }
+
+      // Reschedule email — only when an existing booked/confirmed appointment moves
+      // to a different time. First-time date sets go through confirm_appointment,
+      // which has its own client confirmation path.
+      if (isBookedState && dateChanged && booking.client_email) {
+        try {
+          const { data: artist } = await supabase
+            .from("artists")
+            .select("name, gmail_address, email, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
+            .eq("id", user.id)
+            .single();
+          if (artist && (artist as { auto_emails_enabled?: boolean | null }).auto_emails_enabled !== false) {
+            const { sendEmail, buildTemplateVars } = await import("@/lib/email");
+            const studioAddress = (artist as { studio_address?: string | null }).studio_address ?? null;
+            const mapsUrl = studioAddress
+              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(studioAddress)}`
+              : null;
+            const artistName = artist.name || "Your artist";
+            const venueLine = (artist as { studio_name?: string | null }).studio_name || artistName;
+            const replyTo = (artist as { gmail_address?: string | null }).gmail_address || (artist as { email?: string | null }).email || null;
+
+            const fmtDateTime = (iso: string) => {
+              const d = new Date(iso);
+              return `${d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+            };
+
+            const bodyLines = [
+              `Hi ${booking.client_name.split(" ")[0]},`,
+              ``,
+              `Your appointment with ${artistName} has been moved.`,
+              ``,
+              `New time: ${fmtDateTime(newDate)}`,
+            ];
+            if (oldDate) bodyLines.push(`Was: ${fmtDateTime(oldDate)}`);
+            if (studioAddress && mapsUrl) {
+              bodyLines.push(``, `Where: ${venueLine}`, studioAddress, mapsUrl);
+            }
+            bodyLines.push(``, `Reply to this email if the new time doesn't work.`, ``, artistName);
+
+            const sendDateLabel = new Date(newDate).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+            const { subject: sentSubject } = await sendEmail({
+              toEmail: booking.client_email,
+              vars: buildTemplateVars({
+                clientName: booking.client_name,
+                artistName,
+                paymentLinksList: [],
+                calendarLinksList: [],
+              }),
+              template: {
+                subject: `Appointment rescheduled – ${sendDateLabel}`,
+                body: bodyLines.join("\n"),
+              },
+              artistReplyTo: replyTo,
+              branding: {
+                logoUrl: (artist as { logo_url?: string | null }).logo_url ?? null,
+                logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
+                logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
+              },
+            });
+            await supabase
+              .from("bookings")
+              .update({ last_email_sent_at: new Date().toISOString() })
+              .eq("id", id);
+            await appendSentEmail(sentSubject ?? "Appointment rescheduled");
+          }
+        } catch (e) { console.error("Reschedule email failed:", e); }
       }
 
       return NextResponse.json({ success: true, appointment_date: newDate });
@@ -246,11 +318,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
 
       const [{ data: artist }, { data: templateRow }] = await Promise.all([
-        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email").eq("id", booking.artist_id).single(),
+        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled").eq("id", booking.artist_id).single(),
         supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
       ]);
 
-      if (!templateRow || templateRow.auto_send) {
+      const masterAutoOn = (artist as { auto_emails_enabled?: boolean | null } | null)?.auto_emails_enabled !== false;
+      if (masterAutoOn && (!templateRow || templateRow.auto_send)) {
         try {
           const { sendStateTransitionEmail } = await import("@/lib/email");
           const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
@@ -263,6 +336,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             calendarLinksList: [],
             template: templateRow ?? null,
             artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
+            branding: { logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null, logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false, logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark" },
           });
           await supabase.from("bookings").update({
             last_email_sent_at: new Date().toISOString(),
@@ -282,7 +356,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const [{ data: artist }, { data: templateRow }] = await Promise.all([
-      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email").eq("id", booking.artist_id).single(),
+      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled").eq("id", booking.artist_id).single(),
       supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
@@ -297,7 +371,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       rejected:  "Submission Rejected",
     };
 
-    const shouldAutoEmail = !templateRow || templateRow.auto_send;
+    const masterAutoOn = (artist as { auto_emails_enabled?: boolean | null } | null)?.auto_emails_enabled !== false;
+    const shouldAutoEmail = masterAutoOn && (!templateRow || templateRow.auto_send);
     if (shouldAutoEmail) {
       try {
         const { sendStateTransitionEmail } = await import("@/lib/email");
@@ -311,6 +386,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           calendarLinksList: [],
           template: templateRow ?? null,
           artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
+          branding: { logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null, logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false, logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark" },
         });
         await supabase.from("bookings").update({
           last_email_sent_at: new Date().toISOString(),

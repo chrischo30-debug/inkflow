@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, Upload, X, Plus, ChevronDown } from "lucide-react";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 function ColorInput({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
   const [text, setText] = useState(value);
@@ -342,9 +343,20 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
           Customize how your public booking form looks and what it shows.
         </p>
       </div>
+      <CoachmarkSequence tips={[{
+        id: "booking-page.design",
+        anchorSelector: '[data-coachmark="booking-page-design"]',
+        title: "This is your storefront",
+        body: <>
+          <p>Upload a logo, pick a layout, tweak colors.</p>
+          <p>Clients land here from your public booking URL.</p>
+          <p>Use the eye icon up top to preview your changes before they go live.</p>
+          <p>Hit <em>Save Booking Page</em> at the bottom to push them to the public form.</p>
+        </>,
+      }]} />
 
       {/* Logo */}
-      <section className="space-y-3">
+      <section className="space-y-3" data-coachmark="booking-page-design">
         <h4 className="text-sm font-semibold text-on-surface">Logo</h4>
         <div className="flex items-center gap-4">
           {logoUrl && (

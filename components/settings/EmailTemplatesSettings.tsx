@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Check, ChevronDown, Plus, Trash2, Link2, Calendar, Eye, Pencil } from "lucide-react";
 import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
+import { CoachmarkSequence, type Tip } from "@/components/coachmarks/Coachmark";
 
 // ── Body preview — resolves variables with sample data ────────────────────────
 
@@ -276,9 +277,19 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
           </div>
         )}
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2" data-coachmark="email-variables">
         <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
         <VarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+        <CoachmarkSequence tips={[{
+          id: "emails-tab.variables",
+          anchorSelector: '[data-coachmark="email-variables"]',
+          title: "Personalize with variables",
+          body: <>
+            <p>Click a chip to drop a placeholder into the focused field.</p>
+            <p>FlashBooker swaps it for the real value at send time.</p>
+            <p>Lines with empty values get skipped, so clients never see <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{appointmentDate}"}</code> as raw text.</p>
+          </>,
+        }]} />
       </div>
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -476,12 +487,14 @@ function NewTemplateForm({ onCreated, paymentLinks, calendarLinks }: { onCreated
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string }) {
+export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName, initialAutoEmailsEnabled }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string; initialAutoEmailsEnabled: boolean }) {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
   const [openState, setOpenState] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [autoEmailsEnabled, setAutoEmailsEnabled] = useState(initialAutoEmailsEnabled);
+  const [autoEmailsSaving, setAutoEmailsSaving] = useState(false);
 
   const load = async () => {
     const res = await fetch("/api/artist/email-templates");
@@ -493,20 +506,88 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName
     setLoading(false);
   };
 
+  const toggleAutoEmails = async () => {
+    const next = !autoEmailsEnabled;
+    setAutoEmailsEnabled(next);
+    setAutoEmailsSaving(true);
+    try {
+      const res = await fetch("/api/artist/auto-emails", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auto_emails_enabled: next }),
+      });
+      if (!res.ok) setAutoEmailsEnabled(!next); // rollback on failure
+    } finally {
+      setAutoEmailsSaving(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
 
   if (loading) return <p className="text-sm text-on-surface-variant">Loading templates…</p>;
 
+  const tips: Tip[] = [
+    {
+      id: "emails-tab.auto-toggle",
+      anchorSelector: '[data-coachmark="email-auto-toggle"]',
+      title: "Decide when emails send",
+      body: (
+        <>
+          <p>Leave this on to send emails automatically as bookings move through stages.</p>
+          <p>Turn it off if you&apos;d rather hit Send yourself on each booking.</p>
+        </>
+      ),
+    },
+    {
+      id: "emails-tab.stage-card",
+      anchorSelector: '[data-coachmark="email-stage-card"]',
+      title: "Each stage has its own email",
+      body: (
+        <>
+          <p>Click a stage to customize what goes out.</p>
+          <p>Use placeholders like <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{clientFirstName}"}</code> and <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{appointmentDate}"}</code> so each email is personalized.</p>
+        </>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
+      <CoachmarkSequence tips={tips} />
+      {/* Master auto-send toggle */}
+      <div className={`rounded-xl border px-5 py-4 transition-colors ${autoEmailsEnabled ? "border-outline-variant/20 bg-surface-container-lowest" : "border-amber-300/60 bg-amber-50/60"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <p className="text-base font-medium text-on-surface">Send automatic emails</p>
+            <div className="text-sm text-on-surface-variant leading-relaxed space-y-2">
+              <p>When off, nothing goes out on its own.</p>
+              <p>That means no stage emails, no deposit-paid emails, no scheduling confirmations, and no reschedule notices.</p>
+              <p>You can still send manually from any booking.</p>
+              <p className="text-xs text-on-surface-variant/80">Reminders have their own toggle on the Reminders tab.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoEmailsEnabled}
+            onClick={toggleAutoEmails}
+            disabled={autoEmailsSaving}
+            data-coachmark="email-auto-toggle"
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${autoEmailsEnabled ? "bg-primary" : "bg-outline-variant"}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoEmailsEnabled ? "translate-x-6" : "translate-x-1"}`} />
+          </button>
+        </div>
+      </div>
+
       {/* State-linked templates */}
-      <div className="space-y-2">
+      <div className={`space-y-2 ${autoEmailsEnabled ? "" : "opacity-60"}`}>
         <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-3">Stage templates</p>
-        {templates.map(t => {
+        {templates.map((t, idx) => {
           const state = t.state as Exclude<BookingState, "cancelled">;
           const isOpen = openState === state;
           return (
-            <div key={state} className="rounded-xl border border-outline-variant/20 overflow-hidden">
+            <div key={state} className="rounded-xl border border-outline-variant/20 overflow-hidden" {...(idx === 0 ? { "data-coachmark": "email-stage-card" } : {})}>
               <button type="button"
                 className="w-full flex items-center justify-between px-5 py-4 bg-surface-container-low hover:bg-surface-container transition-colors text-left"
                 onClick={() => setOpenState(isOpen ? null : state)}>

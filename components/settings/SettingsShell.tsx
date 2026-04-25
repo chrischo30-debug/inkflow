@@ -24,8 +24,14 @@ export interface SettingsShellProps {
   slug: string;
   artistName: string;
   studioName: string;
+  studioAddress: string;
   email: string;
   gmailAddress: string;
+  emailLogoEnabled: boolean;
+  emailLogoBg: "light" | "dark";
+  autoEmailsEnabled: boolean;
+  hasLogo: boolean;
+  logoUrl: string | null;
   accentTheme: "crimson" | "blue";
   googleConfigured: boolean;
   hasRefreshToken: boolean;
@@ -73,15 +79,26 @@ export function SettingsShell(props: SettingsShellProps) {
         <main className="flex-1 overflow-y-auto px-8 py-8">
           {tab === "profile" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Profile" description="Your public identity and booking page URL." />
+              <SectionHeading
+                title="Profile"
+                description={[
+                  "Your public identity. This is what clients see on your booking page and in emails.",
+                  "Set your name, the URL clients land on, and where reply emails go.",
+                ]}
+              />
               <ThemeSettings initialTheme={props.accentTheme} />
               <AccountSettings
                 initialValues={{
                   name: props.artistName,
                   slug: props.slug,
                   studio_name: props.studioName,
+                  studio_address: props.studioAddress,
                   email: props.email,
                   gmail_address: props.gmailAddress,
+                  email_logo_enabled: props.emailLogoEnabled,
+                  email_logo_bg: props.emailLogoBg,
+                  has_logo: props.hasLogo,
+                  logo_url: props.logoUrl,
                 }}
               />
             </div>
@@ -89,7 +106,13 @@ export function SettingsShell(props: SettingsShellProps) {
 
           {tab === "integrations" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Integrations" description="Connect external services for calendar sync and payments." />
+              <SectionHeading
+                title="Integrations"
+                description={[
+                  "Connect outside tools to automate parts of your workflow.",
+                  "Both are optional. You can run FlashBooker without either and still get the full pipeline.",
+                ]}
+              />
               <GoogleIntegrationSettings
                 googleConfigured={props.googleConfigured}
                 hasRefreshToken={props.hasRefreshToken}
@@ -106,18 +129,31 @@ export function SettingsShell(props: SettingsShellProps) {
 
           {tab === "emails" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Email Templates" description="Customize messages sent at each stage. Toggle auto-send to control whether emails go out automatically." />
+              <SectionHeading
+                title="Email Templates"
+                description={[
+                  "Customize the message that goes out at each booking stage.",
+                  "Toggle auto-send to control whether emails go out on their own, or only when you click Send.",
+                ]}
+              />
               <EmailTemplatesSettings
                 paymentLinks={props.paymentLinks}
                 calendarLinks={props.calendarLinks}
                 artistName={props.artistName}
+                initialAutoEmailsEnabled={props.autoEmailsEnabled}
               />
             </div>
           )}
 
           {tab === "reminders" && (
             <div className="max-w-2xl space-y-6">
-              <SectionHeading title="Appointment Reminders" description="Send clients an automatic reminder email before their appointment." />
+              <SectionHeading
+                title="Appointment Reminders"
+                description={[
+                  "Send clients a reminder email before their appointment.",
+                  "Pick how far ahead the reminder goes out. We&rsquo;ll only send for confirmed bookings.",
+                ]}
+              />
               <ReminderSettings
                 initialEnabled={props.reminderEnabled}
                 initialHoursBefore={props.reminderHoursBefore}
@@ -131,11 +167,16 @@ export function SettingsShell(props: SettingsShellProps) {
   );
 }
 
-function SectionHeading({ title, description }: { title: string; description: string }) {
+function SectionHeading({ title, description }: { title: string; description: string | string[] }) {
+  const lines = Array.isArray(description) ? description : [description];
   return (
     <div className="mb-2">
       <h2 className="text-lg font-heading font-semibold text-on-surface">{title}</h2>
-      <p className="text-sm text-on-surface-variant mt-0.5">{description}</p>
+      <div className="mt-2 space-y-2">
+        {lines.map((line, i) => (
+          <p key={i} className="text-base text-on-surface-variant leading-relaxed">{line}</p>
+        ))}
+      </div>
     </div>
   );
 }

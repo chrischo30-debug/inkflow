@@ -3,11 +3,16 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
+import { sendEmail, buildTemplateVars } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
 const SENDING_DOMAIN = process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app";
 const resend = new Resend(process.env.RESEND_API_KEY || "re_mock_key");
+
+function buildMapsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
 
 const bodySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -53,7 +58,7 @@ export async function POST(
   const admin = createAdminClient();
   const { data: artist } = await admin
     .from("artists")
-    .select("scheduling_links, email, name")
+    .select("scheduling_links, email, name, gmail_address, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
     .eq("id", artistId)
     .single();
 
@@ -70,11 +75,14 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  // If a booking ID was provided, update it — verify it belongs to this artist first
+  // If a booking ID was provided, update it — verify it belongs to this artist first.
+  // Also capture client details so we can send them a confirmation email below.
+  let clientEmailToConfirm: string | null = null;
+  let clientNameToConfirm: string | null = null;
   if (body.bid) {
     const { data: booking } = await admin
       .from("bookings")
-      .select("id, state, artist_id")
+      .select("id, state, artist_id, client_email, client_name")
       .eq("id", body.bid)
       .eq("artist_id", artistId)
       .single();
@@ -91,6 +99,9 @@ export async function POST(
           ...(shouldBook ? { state: "booked" } : {}),
         })
         .eq("id", body.bid);
+
+      clientEmailToConfirm = booking.client_email;
+      clientNameToConfirm = booking.client_name;
     }
   }
 
@@ -103,14 +114,14 @@ export async function POST(
     .find(p => p.type === "timeZoneName")?.value ?? link.timezone;
 
   const emailText = [
-    `A client has selected a time for: ${link.label}`,
+    `A client booked: ${link.label}`,
     ``,
     `Date: ${formattedDate}`,
-    `Time: ${formattedStart} – ${formattedEnd} (${tzLabel})`,
+    `Time: ${formattedStart} to ${formattedEnd} (${tzLabel})`,
     ``,
     body.bid
-      ? `Their booking has been moved to Booked and the appointment date has been set automatically.`
-      : `Log in to FlashBooker to update the appointment date on their booking card.`,
+      ? `The booking is now in Booked.`
+      : `Log in to FlashBooker to find the booking.`,
   ].join("\n");
 
   try {
@@ -118,7 +129,7 @@ export async function POST(
       await resend.emails.send({
         from: `FlashBooker <noreply@${SENDING_DOMAIN}>`,
         to: [artist.email],
-        subject: `Time selected: ${link.label} – ${formattedDate}`,
+        subject: `New booking confirmed: ${link.label} – ${formattedDate}`,
         text: emailText,
       });
     } else {
@@ -126,6 +137,53 @@ export async function POST(
     }
   } catch (err) {
     console.error("Scheduling notification email failed:", err);
+  }
+
+  // Confirmation email to the client (if we have their address from the booking)
+  const autoEmailsOn = (artist as { auto_emails_enabled?: boolean | null }).auto_emails_enabled !== false;
+  if (clientEmailToConfirm && clientNameToConfirm && autoEmailsOn) {
+    try {
+      const studioAddress = (artist as { studio_address?: string | null }).studio_address;
+      const mapsUrl = studioAddress ? buildMapsUrl(studioAddress) : null;
+      const artistName = artist.name || "Your artist";
+      const venueLine = (artist as { studio_name?: string | null }).studio_name || artistName;
+      const replyTo = (artist as { gmail_address?: string | null }).gmail_address || artist.email || null;
+
+      const bodyLines = [
+        `Hi ${clientNameToConfirm.split(" ")[0]},`,
+        ``,
+        `You're booked with ${artistName}.`,
+        ``,
+        `When: ${formattedDate}`,
+        `Time: ${formattedStart} to ${formattedEnd} (${tzLabel})`,
+      ];
+      if (studioAddress && mapsUrl) {
+        bodyLines.push(``, `Where: ${venueLine}`, studioAddress, mapsUrl);
+      }
+      bodyLines.push(``, `Reply to this email if you need to reschedule.`, ``, artistName);
+
+      await sendEmail({
+        toEmail: clientEmailToConfirm,
+        vars: buildTemplateVars({
+          clientName: clientNameToConfirm,
+          artistName,
+          paymentLinksList: [],
+          calendarLinksList: [],
+        }),
+        template: {
+          subject: `Appointment confirmed – ${formattedDate}`,
+          body: bodyLines.join("\n"),
+        },
+        artistReplyTo: replyTo,
+        branding: {
+          logoUrl: (artist as { logo_url?: string | null }).logo_url ?? null,
+          logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
+          logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
+        },
+      });
+    } catch (err) {
+      console.error("Client confirmation email failed:", err);
+    }
   }
 
   return NextResponse.json({ success: true });

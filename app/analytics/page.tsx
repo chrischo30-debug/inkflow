@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard";
 import type { Booking } from "@/lib/types";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 // ─── Types passed to client ──────────────────────────────────────────────────
 export type MonthlyPoint = { key: string; label: string; revenue: number; bookings: number };
@@ -487,7 +488,17 @@ export default async function AnalyticsPage() {
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Analytics</h1>
+          <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-analytics">Analytics</h1>
+          <CoachmarkSequence tips={[{
+            id: "page.analytics.intro",
+            anchorSelector: '[data-coachmark="page-analytics"]',
+            title: "How your business is doing",
+            body: <>
+              <p>Revenue, conversion rates, and the styles clients are asking for most.</p>
+              <p>Numbers update as bookings complete, so this gets more useful the longer you use FlashBooker.</p>
+              <p>Use it to spot what&apos;s working and where bookings are dropping off.</p>
+            </>,
+          }]} />
         </header>
         <div className="flex-1 overflow-y-auto">
           <AnalyticsDashboard data={data} />

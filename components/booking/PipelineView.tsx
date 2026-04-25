@@ -10,6 +10,7 @@ import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./Ema
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
 import { SendDepositModal } from "./SendDepositModal";
+import { CoachmarkSequence, useCoachmarks } from "@/components/coachmarks/Coachmark";
 import { SendCalendarModal } from "./SendCalendarModal";
 
 interface PipelineViewProps {
@@ -44,6 +45,10 @@ export function PipelineView({
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<BookingState | null>(null);
+  // Tracks the column the user just dropped a card into, so the first-drag
+  // coachmark has something to point at.
+  const [firstDropColumn, setFirstDropColumn] = useState<BookingState | null>(null);
+  const { hasSeen } = useCoachmarks();
 
   // Modals
   const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
@@ -212,6 +217,11 @@ export function PipelineView({
     const bookingId = draggingId;
     setDraggingId(null);
 
+    // Fire the first-drag explainer the first time someone moves a card.
+    if (!hasSeen("pipeline.first-drag")) {
+      setFirstDropColumn(targetState);
+    }
+
     if (targetState === "follow_up") { handleFollowUpInquiry(bookingId); return; }
     if (targetState === "accepted" && (booking.state === "inquiry" || booking.state === "follow_up")) { handleAcceptInquiry(bookingId); return; }
     if (targetState === "sent_deposit") { handleSendDeposit(bookingId); return; }
@@ -272,14 +282,59 @@ export function PipelineView({
 
   return (
     <>
+      <CoachmarkSequence tips={[
+        // First-drag explainer is prepended only when the user has actually
+        // dropped a card, so it fires right after the move and not on page load.
+        ...(firstDropColumn ? [{
+          id: "pipeline.first-drag",
+          anchorSelector: '[data-coachmark-drop="true"]',
+          title: "Nice — you moved a booking",
+          body: <>
+            <p>Each card represents one client. Dragging a card to a new column changes its stage.</p>
+            <p>If auto emails are on, the email for that stage just went out. If they&apos;re off, hit Send manually from the card.</p>
+            <p>Made a mistake? Drag the card back to where it was.</p>
+          </>,
+        }] : []),
+        {
+          id: "dashboard.pipeline-flow",
+          anchorSelector: '[data-coachmark="pipeline-first-column"]',
+          title: "This is your pipeline",
+          body: <>
+            <p>Bookings move left to right: Submission, Accepted, Booked, Completed.</p>
+            <p>Drag a card across, or use the action button on each card.</p>
+            <p>Each stage has its own email, which sends automatically if you have auto emails on.</p>
+          </>,
+        },
+        {
+          id: "dashboard.add-booking",
+          anchorSelector: '[data-coachmark="dashboard-add-booking"]',
+          title: "Or add bookings manually",
+          body: <>
+            <p>You don&apos;t need any integrations to use FlashBooker.</p>
+            <p>Click here any time to enter a client&apos;s details by hand. Same pipeline, same emails.</p>
+          </>,
+        },
+        {
+          id: "dashboard.card-actions",
+          anchorSelector: '[data-coachmark="booking-card"]',
+          title: "Each card has options",
+          body: <>
+            <p>The button on the bottom right advances the booking to the next stage without dragging.</p>
+            <p>Click the <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">⋯</code> menu for more: send an email, cancel, or jump straight to any stage.</p>
+            <p>If you took a deposit outside Stripe, mark it paid from that menu too.</p>
+          </>,
+        },
+      ]} />
       <div className="flex h-full w-full overflow-x-auto gap-3 pb-4 snap-x">
-        {PIPELINE_COLUMNS.map(id => {
+        {PIPELINE_COLUMNS.map((id, colIdx) => {
           const title = COLUMN_LABELS[id];
           const colBookings = columnBookings(id);
           const isDropTarget = dropTargetId === id;
 
           return (
             <div key={id}
+              {...(colIdx === 0 ? { "data-coachmark": "pipeline-first-column" } : {})}
+              {...(firstDropColumn === id ? { "data-coachmark-drop": "true" } : {})}
               onDragOver={e => { e.preventDefault(); setDropTargetId(id); }}
               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetId(null); }}
               onDrop={() => handleDrop(id)}

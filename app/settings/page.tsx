@@ -34,6 +34,11 @@ export default async function SettingsPage({
     stripe_webhook_secret?: string;
     reminder_enabled?: boolean;
     reminder_hours_before?: number;
+    studio_address?: string;
+    email_logo_enabled?: boolean;
+    email_logo_bg?: "light" | "dark";
+    logo_url?: string;
+    auto_emails_enabled?: boolean;
   };
   // Use select(*) so a single missing column (e.g. unrun migration) doesn't
   // wipe out the entire row — we still get every other field that exists.
@@ -58,6 +63,12 @@ export default async function SettingsPage({
         slug={artist?.slug ?? ""}
         artistName={artist?.name ?? ""}
         studioName={artist?.studio_name ?? ""}
+        studioAddress={extended.studio_address ?? ""}
+        emailLogoEnabled={extended.email_logo_enabled ?? true}
+        emailLogoBg={extended.email_logo_bg ?? "light"}
+        autoEmailsEnabled={extended.auto_emails_enabled !== false}
+        hasLogo={Boolean(extended.logo_url)}
+        logoUrl={extended.logo_url ?? null}
         email={user.email ?? ""}
         accentTheme={(artist?.accent_theme as "crimson" | "blue") ?? "crimson"}
         googleConfigured={googleConfigured}

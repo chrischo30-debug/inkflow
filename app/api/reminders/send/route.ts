@@ -5,8 +5,8 @@ import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
 import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
 const DEFAULT_REMINDER_TEMPLATE = {
-  subject: "Reminder: Your appointment is coming up – {artistName}",
-  body: `Hi {clientName},\n\nJust a friendly reminder that you have a tattoo appointment with {artistName} on {appointmentDate}.\n\nIf you have any questions, feel free to reply to this email.\n\nSee you soon!\n\n{artistName}`,
+  subject: "Reminder: appointment with {artistName}",
+  body: `Hi {clientName},\n\nQuick reminder you have an appointment with {artistName} on {appointmentDate}.\n\nReply to this email if anything comes up.\n\n{artistName}`,
 };
 
 // Vercel Cron sends Authorization: Bearer $CRON_SECRET
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   // Fetch all artists with reminders enabled
   const { data: artists, error: artistErr } = await supabase
     .from("artists")
-    .select("id, name, email, payment_links, gmail_address, reminder_hours_before")
+    .select("id, name, email, payment_links, gmail_address, reminder_hours_before, logo_url, email_logo_enabled, email_logo_bg")
     .eq("reminder_enabled", true);
 
   if (artistErr || !artists?.length) {
@@ -73,6 +73,11 @@ export async function GET(req: Request) {
           vars,
           template: DEFAULT_REMINDER_TEMPLATE,
           artistReplyTo,
+          branding: {
+            logoUrl: (artist as { logo_url?: string | null }).logo_url ?? null,
+            logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
+            logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
+          },
         });
 
         await supabase

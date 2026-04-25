@@ -105,6 +105,23 @@
 - **Setup guide**: removed Cal.com from Recommended Tools grid; updated scheduling links step description.
 - **Bug fix**: `.env` had `GOOGLE_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY` concatenated on one line (missing newline), causing `invalid_client` errors from Google OAuth.
 
+### Session — UX Polish, Coachmarks & Email Branding (2026-04-25)
+- **AddBookingModal calendar checks**: artist-side date picker now uses freeBusy (skips transparent events) + respects `blocked_dates`. New `/api/calendar/availability` endpoint returns busy intervals + blocked dates. Conflict warning when picked time overlaps a busy interval.
+- **Public scheduling auto-confirm**: SchedulingPicker drops the "request" handoff — picking a slot immediately confirms (booking → `booked`, emails artist + client). Wording cleaned up across UI and notification email. Per-link `confirmation_message` field — artists customize what clients see after picking.
+- **Public scheduling UX overhaul**: replaced 3-step `calendar → slots → confirm` flow with a single side-by-side panel (calendar left, slots right; stacks on mobile). Confirm button lives inside the slots panel. Past dates, day-of-week, and `blocked_dates` are all greyed in the calendar.
+- **Studio address + Maps link in client emails**: new `studio_address` column. Client confirmation and reschedule emails include the address with a Google Maps URL when set. Settings has a "Preview on Google Maps" link so artists can verify the address resolves correctly.
+- **Logo lifted to AccountSettings**: same `artists.logo_url` powers the booking page and the client email header. Upload UI now in Settings → Profile (was previously only in Booking Page settings). Email logo toggle (`email_logo_enabled`), light/dark header background picker (`email_logo_bg`).
+- **HTML email rendering**: `lib/email.ts` `sendEmail` now produces both text + HTML; HTML version has a centered logo header in the artist's chosen background color. `applyPlaceholders` strips lines whose tokens resolve to empty so clients never see raw `{appointmentDate}` text.
+- **Reschedule notification**: `update_appointment` for booked/confirmed bookings now emails the client with new time + previous time + Maps link. Only fires when the date actually changed.
+- **Auto-emails master kill switch**: `artists.auto_emails_enabled` (toggle at top of Emails tab) gates state-transition, deposit-paid, scheduling-confirmation, and reschedule emails. Reminders keep their own toggle.
+- **Email template defaults rewritten**: all 8 stage templates + reminder + Stripe webhook templates redone in casual, direct copy. No em dashes, no hype phrases. Subjects shortened (no trailing `– {artistName}`).
+- **Coachmark system** (`components/coachmarks/Coachmark.tsx`): per-device localStorage-backed guided tips with spotlight ring; click-outside dismiss; global "Don't show tips" kill. Tips wired across every page: dashboard pipeline (3 + first-drag triggered), bookings/calendar/links/analytics/form-builder page intros, settings tabs (auto-emails toggle, stage templates, variables, booking page, Stripe API key + webhook).
+- **First-drag explainer** in PipelineView fires the first time a card is dropped; explains stage progression, auto emails, and how to undo.
+- **Settings copy expansion**: `SectionHeading` now takes `string | string[]` for multi-paragraph descriptions. All four tabs (Profile / Integrations / Emails / Reminders) and key cards (Google Calendar, Stripe API key, master auto-emails) broken into short paragraphs at `text-sm` / `text-base` instead of cramped `text-xs` blocks.
+- **Setup guide bugfix**: page used a narrow `select(...columns...)` that returned `null` for the entire row when any newly-added column was missing — silently marking every step incomplete. Refactored to a single `select("*")`. "Add payment links" step now also marks complete when Stripe is connected.
+- **Tooltip text upsized**: Coachmark card width `w-80 → w-96`, title `text-sm → text-base`, body `text-xs → text-sm` with `space-y-2.5` for paragraph breaks.
+- **New migration**: `20260425_studio_address_and_email_logo.sql` (`studio_address`, `email_logo_enabled`, `email_logo_bg`, `auto_emails_enabled`).
+
 ### Session — Pipeline V2, Scheduling Links & Availability (2026-04-25)
 - **7-stage pipeline**: Submission → Follow Up → Accepted → Sent Deposit → Sent Calendar → Booked → Completed. `confirmed` kept as legacy alias for `booked` in all views.
 - **SendDepositModal**: email compose + optional Stripe deposit link generator + scheduling link picker (sets `booking.scheduling_link_id` for Stripe automation).

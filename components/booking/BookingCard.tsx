@@ -209,6 +209,7 @@ export function BookingCard({
     <div
       draggable={!!onDragStart}
       onDragStart={e => { onDragStart?.(booking.id); e.dataTransfer.effectAllowed = "move"; }}
+      data-coachmark="booking-card"
       className={`bg-surface-container-lowest border border-outline-variant/20 rounded-xl overflow-hidden group hover:shadow-sm hover:border-outline-variant/40 transition-all duration-200 ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} ${dragging ? "opacity-40 scale-[0.98]" : ""}`}
     >
       <div className="p-4 flex flex-col gap-2.5">

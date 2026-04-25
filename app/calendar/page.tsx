@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { CalendarView } from "@/components/calendar/CalendarView";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 export default async function CalendarPage({
   searchParams,
@@ -28,12 +29,22 @@ export default async function CalendarPage({
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-heading font-semibold text-on-surface">Calendar</h1>
+            <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-calendar">Calendar</h1>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isCalendarConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container-high text-on-surface-variant border border-outline-variant/20"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isCalendarConnected ? "bg-emerald-500" : "bg-on-surface-variant/40"}`} />
               {isCalendarConnected ? "syncing" : "not connected"}
             </span>
           </div>
+          <CoachmarkSequence tips={[{
+            id: "page.calendar.intro",
+            anchorSelector: '[data-coachmark="page-calendar"]',
+            title: "Your full schedule, in one view",
+            body: <>
+              <p>Confirmed appointments show here automatically.</p>
+              <p>If you connect Google Calendar, your existing events show too, so you can see everything in one place and avoid double-booking.</p>
+              <p>Click any empty slot to add a booking right at that time.</p>
+            </>,
+          }]} />
           <div className="flex items-center gap-3">
             <AddBookingModal />
           </div>

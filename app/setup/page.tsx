@@ -89,35 +89,41 @@ export default async function SetupPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return redirect("/login");
 
-  const { data: artist } = await supabase
-    .from("artists")
-    .select("name, slug, logo_url, google_refresh_token, payment_links, calendar_sync_enabled, gmail_address")
-    .eq("id", user.id)
-    .single();
-
-  type Extended = { calendar_links?: CalendarLink[]; stripe_api_key?: string };
-  // select(*) so a single missing column doesn't blank out the rest of the row
-  let extended: Extended = {};
-  const { data: extData, error: extErr } = await supabase
+  // Use select(*) so a single missing column (a not-yet-run migration) doesn't
+  // null out the entire row and silently mark every step as incomplete.
+  const { data: extData } = await supabase
     .from("artists")
     .select("*")
     .eq("id", user.id)
     .single();
-  if (!extErr && extData) {
-    extended = extData as Extended;
-  }
+
+  type Extended = {
+    name?: string;
+    slug?: string;
+    logo_url?: string | null;
+    google_refresh_token?: string | null;
+    payment_links?: unknown;
+    calendar_sync_enabled?: boolean | null;
+    gmail_address?: string | null;
+    calendar_links?: CalendarLink[];
+    stripe_api_key?: string | null;
+  };
+  const artist: Extended = (extData as Extended) ?? {};
 
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-  const calendarConnected = Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token);
-  const paymentLinks = normalizePaymentLinks(artist?.payment_links);
-  const calendarLinks = (extended.calendar_links ?? []) as CalendarLink[];
-  const hasLogo = Boolean(artist?.logo_url);
-  const hasSlug = Boolean(artist?.slug);
-  const hasStripe = Boolean(extended.stripe_api_key);
-  const hasReplyTo = Boolean(artist?.gmail_address ?? user.email);
+  const calendarConnected = Boolean(artist.calendar_sync_enabled && artist.google_refresh_token);
+  const paymentLinks = normalizePaymentLinks(artist.payment_links);
+  const calendarLinks = (artist.calendar_links ?? []) as CalendarLink[];
+  const hasLogo = Boolean(artist.logo_url);
+  const hasSlug = Boolean(artist.slug);
+  const hasStripe = Boolean(artist.stripe_api_key);
+  const hasReplyTo = Boolean(artist.gmail_address ?? user.email);
+  // Stripe satisfies the "have a way to take deposits" intent of this step too,
+  // so an artist who only connected Stripe doesn't see a stuck checkbox.
+  const hasPaymentMethod = paymentLinks.length > 0 || hasStripe;
 
   const requiredSteps = [hasSlug, hasReplyTo];
-  const recommendedSteps = [paymentLinks.length > 0, calendarLinks.length > 0, hasLogo];
+  const recommendedSteps = [hasPaymentMethod, calendarLinks.length > 0, hasLogo];
   const integrationSteps = [calendarConnected, hasStripe];
 
   const requiredComplete = requiredSteps.filter(Boolean).length;
@@ -259,10 +265,16 @@ export default async function SetupPage({
               <p className="text-xs text-on-surface-variant -mt-1 mb-2">These make your booking flow feel finished. Add them when you&apos;re ready.</p>
 
               <StepCard
-                done={paymentLinks.length > 0}
-                title="Add payment links"
-                description="Stripe, Venmo, or Cash App. Sent to the client automatically when you accept a booking and request a deposit."
-                note={paymentLinks.length > 0 ? `${paymentLinks.length} link${paymentLinks.length !== 1 ? "s" : ""} saved` : undefined}
+                done={hasPaymentMethod}
+                title="Add a way to take deposits"
+                description="Stripe, Venmo, Cash App, or any link clients can pay with. Sent automatically when you request a deposit."
+                note={
+                  paymentLinks.length > 0
+                    ? `${paymentLinks.length} link${paymentLinks.length !== 1 ? "s" : ""} saved`
+                    : hasStripe
+                      ? "Stripe connected — deposits will use Stripe links"
+                      : undefined
+                }
                 action="Add links"
                 actionHref="/payment-links"
               />
@@ -279,7 +291,8 @@ export default async function SetupPage({
               <StepCard
                 done={hasLogo}
                 title="Upload your logo"
-                description="Shown on your booking form and at the top of client emails. Makes your bookings feel on-brand."
+                description="Shown on your booking form and at the top of client emails. PNG or SVG with a transparent background works best on both light and dark surfaces."
+                note={hasLogo ? "Logo uploaded" : undefined}
                 action="Upload logo"
                 actionHref="/settings"
               />

@@ -6,6 +6,7 @@ import { CopyFormLinkButton } from "@/components/booking/CopyFormLinkButton";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import type { Booking } from "@/lib/types";
 import { PaymentSSEListener } from "@/components/booking/PaymentSSEListener";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 export default async function BookingsPage({
   searchParams,
@@ -43,7 +44,17 @@ export default async function BookingsPage({
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Bookings</h1>
+          <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-bookings">Bookings</h1>
+          <CoachmarkSequence tips={[{
+            id: "page.bookings.intro",
+            anchorSelector: '[data-coachmark="page-bookings"]',
+            title: "Every booking in one list",
+            body: <>
+              <p>This is the full record of every client who&apos;s ever come through your form, alive or archived.</p>
+              <p>Filter by stage at the top, click a row to expand details, or use the action button to move it forward.</p>
+              <p>Use the dashboard if you want a column view instead.</p>
+            </>,
+          }]} />
           <div className="flex items-center gap-3">
             <CopyFormLinkButton slug={artistData?.slug ?? ""} />
             <AddBookingModal />

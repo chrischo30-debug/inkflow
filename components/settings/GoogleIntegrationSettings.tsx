@@ -11,10 +11,11 @@ interface Props {
 export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, isCalendarConnected }: Props) {
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
-      <h3 className="text-sm font-semibold text-on-surface mb-1">Google Calendar</h3>
-      <p className="text-xs text-on-surface-variant mb-5">
-        Sync confirmed appointments to your Google Calendar. Your clients never see this — it just keeps your personal calendar up to date.
-      </p>
+      <h3 className="text-base font-semibold text-on-surface mb-2">Google Calendar</h3>
+      <div className="text-sm text-on-surface-variant mb-5 space-y-2 leading-relaxed">
+        <p>Sync confirmed appointments to your Google Calendar.</p>
+        <p>Your clients never see this. It keeps your personal calendar up to date so you avoid double-booking.</p>
+      </div>
 
       {!googleConfigured && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
@@ -26,8 +27,8 @@ export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, i
       <div className="mb-5">
         <div className="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3">
           <div>
-            <p className="text-sm font-medium text-on-surface">Google Calendar</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">
+            <p className="text-base font-medium text-on-surface">Google Calendar</p>
+            <p className="text-sm text-on-surface-variant mt-1">
               {isCalendarConnected ? "Confirmed bookings sync automatically." : "Confirmed bookings will not sync to your calendar."}
             </p>
           </div>

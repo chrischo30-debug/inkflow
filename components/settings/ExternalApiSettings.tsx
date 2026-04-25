@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Check, ExternalLink, Eye, EyeOff, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
@@ -227,22 +228,47 @@ export function ExternalApiSettings({
 
   return (
     <div className="space-y-6">
+      <CoachmarkSequence tips={[
+        {
+          id: "settings.stripe-connect",
+          anchorSelector: '[data-coachmark="stripe-connect"]',
+          title: "Stripe is optional",
+          body: <>
+            <p>Connect Stripe and FlashBooker auto-marks deposits as paid when a client pays.</p>
+            <p>The booking then moves from <em>Sent Deposit</em> to <em>Sent Calendar</em> on its own.</p>
+            <p>Skip it and you can still send your own payment link (Venmo, Zelle, anything), then tick the deposit checkbox yourself.</p>
+          </>,
+        },
+        {
+          id: "settings.stripe-webhook",
+          anchorSelector: '[data-coachmark="stripe-webhook"]',
+          title: "Webhook is the second half",
+          body: <>
+            <p>The API key lets FlashBooker create payment links. The webhook lets Stripe tell FlashBooker when a client actually pays.</p>
+            <p>Without it, deposits won&apos;t auto-mark as paid and bookings won&apos;t advance on their own.</p>
+            <p>Follow the numbered steps below. Two minutes, one URL paste, one signing secret to copy back.</p>
+          </>,
+        },
+      ]} />
       <div className="space-y-4">
-        <div className="rounded-xl border border-outline-variant/20 overflow-hidden">
+        <div className="rounded-xl border border-outline-variant/20 overflow-hidden" data-coachmark="stripe-connect">
           {/* Step 1 — API Key */}
           <div className="bg-surface-container-lowest p-5 space-y-3">
             <div className="flex items-center gap-2">
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${savedStripeKey ? "bg-emerald-100 text-emerald-700" : "bg-surface-container border border-outline-variant/30 text-on-surface-variant"}`}>
                 {savedStripeKey ? "✓" : "1"}
               </span>
-              <p className="text-sm font-semibold text-on-surface">Stripe API Key</p>
+              <p className="text-base font-semibold text-on-surface">Stripe API Key</p>
               {savedStripeKey && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                   <Check className="w-3 h-3" /> Connected
                 </span>
               )}
             </div>
-            <p className="text-sm text-on-surface-variant">Generate deposit payment links directly from bookings. Clients pay, deposit is automatically marked as paid.</p>
+            <div className="text-sm text-on-surface-variant space-y-2 leading-relaxed">
+              <p>Generate deposit payment links directly from bookings.</p>
+              <p>When a client pays, the deposit is automatically marked as paid and the booking moves forward on its own.</p>
+            </div>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
@@ -279,7 +305,7 @@ export function ExternalApiSettings({
           <div className="border-t border-outline-variant/15" />
 
           {/* Step 2 — Webhook */}
-          <div className={`p-5 space-y-4 transition-all duration-700 ${savedStripeKey ? "" : "opacity-40 pointer-events-none select-none"} ${step2Flash ? "bg-indigo-50/50" : ""}`}>
+          <div data-coachmark="stripe-webhook" className={`p-5 space-y-4 transition-all duration-700 ${savedStripeKey ? "" : "opacity-40 pointer-events-none select-none"} ${step2Flash ? "bg-indigo-50/50" : ""}`}>
             <div className="flex items-center gap-2">
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300 ${
                 savedStripeWebhookSecret

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, Copy, Check, ExternalLink, Zap, Pencil, X, BanIcon } from "lucide-react";
 import type { PaymentLink, CalendarLink, SchedulingLink } from "@/lib/pipeline-settings";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -224,7 +225,7 @@ const TIMEZONES = [
 
 function generateId() { return Math.random().toString(36).slice(2, 10); }
 function newLinkDraft(): Omit<SchedulingLink, "id"> {
-  return { label: "", duration_minutes: 120, days: [1, 2, 3, 4, 5], start_hour: 10, end_hour: 19, timezone: "America/New_York", block_full_day: false };
+  return { label: "", duration_minutes: 120, days: [1, 2, 3, 4, 5], start_hour: 10, end_hour: 19, timezone: "America/New_York", block_full_day: false, confirmation_message: "" };
 }
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
@@ -280,7 +281,7 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
   const startEdit = (link: SchedulingLink) => {
     setAdding(false);
     setEditingId(link.id);
-    setEditDraft({ label: link.label, duration_minutes: link.duration_minutes, days: link.days, start_hour: link.start_hour, end_hour: link.end_hour, timezone: link.timezone, calendar_ids: link.calendar_ids ?? [], block_full_day: link.block_full_day ?? false });
+    setEditDraft({ label: link.label, duration_minutes: link.duration_minutes, days: link.days, start_hour: link.start_hour, end_hour: link.end_hour, timezone: link.timezone, calendar_ids: link.calendar_ids ?? [], block_full_day: link.block_full_day ?? false, confirmation_message: link.confirmation_message ?? "" });
   };
 
   const toggleCalendarInDraft = (id: string) =>
@@ -318,7 +319,7 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
   const canSaveEdit = editDraft.label.trim().length > 0 && editDraft.days.length > 0 && editDraft.start_hour < editDraft.end_hour;
 
   return (
-    <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-4">
+    <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-4" data-coachmark="scheduling-links-section">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-on-surface">Scheduling Links</p>
         <StatusBadge status={status} />
@@ -392,6 +393,12 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
                     <p className="text-xs text-on-surface-variant">Once a booking is confirmed for a day, hide all remaining slots</p>
                   </div>
                   <Toggle on={!!editDraft.block_full_day} onToggle={() => setEditDraft(prev => ({ ...prev, block_full_day: !prev.block_full_day }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-on-surface-variant block mb-1">Confirmation message</label>
+                  <textarea value={editDraft.confirmation_message ?? ""} onChange={e => setEditDraft(prev => ({ ...prev, confirmation_message: e.target.value }))}
+                    rows={3} placeholder="Shown to clients after they confirm a slot. Leave blank for default."
+                    className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888] resize-none" />
                 </div>
                 {isCalendarConnected && (
                   <div>
@@ -517,6 +524,12 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
             </div>
             <Toggle on={!!draft.block_full_day} onToggle={() => setDraft(prev => ({ ...prev, block_full_day: !prev.block_full_day }))} />
           </div>
+          <div>
+            <label className="text-xs font-medium text-on-surface-variant block mb-1">Confirmation message</label>
+            <textarea value={draft.confirmation_message ?? ""} onChange={e => setDraft(prev => ({ ...prev, confirmation_message: e.target.value }))}
+              rows={3} placeholder="Shown to clients after they confirm a slot. Leave blank for default."
+              className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888] resize-none" />
+          </div>
           {isCalendarConnected && (
             <div>
               <label className="text-xs font-medium text-on-surface-variant block mb-2">Check availability against</label>
@@ -600,7 +613,7 @@ function BlockedDatesSection({ initialDates }: { initialDates: string[] }) {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-4">
+    <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-4" data-coachmark="blocked-dates-section">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BanIcon className="w-4 h-4 text-on-surface-variant shrink-0" />
@@ -754,6 +767,27 @@ export function LinksView({
 
   return (
     <div className="max-w-4xl">
+      <CoachmarkSequence tips={[
+        {
+          id: "links.scheduling-section",
+          anchorSelector: '[data-coachmark="scheduling-links-section"]',
+          title: "Let clients book themselves",
+          body: <>
+            <p>A scheduling link shows clients your open slots (based on your Google Calendar) and locks in a time.</p>
+            <p>Paste it into emails or share it directly.</p>
+            <p>Skip this if you prefer to book everyone manually.</p>
+          </>,
+        },
+        {
+          id: "links.blocked-dates",
+          anchorSelector: '[data-coachmark="blocked-dates-section"]',
+          title: "Block out time off",
+          body: <>
+            <p>Add dates here when you&apos;re away or not booking.</p>
+            <p>They&apos;re hidden from every scheduling link automatically.</p>
+          </>,
+        },
+      ]} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 items-start">
 
         {/* Left: Payment */}

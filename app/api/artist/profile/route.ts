@@ -7,8 +7,12 @@ const profileSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   studio_name: z.string().optional(),
+  studio_address: z.string().optional(),
   style_tags: z.string().optional(),
   gmail_address: z.string().email().optional(),
+  email_logo_enabled: z.boolean().optional(),
+  email_logo_bg: z.enum(["light", "dark"]).optional(),
+  logo_url: z.string().nullable().optional(),
 });
 
 export async function PUT(req: Request) {
@@ -55,6 +59,10 @@ export async function PUT(req: Request) {
         studio_name: parsed.studio_name || null,
         style_tags: styleTags,
         ...(parsed.gmail_address !== undefined && { gmail_address: parsed.gmail_address }),
+        ...(parsed.studio_address !== undefined && { studio_address: parsed.studio_address || null }),
+        ...(parsed.email_logo_enabled !== undefined && { email_logo_enabled: parsed.email_logo_enabled }),
+        ...(parsed.email_logo_bg !== undefined && { email_logo_bg: parsed.email_logo_bg }),
+        ...(parsed.logo_url !== undefined && { logo_url: parsed.logo_url || null }),
       })
       .eq("id", user.id);
 
