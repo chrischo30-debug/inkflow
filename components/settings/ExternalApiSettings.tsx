@@ -1,32 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Check, ExternalLink, Eye, EyeOff, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
-function HowToGuide({ steps }: { steps: string[] }) {
-  const [open, setOpen] = useState(false);
+function HowToGuide({ steps, defaultOpen = false }: { steps: string[]; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs text-primary hover:underline underline-offset-4 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-primary hover:underline underline-offset-4 transition-colors font-medium"
       >
-        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         {open ? "Hide instructions" : "How to get this key"}
       </button>
       {open && (
-        <ol className="mt-3 space-y-2 pl-0 list-none">
+        <ol className="mt-4 space-y-3 pl-0 list-none">
           {steps.map((step, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-xs text-on-surface-variant">
-              <span className="w-4 h-4 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+            <li key={i} className="flex items-start gap-3 text-sm text-on-surface-variant">
+              <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
                 {i + 1}
               </span>
-              <span>{step}</span>
+              <span className="leading-relaxed">{step}</span>
             </li>
           ))}
         </ol>
@@ -48,6 +48,7 @@ function ApiKeyField({
   status,
   errorMessage,
   howToSteps,
+  howToDefaultOpen = false,
 }: {
   label: string;
   description: string;
@@ -61,6 +62,7 @@ function ApiKeyField({
   status: SaveStatus;
   errorMessage?: string | null;
   howToSteps: string[];
+  howToDefaultOpen?: boolean;
 }) {
   const [show, setShow] = useState(false);
   const isSaved = Boolean(savedValue) && value === savedValue;
@@ -87,7 +89,7 @@ function ApiKeyField({
               </span>
             )}
           </div>
-          <p className="text-xs text-on-surface-variant mt-0.5">{description}</p>
+          <p className="text-sm text-on-surface-variant mt-0.5 leading-relaxed">{description}</p>
         </div>
         <a
           href={signupUrl}
@@ -138,65 +140,51 @@ function ApiKeyField({
             : "Failed to save. Check your key and try again."}
         </p>
       )}
-      <HowToGuide steps={howToSteps} />
+      {howToSteps.length > 0 && <HowToGuide steps={howToSteps} defaultOpen={howToDefaultOpen} />}
     </div>
   );
 }
 
 const STRIPE_STEPS = [
   "Go to stripe.com and create a free account (or log in if you have one).",
-  "In the left sidebar, click Developers.",
-  "Click API keys.",
+  "After signing up, Stripe will ask you to activate your account — complete this to receive payouts. You'll need to add your bank account, SSN (last 4), and a few business details. This takes about 5 minutes.",
+  "Once activated, go to Settings → Bank accounts to confirm your payout bank account is connected.",
+  "Go to Developers → API keys in the left sidebar.",
+  'Click Create secret key. When Stripe asks "How will you be using this key?" — select Powering an integration you built.',
   "Under Secret key, click Reveal live key (for real payments) or use the test key while testing.",
   "Copy the key — it starts with sk_live_ or sk_test_.",
   "Paste it in the field above and click Save.",
 ];
 
-const KIT_API_KEY_STEPS = [
-  "Go to kit.com and log in (or create a free account).",
-  "Click your name in the top right, then select Settings.",
-  "Click the Developer tab.",
-  "Under API Key, copy the public API key (not the secret).",
-  "Paste it in the field above and click Save.",
-];
-
-const KIT_FORM_ID_STEPS = [
-  "In Kit, go to Grow → Landing Pages & Forms.",
-  "Open an existing form or create a new one.",
-  "Look at the URL in your browser: app.kit.com/forms/12345/edit",
-  "The number in the URL is your Form ID.",
-  "Paste it in the field above and click Save.",
-  "Then go to Newsletter Form in the sidebar to configure and enable your signup form.",
-];
-
 export function ExternalApiSettings({
   initialStripeKey,
   initialStripeWebhookSecret,
-  initialKitApiKey,
-  initialKitFormId,
   artistId,
 }: {
   initialStripeKey: string;
   initialStripeWebhookSecret: string;
-  initialKitApiKey: string;
-  initialKitFormId: string;
   artistId: string;
 }) {
   const [stripeKey, setStripeKey] = useState(initialStripeKey);
   const [savedStripeKey, setSavedStripeKey] = useState(initialStripeKey);
   const [stripeWebhookSecret, setStripeWebhookSecret] = useState(initialStripeWebhookSecret);
   const [savedStripeWebhookSecret, setSavedStripeWebhookSecret] = useState(initialStripeWebhookSecret);
-  const [kitApiKey, setKitApiKey] = useState(initialKitApiKey);
-  const [savedKitApiKey, setSavedKitApiKey] = useState(initialKitApiKey);
-  const [kitFormId, setKitFormId] = useState(initialKitFormId);
-  const [savedKitFormId, setSavedKitFormId] = useState(initialKitFormId);
   const [stripeStatus, setStripeStatus] = useState<SaveStatus>("idle");
   const [stripeError, setStripeError] = useState<string | null>(null);
   const [stripeWebhookStatus, setStripeWebhookStatus] = useState<SaveStatus>("idle");
   const [stripeWebhookError, setStripeWebhookError] = useState<string | null>(null);
-  const [kitApiStatus, setKitApiStatus] = useState<SaveStatus>("idle");
-  const [kitFormStatus, setKitFormStatus] = useState<SaveStatus>("idle");
   const [webhookUrlCopied, setWebhookUrlCopied] = useState(false);
+  const [stripeKeyVisible, setStripeKeyVisible] = useState(false);
+  const [step2Flash, setStep2Flash] = useState(false);
+  const prevSavedStripeKey = useRef(initialStripeKey);
+  useEffect(() => {
+    if (!prevSavedStripeKey.current && savedStripeKey) {
+      setStep2Flash(true);
+      const t = setTimeout(() => setStep2Flash(false), 2500);
+      return () => clearTimeout(t);
+    }
+    prevSavedStripeKey.current = savedStripeKey;
+  }, [savedStripeKey]);
 
   const webhookUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/stripe/${artistId}`;
 
@@ -237,73 +225,144 @@ export function ExternalApiSettings({
     }
   };
 
-  const saveKitField = async (
-    field: "kit_api_key" | "kit_form_id",
-    value: string,
-    setStatus: (s: SaveStatus) => void,
-    onSavedValue?: (v: string) => void,
-  ) => {
-    setStatus("saving");
-    const res = await fetch("/api/artist/kit-integration", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: value }),
-    });
-    if (res.ok) {
-      onSavedValue?.(value);
-      setStatus("success");
-      setTimeout(() => setStatus("idle"), 3000);
-    } else {
-      setStatus("error");
-      setTimeout(() => setStatus("idle"), 4000);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Payment & Scheduling</p>
-        <ApiKeyField
-          label="Stripe"
-          description="Generate deposit payment links directly from bookings. Clients pay, deposit is automatically marked as paid."
-          value={stripeKey}
-          onChange={setStripeKey}
-          placeholder="sk_live_..."
-          signupUrl="https://dashboard.stripe.com/register"
-          signupLabel="Create Stripe account"
-          savedValue={savedStripeKey}
-          onSave={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus, setStripeError, setSavedStripeKey)}
-          status={stripeStatus}
-          errorMessage={stripeError}
-          howToSteps={STRIPE_STEPS}
-        />
-        {stripeKey && (
-          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-5 space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-on-surface">Stripe Webhook</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">
-                Add this URL to Stripe so deposits are automatically tracked. Go to{" "}
-                <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  Stripe → Developers → Webhooks
-                </a>{" "}
-                → Add endpoint, paste the URL below, and select the{" "}
-                <code className="text-xs bg-surface-container-high px-1 py-0.5 rounded">checkout.session.completed</code> event.
-              </p>
+        <div className="rounded-xl border border-outline-variant/20 overflow-hidden">
+          {/* Step 1 — API Key */}
+          <div className="bg-surface-container-lowest p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${savedStripeKey ? "bg-emerald-100 text-emerald-700" : "bg-surface-container border border-outline-variant/30 text-on-surface-variant"}`}>
+                {savedStripeKey ? "✓" : "1"}
+              </span>
+              <p className="text-sm font-semibold text-on-surface">Stripe API Key</p>
+              {savedStripeKey && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  <Check className="w-3 h-3" /> Connected
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2 rounded-lg bg-surface-container-high/60 border border-outline-variant/20 px-3 py-2">
-              <p className="flex-1 text-xs font-mono text-on-surface-variant truncate">{webhookUrl}</p>
-              <button
+            <p className="text-sm text-on-surface-variant">Generate deposit payment links directly from bookings. Clients pay, deposit is automatically marked as paid.</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={stripeKeyVisible ? "text" : "password"}
+                  value={stripeKey}
+                  onChange={(e) => setStripeKey(e.target.value)}
+                  placeholder="sk_live_..."
+                  className="pr-10 border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setStripeKeyVisible(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  {stripeKeyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <Button
                 type="button"
-                onClick={copyWebhookUrl}
-                className="shrink-0 p-1 rounded text-on-surface-variant hover:text-on-surface transition-colors"
-                title="Copy URL"
+                onClick={() => saveExternalKey("stripe_api_key", stripeKey, setStripeStatus, setStripeError, setSavedStripeKey)}
+                disabled={stripeStatus === "saving" || (Boolean(savedStripeKey) && stripeKey === savedStripeKey)}
+                className="h-auto py-2 px-4 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity shrink-0 disabled:opacity-40"
               >
-                {webhookUrlCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
+                {stripeStatus === "saving" ? "Saving…" : (Boolean(savedStripeKey) && stripeKey === savedStripeKey) ? "Saved" : "Save"}
+              </Button>
             </div>
+            {stripeStatus === "error" && (
+              <p className="text-xs text-destructive">{stripeError ? `Save failed: ${stripeError}` : "Failed to save. Check your key and try again."}</p>
+            )}
+            {!savedStripeKey && <HowToGuide steps={STRIPE_STEPS} defaultOpen />}
+          </div>
+
+          {/* Divider with step label */}
+          <div className="border-t border-outline-variant/15" />
+
+          {/* Step 2 — Webhook */}
+          <div className={`p-5 space-y-4 transition-all duration-700 ${savedStripeKey ? "" : "opacity-40 pointer-events-none select-none"} ${step2Flash ? "bg-indigo-50/50" : ""}`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-300 ${
+                savedStripeWebhookSecret
+                  ? "bg-emerald-100 text-emerald-700"
+                  : step2Flash
+                    ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300 scale-110"
+                    : "bg-surface-container border border-outline-variant/30 text-on-surface-variant"
+              }`}>
+                {savedStripeWebhookSecret ? "✓" : "2"}
+              </span>
+              <p className={`text-sm font-semibold transition-colors duration-300 ${step2Flash ? "text-indigo-700" : "text-on-surface"}`}>
+                Stripe Webhook
+              </p>
+              {step2Flash && !savedStripeWebhookSecret && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 animate-pulse">
+                  Do this next
+                </span>
+              )}
+              {savedStripeWebhookSecret && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  <Check className="w-3 h-3" /> Connected
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-on-surface-variant leading-relaxed">
+              Add this URL to Stripe so FlashBooker automatically marks deposits as paid when clients pay.
+            </p>
+            <ol className="space-y-2.5 pl-0 list-none">
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                <span className="leading-relaxed pt-0.5">
+                  Go to{" "}
+                  <a href="https://dashboard.stripe.com/webhooks" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
+                    Stripe → Developers → Webhooks
+                  </a>{" "}
+                  and click <span className="font-medium text-on-surface">Add destination</span>
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                <span className="leading-relaxed pt-0.5">Select <span className="font-medium text-on-surface">Your account</span></span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                <span className="leading-relaxed pt-0.5">
+                  Search for{" "}
+                  <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">checkout.session.completed</code>
+                  , select it → Next
+                </span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</span>
+                <span className="leading-relaxed pt-0.5">Select <span className="font-medium text-on-surface">Webhook endpoint</span> → Continue</span>
+              </li>
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">5</span>
+                <span className="leading-relaxed pt-0.5">Paste your URL into the <span className="font-medium text-on-surface">Endpoint URL</span> field:</span>
+              </li>
+            </ol>
+            <div className="ml-8 space-y-2">
+              <div className="flex items-center gap-2 rounded-lg bg-surface-container-high/60 border border-outline-variant/20 px-3 py-2">
+                <p className="flex-1 text-xs font-mono text-on-surface-variant truncate">{webhookUrl}</p>
+                <button
+                  type="button"
+                  onClick={copyWebhookUrl}
+                  className="shrink-0 p-1 rounded text-on-surface-variant hover:text-on-surface transition-colors"
+                  title="Copy URL"
+                >
+                  {webhookUrlCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+            <ol className="space-y-2.5 pl-0 list-none" start={6}>
+              <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+                <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">6</span>
+                <span className="leading-relaxed pt-0.5">Save, then open the destination detail page and click <span className="font-medium text-on-surface">Reveal signing secret</span>. Copy it below.</span>
+              </li>
+            </ol>
+
             <ApiKeyField
               label="Webhook Signing Secret"
-              description="After creating the webhook endpoint in Stripe, copy the signing secret (starts with whsec_) and save it here."
+              description="After creating the endpoint in Stripe, copy the signing secret (starts with whsec_) from the webhook detail page and paste it here."
               value={stripeWebhookSecret}
               onChange={setStripeWebhookSecret}
               placeholder="whsec_..."
@@ -313,49 +372,12 @@ export function ExternalApiSettings({
               onSave={() => saveExternalKey("stripe_webhook_secret", stripeWebhookSecret, setStripeWebhookStatus, setStripeWebhookError, setSavedStripeWebhookSecret)}
               status={stripeWebhookStatus}
               errorMessage={stripeWebhookError}
-              howToSteps={[
-                "In Stripe, go to Developers → Webhooks.",
-                "Click Add endpoint.",
-                `Paste your webhook URL: ${webhookUrl}`,
-                "Under Events, select checkout.session.completed.",
-                "Click Add endpoint.",
-                "On the webhook detail page, click Reveal signing secret.",
-                "Copy the secret (starts with whsec_) and paste it above.",
-              ]}
+              howToSteps={[]}
             />
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="space-y-4">
-        <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Newsletter</p>
-        <ApiKeyField
-          label="Kit — API Key"
-          description="Your public Kit API key. Used to add subscribers from your newsletter signup form."
-          value={kitApiKey}
-          savedValue={savedKitApiKey}
-          onChange={setKitApiKey}
-          placeholder="your kit api key..."
-          signupUrl="https://kit.com"
-          signupLabel="Create Kit account"
-          onSave={() => saveKitField("kit_api_key", kitApiKey, setKitApiStatus, setSavedKitApiKey)}
-          status={kitApiStatus}
-          howToSteps={KIT_API_KEY_STEPS}
-        />
-        <ApiKeyField
-          label="Kit — Form ID"
-          description="The ID of the Kit form to subscribe people to. New subscribers are added to this form."
-          value={kitFormId}
-          savedValue={savedKitFormId}
-          onChange={setKitFormId}
-          placeholder="12345"
-          signupUrl="https://app.kit.com/forms"
-          signupLabel="Open Kit forms"
-          onSave={() => saveKitField("kit_form_id", kitFormId, setKitFormStatus, setSavedKitFormId)}
-          status={kitFormStatus}
-          howToSteps={KIT_FORM_ID_STEPS}
-        />
-      </div>
     </div>
   );
 }

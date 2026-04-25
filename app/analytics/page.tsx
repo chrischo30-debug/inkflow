@@ -10,6 +10,16 @@ export type DistItem = { name: string; count: number; revenue?: number };
 export type StateItem = { state: string; label: string; count: number };
 export type StripeCharge = { month: string; amount: number };
 
+export type RecentPayment = {
+  id: string;
+  clientName: string;
+  sessionType: string;
+  amount: number;
+  net: number | null; // after Stripe fees
+  status: string;
+  date: string;
+};
+
 export type AnalyticsData = {
   totalRevenue: number;
   totalTips: number;
@@ -28,6 +38,19 @@ export type AnalyticsData = {
   stripeRevenue: number | null;
   stripeCount: number | null;
   stripeMonthly: StripeCharge[] | null;
+  // Payment-link metrics
+  stripeThisMonth: number | null;
+  stripeLastMonth: number | null;
+  stripeOutstanding: number;
+  stripeConversionRate: number | null;
+  stripeRecentPayments: RecentPayment[];
+  // Period-scoped KPI values
+  revenueThisMonth: number;
+  revenueThisYear: number;
+  clientsThisMonth: number;
+  clientsThisYear: number;
+  sessionsThisMonth: number;
+  sessionsThisYear: number;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -52,31 +75,6 @@ function last12MonthKeys(): string[] {
   });
 }
 
-// ─── Stripe fetch (gracefully degrades) ──────────────────────────────────────
-async function fetchStripeData(apiKey: string): Promise<{
-  revenue: number; count: number; monthly: StripeCharge[];
-} | null> {
-  try {
-    const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(apiKey);
-    const charges = await stripe.charges.list({ limit: 100, expand: ["data.balance_transaction"] });
-    const successful = charges.data.filter(c => c.status === "succeeded" && !c.refunded);
-    const revenue = successful.reduce((s, c) => s + c.amount / 100, 0);
-
-    const byMonth: Record<string, number> = {};
-    for (const c of successful) {
-      const key = monthKey(new Date(c.created * 1000).toISOString());
-      byMonth[key] = (byMonth[key] ?? 0) + c.amount / 100;
-    }
-    const monthly: StripeCharge[] = Object.entries(byMonth)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, amount]) => ({ month, amount }));
-
-    return { revenue, count: successful.length, monthly };
-  } catch {
-    return null;
-  }
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function AnalyticsPage() {
@@ -87,7 +85,7 @@ export default async function AnalyticsPage() {
   const [{ data: bookingsRaw }, { data: artistRaw }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, client_email, state, appointment_date, created_at, total_amount, tip_amount, budget, placement, size, description")
+      .select("id, client_email, client_name, state, appointment_date, created_at, total_amount, tip_amount, budget, placement, size, description, deposit_paid, amount_paid, stripe_payment_id")
       .eq("artist_id", user.id),
     supabase
       .from("artists")
@@ -96,9 +94,15 @@ export default async function AnalyticsPage() {
       .single(),
   ]);
 
-  const bookings = (bookingsRaw ?? []) as Pick<Booking,
+  type BookingRow = Pick<Booking,
     "id" | "client_email" | "state" | "appointment_date" | "created_at" | "total_amount" | "tip_amount" | "budget" | "placement" | "size" | "description"
-  >[];
+  > & {
+    client_name?: string | null;
+    deposit_paid?: boolean | null;
+    amount_paid?: number | null;
+    stripe_payment_id?: string | null;
+  };
+  const bookings = (bookingsRaw ?? []) as BookingRow[];
 
   const artist = artistRaw as { stripe_api_key?: string } | null;
 
@@ -248,16 +252,204 @@ export default async function AnalyticsPage() {
   let stripeRevenue: number | null = null;
   let stripeCount: number | null = null;
   let stripeMonthly: StripeCharge[] | null = null;
+  let stripeThisMonth: number | null = null;
+  let stripeLastMonth: number | null = null;
+  let stripeRecentPayments: RecentPayment[] = [];
 
   const stripeKey = (artist as { stripe_api_key?: string | null } | null)?.stripe_api_key;
   if (stripeKey) {
-    const sd = await fetchStripeData(stripeKey);
-    if (sd) {
-      stripeRevenue = sd.revenue;
-      stripeCount = sd.count;
-      stripeMonthly = sd.monthly;
+    const paidBookings = bookings.filter(b => b.deposit_paid);
+
+    if (paidBookings.length > 0) {
+      // Primary path: compute from DB deposit records (FlashBooker deposits only)
+      const now = new Date();
+      const thisMonthKey = monthKey(now.toISOString());
+      const lastMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString());
+
+      let revenue = 0;
+      let thisMonth = 0;
+      let lastMonth = 0;
+      const byMonth: Record<string, number> = {};
+
+      for (const b of paidBookings) {
+        const dollars = (b.amount_paid ?? 0) / 100;
+        revenue += dollars;
+        const k = monthKey((b.appointment_date ?? b.created_at)!);
+        byMonth[k] = (byMonth[k] ?? 0) + dollars;
+        if (k === thisMonthKey) thisMonth += dollars;
+        if (k === lastMonthKey) lastMonth += dollars;
+      }
+
+      // For bookings missing amount_paid, fetch from Stripe using stored payment intent ID
+      const recent = [...paidBookings]
+        .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
+        .slice(0, 20);
+
+      const amountById: Record<string, number> = {};
+      const netById: Record<string, number> = {};
+      const needsStripe = paidBookings.filter(b => b.stripe_payment_id && !b.amount_paid);
+
+      if (needsStripe.length > 0) {
+        try {
+          const Stripe = (await import("stripe")).default;
+          const stripe = new Stripe(stripeKey);
+          await Promise.all(needsStripe.map(async b => {
+            try {
+              const pi = await stripe.paymentIntents.retrieve(b.stripe_payment_id!, {
+                expand: ["latest_charge.balance_transaction"],
+              });
+              amountById[b.stripe_payment_id!] = pi.amount / 100;
+              const charge = pi.latest_charge;
+              if (charge && typeof charge !== "string") {
+                const bt = (charge as { balance_transaction?: unknown }).balance_transaction;
+                if (bt != null && typeof bt !== "string" && typeof bt === "object" && "net" in bt) {
+                  netById[b.stripe_payment_id!] = (bt as { net: number }).net / 100;
+                }
+              }
+            } catch { /* ignore */ }
+          }));
+          // Add Stripe-fetched amounts into totals
+          for (const b of needsStripe) {
+            if (b.stripe_payment_id && amountById[b.stripe_payment_id]) {
+              const dollars = amountById[b.stripe_payment_id];
+              revenue += dollars;
+              const k = monthKey((b.appointment_date ?? b.created_at)!);
+              byMonth[k] = (byMonth[k] ?? 0) + dollars;
+              if (k === thisMonthKey) thisMonth += dollars;
+              if (k === lastMonthKey) lastMonth += dollars;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      stripeMonthly = Object.entries(byMonth)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, amount]) => ({ month, amount }));
+
+      stripeRecentPayments = recent.map(b => {
+        const stripeAmount = b.stripe_payment_id ? (amountById[b.stripe_payment_id] ?? null) : null;
+        return {
+          id: b.id,
+          clientName: b.client_name ?? "—",
+          sessionType: b.description?.slice(0, 60) ?? "—",
+          amount: b.amount_paid ? b.amount_paid / 100 : (stripeAmount ?? 0),
+          net: b.stripe_payment_id ? (netById[b.stripe_payment_id] ?? null) : null,
+          status: "succeeded",
+          date: b.created_at!,
+        };
+      });
+
+      stripeRevenue = revenue;
+      stripeCount = paidBookings.length;
+      stripeThisMonth = thisMonth;
+      stripeLastMonth = lastMonth;
+    } else {
+      // Fallback: no webhook deposits in DB yet — pull from Stripe charges API
+      try {
+        const Stripe = (await import("stripe")).default;
+        const stripe = new Stripe(stripeKey);
+        const charges = await stripe.charges.list({ limit: 100, expand: ["data.balance_transaction"] });
+        const successful = charges.data.filter(c => c.status === "succeeded" && !c.refunded);
+
+        const now = new Date();
+        const thisMonthKey = monthKey(now.toISOString());
+        const lastMonthKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString());
+
+        let revenue = 0;
+        let thisMonth = 0;
+        let lastMonth = 0;
+        const byMonth: Record<string, number> = {};
+
+        for (const c of successful) {
+          const dollars = c.amount / 100;
+          revenue += dollars;
+          const k = monthKey(new Date(c.created * 1000).toISOString());
+          byMonth[k] = (byMonth[k] ?? 0) + dollars;
+          if (k === thisMonthKey) thisMonth += dollars;
+          if (k === lastMonthKey) lastMonth += dollars;
+        }
+
+        stripeMonthly = Object.entries(byMonth)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([month, amount]) => ({ month, amount }));
+
+        stripeRecentPayments = successful.slice(0, 20).map(c => {
+          const bt = c.balance_transaction;
+          const net = (bt != null && typeof bt !== "string") ? bt.net / 100 : null;
+          return {
+            id: c.id,
+            clientName: (c.metadata?.client_name as string | undefined) ?? (c.billing_details?.name ?? "—"),
+            sessionType: (c.metadata?.session_type as string | undefined) ?? (c.description ?? "—"),
+            amount: c.amount / 100,
+            net,
+            status: c.status,
+            date: new Date(c.created * 1000).toISOString(),
+          };
+        });
+
+        stripeRevenue = revenue;
+        stripeCount = successful.length;
+        stripeThisMonth = thisMonth;
+        stripeLastMonth = lastMonth;
+      } catch { /* ignore */ }
     }
   }
+
+  // ── Period-scoped KPI values ──────────────────────────────────────────────
+  const nowDate = new Date();
+  const currentMonthKey = monthKey(nowDate.toISOString());
+  const currentYearStr = String(nowDate.getFullYear());
+
+  const revenueThisMonthBookings = completed.reduce((s, b) => {
+    const k = monthKey(b.appointment_date ?? b.created_at);
+    return k === currentMonthKey ? s + (b.total_amount ?? 0) + (b.tip_amount ?? 0) : s;
+  }, 0);
+  const revenueThisYearBookings = completed.reduce((s, b) => {
+    const k = monthKey(b.appointment_date ?? b.created_at);
+    return k.startsWith(currentYearStr) ? s + (b.total_amount ?? 0) + (b.tip_amount ?? 0) : s;
+  }, 0);
+  const stripeThisYear = stripeMonthly?.reduce((s, m) =>
+    m.month.startsWith(currentYearStr) ? s + m.amount : s, 0) ?? 0;
+
+  const revenueThisMonth = revenueThisMonthBookings + (stripeThisMonth ?? 0);
+  const revenueThisYear = revenueThisYearBookings + stripeThisYear;
+
+  const clientsThisMonthSet = new Set<string>();
+  const clientsThisYearSet = new Set<string>();
+  for (const b of bookings) {
+    const k = monthKey(b.appointment_date ?? b.created_at);
+    const email = b.client_email.toLowerCase();
+    if (k === currentMonthKey) clientsThisMonthSet.add(email);
+    if (k.startsWith(currentYearStr)) clientsThisYearSet.add(email);
+  }
+  const clientsThisMonth = clientsThisMonthSet.size;
+  const clientsThisYear = clientsThisYearSet.size;
+
+  const sessionsThisMonth = completed.filter(b =>
+    monthKey(b.appointment_date ?? b.created_at) === currentMonthKey
+  ).length;
+  const sessionsThisYear = completed.filter(b =>
+    monthKey(b.appointment_date ?? b.created_at).startsWith(currentYearStr)
+  ).length;
+
+  // Outstanding payments: payment_link set but deposit not yet paid
+  const { data: outstandingRaw } = await supabase
+    .from("bookings")
+    .select("id", { count: "exact", head: false })
+    .eq("artist_id", user.id)
+    .not("payment_link", "is", null)
+    .eq("deposit_paid", false);
+  const stripeOutstanding = (outstandingRaw ?? []).length;
+
+  // Payment conversion rate: paid / total with payment link sent
+  const { data: totalWithLink } = await supabase
+    .from("bookings")
+    .select("id, deposit_paid")
+    .eq("artist_id", user.id)
+    .not("payment_link", "is", null);
+  const linksSent = (totalWithLink ?? []).length;
+  const linksPaid = (totalWithLink ?? []).filter(b => b.deposit_paid).length;
+  const stripeConversionRate = linksSent > 0 ? (linksPaid / linksSent) * 100 : null;
 
   const data: AnalyticsData = {
     totalRevenue,
@@ -277,6 +469,17 @@ export default async function AnalyticsPage() {
     stripeRevenue,
     stripeCount,
     stripeMonthly,
+    stripeThisMonth,
+    stripeLastMonth,
+    stripeOutstanding,
+    stripeConversionRate,
+    stripeRecentPayments,
+    revenueThisMonth,
+    revenueThisYear,
+    clientsThisMonth,
+    clientsThisYear,
+    sessionsThisMonth,
+    sessionsThisYear,
   };
 
   return (

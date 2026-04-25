@@ -19,7 +19,7 @@ export default async function DashboardPage() {
 
   const { data: artistData } = await supabase
     .from("artists")
-    .select("name, slug, calendar_sync_enabled, books_open, books_open_at, books_close_at, stripe_api_key")
+    .select("name, slug, calendar_sync_enabled, books_open, books_open_at, books_close_at, stripe_api_key, scheduling_links")
     .eq("id", user.id)
     .single();
 
@@ -144,7 +144,24 @@ export default async function DashboardPage() {
           <div className="px-4 md:px-6 xl:px-8 pb-8">
             <div className="flex items-center gap-1.5 mb-3">
               <h2 className="text-sm font-heading font-semibold text-on-surface">Pipeline</h2>
-              <HelpTooltip body="All active bookings organized by stage — New, Accepted, Confirmed, and Completed. Use the action buttons on each card to move clients forward and send emails." />
+              <HelpTooltip title="How the pipeline works">
+                <div className="divide-y divide-outline-variant/15">
+                  {[
+                    { stage: "Submission", desc: "New inquiry just came in. Review and choose Accept, Reject, or Follow Up." },
+                    { stage: "Follow Up", desc: "You sent a question to the client. Waiting on their reply before deciding." },
+                    { stage: "Accepted", desc: "Client is in. Click Send Deposit to email them a payment link." },
+                    { stage: "Sent Deposit", desc: "Deposit email is out. With Stripe, moves to Sent Calendar automatically when they pay." },
+                    { stage: "Sent Calendar", desc: "Deposit received. Client gets a link to pick their appointment time." },
+                    { stage: "Booked", desc: "Appointment is locked in. Prepare for the session." },
+                    { stage: "Completed", desc: "Session done. Record final payment and notes." },
+                  ].map(({ stage, desc }) => (
+                    <div key={stage} className="flex items-start gap-3 py-2.5">
+                      <span className="shrink-0 text-[10px] font-semibold text-on-surface bg-surface-container-high px-1.5 py-0.5 rounded leading-tight mt-0.5 whitespace-nowrap">{stage}</span>
+                      <p className="text-xs text-on-surface-variant leading-snug">{desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </HelpTooltip>
             </div>
             {bookings.length > 0 ? (
               <PipelineView
@@ -152,7 +169,8 @@ export default async function DashboardPage() {
                 fieldLabelMap={fieldLabelMap}
                 calendarSyncEnabled={Boolean(artistData?.calendar_sync_enabled)}
                 hasStripe={hasStripe}
-
+                artistId={user.id}
+                schedulingLinks={Array.isArray((artistData as Record<string,unknown>)?.scheduling_links) ? (artistData as Record<string,unknown>).scheduling_links as import("@/lib/pipeline-settings").SchedulingLink[] : []}
               />
             ) : (
               <div className="rounded-xl border border-dashed border-outline-variant/30 p-12 text-center">

@@ -4,16 +4,57 @@ import { useState, useEffect, useRef } from "react";
 import { BookingState, EmailTemplate } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Check, ChevronDown, Plus, Trash2, Link2, Calendar } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2, Link2, Calendar, Eye, Pencil } from "lucide-react";
 import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
 
+// ── Body preview — resolves variables with sample data ────────────────────────
+
+function resolvePreview(
+  text: string,
+  artistName: string,
+  paymentLinks: PaymentLink[],
+  calendarLinks: CalendarLink[],
+): string {
+  const findByLabel = (links: { label: string; url: string }[], label: string) =>
+    links.find(l => l.label.trim().toLowerCase() === label.trim().toLowerCase())?.url ?? null;
+
+  return text
+    .replace(/\{paymentLink:([^}]+)\}/g, (_, label: string) =>
+      findByLabel(paymentLinks, label) ?? paymentLinks[0]?.url ?? "https://pay.example.com")
+    .replace(/\{calendarLink:([^}]+)\}/g, (_, label: string) =>
+      findByLabel(calendarLinks, label) ?? calendarLinks[0]?.url ?? "https://calendly.com/example")
+    .replace(/\{clientFirstName\}/g, "Jane")
+    .replace(/\{clientName\}/g, "Jane Doe")
+    .replace(/\{artistName\}/g, artistName || "Your Studio")
+    .replace(/\{paymentLink\}/g, paymentLinks[0]?.url ?? "https://pay.example.com")
+    .replace(/\{calendarLink\}/g, calendarLinks[0]?.url ?? "https://calendly.com/example")
+    .replace(/\{appointmentDate\}/g, "May 3, 2026");
+}
+
+function BodyPreview({ text, artistName, paymentLinks, calendarLinks }: {
+  text: string;
+  artistName: string;
+  paymentLinks: PaymentLink[];
+  calendarLinks: CalendarLink[];
+}) {
+  const resolved = resolvePreview(text, artistName, paymentLinks, calendarLinks);
+  return (
+    <div className="whitespace-pre-wrap text-sm text-on-surface leading-relaxed min-h-[140px]">
+      {resolved}
+    </div>
+  );
+}
+
 const STATE_LABELS: Record<Exclude<BookingState, "cancelled">, string> = {
-  inquiry:   "Submission Received",
-  follow_up: "Follow Ups",
-  accepted:  "Accepted – Deposit Requested",
-  confirmed: "Appointment Booked",
-  completed: "Appointment Completed",
-  rejected:  "Submission Rejected",
+  inquiry:       "Submission Received",
+  follow_up:     "Follow Up",
+  accepted:      "Accepted",
+  sent_deposit:  "Sent Deposit",
+  sent_calendar: "Sent Calendar",
+  booked:        "Booked",
+  confirmed:     "Booked (legacy)",
+  completed:     "Appointment Completed",
+  rejected:      "Submission Rejected",
 };
 
 // Static (non-link) variables — link variables are rendered as dropdowns
@@ -75,30 +116,17 @@ function LinkDropdown({
               <a href="/payment-links" className="text-primary hover:underline">Add some →</a>
             </p>
           )}
-          {links.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => pick(`{${variableBase}}`)}
-                className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors flex items-start gap-2"
-              >
-                <span className="font-mono text-xs text-primary shrink-0">{`{${variableBase}}`}</span>
-                <span className="text-xs text-on-surface-variant">first one</span>
-              </button>
-              <div className="border-t border-outline-variant/15 my-1" />
-              {links.map((link) => (
-                <button
-                  key={link.label}
-                  type="button"
-                  onClick={() => pick(`{${variableBase}:${link.label}}`)}
-                  className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors"
-                >
-                  <p className="font-mono text-xs text-primary truncate">{`{${variableBase}:${link.label}}`}</p>
-                  <p className="text-[10px] text-on-surface-variant/70 truncate mt-0.5">{link.url}</p>
-                </button>
-              ))}
-            </>
-          )}
+          {links.length > 0 && links.map((link) => (
+            <button
+              key={link.label}
+              type="button"
+              onClick={() => pick(`{${variableBase}:${link.label}}`)}
+              className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors"
+            >
+              <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
+              <p className="text-[10px] text-on-surface-variant/70 truncate mt-0.5">{link.url}</p>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -147,11 +175,12 @@ function VarChips({
 
 // ── Template editor (state-linked) ────────────────────────────────────────────
 
-function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks }: { template: EmailTemplate; onSaved: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[] }) {
+function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artistName }: { template: EmailTemplate; onSaved: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string }) {
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
   const [autoSend, setAutoSend] = useState(template.auto_send);
   const [status, setStatus] = useState<SaveStatus>("idle");
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -161,7 +190,15 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks }: { te
     setSubject(template.subject);
     setBody(template.body);
     setAutoSend(template.auto_send);
+    setMode("edit");
   }, [template]);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [body]);
 
   const insertVar = (varName: string) => {
     const isSubject = lastFocused.current === "subject";
@@ -207,15 +244,37 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks }: { te
         />
       </div>
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
-        <textarea
-          ref={bodyRef}
-          value={body}
-          onChange={e => setBody(e.target.value)}
-          onFocus={() => { lastFocused.current = "body"; }}
-          rows={6}
-          className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
-        />
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
+          <div className="flex items-center gap-0.5 bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/20">
+            <button type="button" onClick={() => setMode("edit")}
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "edit" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+            <button type="button" onClick={() => setMode("preview")}
+              className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "preview" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+              <Eye className="w-3 h-3" /> Preview
+            </button>
+          </div>
+        </div>
+        {mode === "edit" ? (
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            onFocus={() => { lastFocused.current = "body"; }}
+            rows={1}
+            className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors overflow-hidden min-h-[200px]"
+          />
+        ) : (
+          <div
+            className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text"
+            onClick={() => setMode("edit")}
+            title="Click to edit"
+          >
+            <BodyPreview text={body} artistName={artistName} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
@@ -417,7 +476,7 @@ function NewTemplateForm({ onCreated, paymentLinks, calendarLinks }: { onCreated
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export function EmailTemplatesSettings({ paymentLinks, calendarLinks }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[] }) {
+export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string }) {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
   const [openState, setOpenState] = useState<string | null>(null);
@@ -461,7 +520,7 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks }: { paymen
               </button>
               {isOpen && (
                 <div className="px-5 pb-5 pt-4 bg-surface-container-lowest border-t border-outline-variant/10">
-                  <TemplateEditor template={t} onSaved={load} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+                  <TemplateEditor template={t} onSaved={load} paymentLinks={paymentLinks} calendarLinks={calendarLinks} artistName={artistName} />
                 </div>
               )}
             </div>

@@ -19,7 +19,19 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
   },
   accepted: {
     subject: `You're in! Next steps from {artistName}`,
-    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit:\n{paymentLink}\n\nOnce your deposit is received, use this link to book your appointment time:\n{calendarLink}\n\nThanks,\n{artistName}`,
+    body: `Hi {clientFirstName},\n\nGreat news — {artistName} would love to work with you!\n\nTo secure your spot, please send your deposit using the link below:\n{paymentLink}\n\nThanks,\n{artistName}`,
+  },
+  sent_deposit: {
+    subject: `Deposit reminder – {artistName}`,
+    body: `Hi {clientFirstName},\n\nJust a reminder to send your deposit to secure your spot:\n{paymentLink}\n\nThanks,\n{artistName}`,
+  },
+  sent_calendar: {
+    subject: `Pick your appointment time – {artistName}`,
+    body: `Hi {clientFirstName},\n\nYour deposit is confirmed! Use the link below to pick your appointment time:\n{schedulingLink}\n\nThanks,\n{artistName}`,
+  },
+  booked: {
+    subject: `Appointment Booked – {artistName}`,
+    body: `Hi {clientFirstName},\n\nYou're locked in! See you on {appointmentDate}.\n\nThanks,\n{artistName}`,
   },
   confirmed: {
     subject: `Appointment Booked – {artistName}`,
@@ -42,6 +54,7 @@ export interface TemplateVars {
   paymentLink: string;      // primary payment link URL (or empty)
   calendarLink: string;     // first calendar link URL (or empty)
   appointmentDate: string;
+  stripePaymentLink: string; // Stripe-generated payment link for this booking (or empty)
   // Full link lists used by the {paymentLink:Label} and {calendarLink:Label}
   // placeholder resolver. Not meant to be inserted as a single token.
   paymentLinksList: PaymentLink[];
@@ -55,6 +68,7 @@ export function buildTemplateVars(opts: {
   calendarLinksList: CalendarLink[];
   appointmentDate?: string;
   primaryPaymentLink?: string;
+  stripePaymentLink?: string;
 }): TemplateVars {
   const paymentLink = opts.primaryPaymentLink || opts.paymentLinksList[0]?.url || '';
   const calendarLink = opts.calendarLinksList[0]?.url || '';
@@ -66,6 +80,7 @@ export function buildTemplateVars(opts: {
     paymentLink,
     calendarLink,
     appointmentDate: opts.appointmentDate ?? '',
+    stripePaymentLink: opts.stripePaymentLink ?? '',
     paymentLinksList: opts.paymentLinksList,
     calendarLinksList: opts.calendarLinksList,
   };
@@ -90,7 +105,8 @@ export function applyPlaceholders(template: string, vars: TemplateVars): string 
     .replace(/\{artistName\}/g, vars.artistName)
     .replace(/\{paymentLink\}/g, vars.paymentLink)
     .replace(/\{calendarLink\}/g, vars.calendarLink)
-    .replace(/\{appointmentDate\}/g, vars.appointmentDate);
+    .replace(/\{appointmentDate\}/g, vars.appointmentDate)
+    .replace(/\{stripePaymentLink\}/g, vars.stripePaymentLink);
 }
 
 function buildFromHeader(artistName: string): string {

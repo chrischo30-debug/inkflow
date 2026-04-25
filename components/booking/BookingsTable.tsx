@@ -11,34 +11,41 @@ import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
 
 const STATE_TABS: { value: string; label: string }[] = [
-  { value: "all",       label: "All" },
-  { value: "inquiry",   label: "Submissions" },
-  { value: "follow_up", label: "Follow Ups" },
-  { value: "accepted",  label: "Accepted" },
-  { value: "confirmed", label: "Booked" },
-  { value: "completed", label: "Completed" },
-  { value: "rejected",  label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "all",           label: "All" },
+  { value: "inquiry",       label: "Submissions" },
+  { value: "follow_up",     label: "Follow Ups" },
+  { value: "accepted",      label: "Accepted" },
+  { value: "sent_deposit",  label: "Sent Deposit" },
+  { value: "sent_calendar", label: "Sent Calendar" },
+  { value: "booked",        label: "Booked" },
+  { value: "completed",     label: "Completed" },
+  { value: "rejected",      label: "Rejected" },
+  { value: "cancelled",     label: "Cancelled" },
 ];
 
 const MOVE_STATES: { value: BookingState; label: string }[] = [
-  { value: "inquiry",   label: "Submission" },
-  { value: "follow_up", label: "Follow Ups" },
-  { value: "accepted",  label: "Accepted" },
-  { value: "confirmed", label: "Booked" },
-  { value: "completed", label: "Completed" },
-  { value: "rejected",  label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "inquiry",       label: "Submission" },
+  { value: "follow_up",     label: "Follow Up" },
+  { value: "accepted",      label: "Accepted" },
+  { value: "sent_deposit",  label: "Sent Deposit" },
+  { value: "sent_calendar", label: "Sent Calendar" },
+  { value: "booked",        label: "Booked" },
+  { value: "completed",     label: "Completed" },
+  { value: "rejected",      label: "Rejected" },
+  { value: "cancelled",     label: "Cancelled" },
 ];
 
 const STATE_FLOW: Record<BookingState, { label: string } | null> = {
-  inquiry:   { label: "Accept" },
-  follow_up: { label: "Accept" },
-  accepted:  { label: "Confirm Appointment" },
-  confirmed: { label: "Complete" },
-  completed: null,
-  rejected:  null,
-  cancelled: null,
+  inquiry:       { label: "Accept" },
+  follow_up:     { label: "Accept" },
+  accepted:      { label: "Send Deposit" },
+  sent_deposit:  { label: "Send Calendar" },
+  sent_calendar: { label: "Mark Booked" },
+  booked:        { label: "Complete" },
+  confirmed:     { label: "Complete" },
+  completed:     null,
+  rejected:      null,
+  cancelled:     null,
 };
 
 function timeAgo(iso: string): string {

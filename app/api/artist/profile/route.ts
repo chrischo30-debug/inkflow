@@ -8,6 +8,7 @@ const profileSchema = z.object({
   slug: z.string().min(2).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   studio_name: z.string().optional(),
   style_tags: z.string().optional(),
+  gmail_address: z.string().email().optional(),
 });
 
 export async function PUT(req: Request) {
@@ -53,6 +54,7 @@ export async function PUT(req: Request) {
         slug: normalizedSlug,
         studio_name: parsed.studio_name || null,
         style_tags: styleTags,
+        ...(parsed.gmail_address !== undefined && { gmail_address: parsed.gmail_address }),
       })
       .eq("id", user.id);
 

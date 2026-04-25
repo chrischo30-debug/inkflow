@@ -1,20 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { User, Link2, Mail, Bell, Webhook } from "lucide-react";
+import { User, Link2, Mail, Bell } from "lucide-react";
 import { AccountSettings } from "./AccountSettings";
 import { ThemeSettings } from "./ThemeSettings";
 import { GoogleIntegrationSettings } from "./GoogleIntegrationSettings";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import { ExternalApiSettings } from "./ExternalApiSettings";
 import { ReminderSettings } from "./ReminderSettings";
-import { WebhookSourcesSettings } from "./WebhookSourcesSettings";
-import type { CalendarLink, PaymentLink } from "@/lib/pipeline-settings";
+import type { CalendarLink, PaymentLink, SchedulingLink } from "@/lib/pipeline-settings";
 
 const TABS = [
   { id: "profile",      label: "Profile",      icon: User },
   { id: "integrations", label: "Integrations", icon: Link2 },
-  { id: "webhooks",     label: "Webhooks",     icon: Webhook },
   { id: "emails",       label: "Emails",       icon: Mail },
   { id: "reminders",    label: "Reminders",    icon: Bell },
 ] as const;
@@ -27,6 +25,7 @@ export interface SettingsShellProps {
   artistName: string;
   studioName: string;
   email: string;
+  gmailAddress: string;
   accentTheme: "crimson" | "blue";
   googleConfigured: boolean;
   hasRefreshToken: boolean;
@@ -35,8 +34,7 @@ export interface SettingsShellProps {
   calendarLinks: CalendarLink[];
   stripeApiKey: string;
   stripeWebhookSecret: string;
-  kitApiKey: string;
-  kitFormId: string;
+  schedulingLinks: SchedulingLink[];
   reminderEnabled: boolean;
   reminderHoursBefore: number;
   initialTab?: TabId;
@@ -83,6 +81,7 @@ export function SettingsShell(props: SettingsShellProps) {
                   slug: props.slug,
                   studio_name: props.studioName,
                   email: props.email,
+                  gmail_address: props.gmailAddress,
                 }}
               />
             </div>
@@ -99,21 +98,9 @@ export function SettingsShell(props: SettingsShellProps) {
               <ExternalApiSettings
                 initialStripeKey={props.stripeApiKey}
                 initialStripeWebhookSecret={props.stripeWebhookSecret}
-
-                initialKitApiKey={props.kitApiKey}
-                initialKitFormId={props.kitFormId}
                 artistId={props.artistId}
               />
-            </div>
-          )}
 
-          {tab === "webhooks" && (
-            <div className="max-w-2xl space-y-6">
-              <SectionHeading
-                title="Webhook Sources"
-                description="Accept submissions from external forms (JotForm, Wix, Forminator, etc.) and route them into your bookings pipeline."
-              />
-              <WebhookSourcesSettings />
             </div>
           )}
 
@@ -123,6 +110,7 @@ export function SettingsShell(props: SettingsShellProps) {
               <EmailTemplatesSettings
                 paymentLinks={props.paymentLinks}
                 calendarLinks={props.calendarLinks}
+                artistName={props.artistName}
               />
             </div>
           )}

@@ -2,10 +2,10 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { SettingsShell, type TabId } from "@/components/settings/SettingsShell";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { normalizePaymentLinks } from "@/lib/pipeline-settings";
+import { normalizePaymentLinks, normalizeSchedulingLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
 
-const ALLOWED_TABS: TabId[] = ["profile", "integrations", "webhooks", "emails", "reminders"];
+const ALLOWED_TABS: TabId[] = ["profile", "integrations", "emails", "reminders"];
 
 export default async function SettingsPage({
   searchParams,
@@ -22,7 +22,7 @@ export default async function SettingsPage({
   // Core columns — always exist
   const { data: artist } = await supabase
     .from("artists")
-    .select("name, slug, studio_name, accent_theme, payment_links, calendar_sync_enabled, google_refresh_token")
+    .select("name, slug, studio_name, accent_theme, payment_links, calendar_sync_enabled, google_refresh_token, gmail_address")
     .eq("id", user.id)
     .single();
 
@@ -32,8 +32,6 @@ export default async function SettingsPage({
     calendar_links?: CalendarLink[];
     stripe_api_key?: string;
     stripe_webhook_secret?: string;
-    kit_api_key?: string;
-    kit_form_id?: string;
     reminder_enabled?: boolean;
     reminder_hours_before?: number;
   };
@@ -67,11 +65,10 @@ export default async function SettingsPage({
         isCalendarConnected={Boolean(artist?.calendar_sync_enabled && hasRefreshToken)}
         paymentLinks={normalizePaymentLinks(artist?.payment_links)}
         calendarLinks={(extended.calendar_links as CalendarLink[]) ?? []}
+        gmailAddress={(artist as { gmail_address?: string } | null)?.gmail_address ?? user.email ?? ""}
         stripeApiKey={extended.stripe_api_key ?? ""}
         stripeWebhookSecret={extended.stripe_webhook_secret ?? ""}
-
-        kitApiKey={extended.kit_api_key ?? ""}
-        kitFormId={extended.kit_form_id ?? ""}
+        schedulingLinks={normalizeSchedulingLinks((extData as Record<string, unknown>)?.scheduling_links)}
         reminderEnabled={extended.reminder_enabled ?? false}
         reminderHoursBefore={extended.reminder_hours_before ?? 24}
         initialTab={initialTab}

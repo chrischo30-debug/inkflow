@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import type { AnalyticsData, DistItem, MonthlyPoint } from "@/app/analytics/page";
-import { TrendingUp, Users, DollarSign, Award, Repeat2, CreditCard, Sparkles } from "lucide-react";
+import type { AnalyticsData, DistItem, MonthlyPoint, RecentPayment } from "@/app/analytics/page";
+import { TrendingUp, Users, DollarSign, Award, Repeat2, CreditCard, Sparkles, AlertCircle } from "lucide-react";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const PALETTE = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#06b6d4", "#f97316", "#84cc16", "#14b8a6", "#a855f7"];
@@ -30,7 +31,8 @@ const ttStyle = {
 };
 
 // ─── Small helpers ────────────────────────────────────────────────────────────
-function fmt$(n: number): string {
+function fmt$(n: number | null | undefined): string {
+  if (n == null || isNaN(n)) return "—";
   if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
   return `$${n.toFixed(0)}`;
 }
@@ -59,6 +61,54 @@ function KpiCard({
       </div>
       <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
       {sub && <p className={`text-xs ${accent ? "text-surface/50" : "text-on-surface-variant/60"}`}>{sub}</p>}
+    </div>
+  );
+}
+
+type Period = "monthly" | "year" | "total";
+
+// ─── Toggle KPI Card (Revenue / Clients) ─────────────────────────────────────
+function ToggleKpiCard({
+  label, monthly, year, total, monthSub, yearSub, totalSub, icon: Icon, accent = false,
+}: {
+  label: string;
+  monthly: string;
+  year: string;
+  total: string;
+  monthSub?: string;
+  yearSub?: string;
+  totalSub?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent?: boolean;
+}) {
+  const [period, setPeriod] = useState<Period>("total");
+  const value = period === "monthly" ? monthly : period === "year" ? year : total;
+  const sub = period === "monthly" ? monthSub : period === "year" ? yearSub : totalSub;
+
+  const activeClass = accent ? "bg-surface/20 text-surface" : "bg-surface-container text-on-surface";
+  const inactiveClass = accent ? "text-surface/40 hover:text-surface/60" : "text-on-surface-variant/50 hover:text-on-surface-variant";
+
+  return (
+    <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/15"}`}>
+      <div className="flex items-center justify-between">
+        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface/60" : "text-on-surface-variant"}`}>{label}</p>
+        <div className={`p-2 rounded-xl ${accent ? "bg-surface/10" : "bg-surface-container-low"}`}>
+          <Icon className={`w-4 h-4 ${accent ? "text-surface/80" : "text-on-surface-variant"}`} />
+        </div>
+      </div>
+      <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
+      {sub && <p className={`text-xs ${accent ? "text-surface/50" : "text-on-surface-variant/60"}`}>{sub}</p>}
+      <div className={`flex items-center gap-1 mt-auto pt-2 ${accent ? "border-t border-surface/10" : "border-t border-outline-variant/10"}`}>
+        {(["monthly", "year", "total"] as Period[]).map(p => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${period === p ? activeClass : inactiveClass}`}
+          >
+            {p === "monthly" ? "Month" : p === "year" ? "Year" : "Total"}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -201,6 +251,52 @@ function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: 
   );
 }
 
+// ─── Recent payments table ────────────────────────────────────────────────────
+function RecentPaymentsTable({ payments }: { payments: RecentPayment[] }) {
+  if (payments.length === 0) {
+    return <p className="text-sm text-on-surface-variant/60">No recent payments.</p>;
+  }
+  const showNet = payments.some(p => p.net !== null);
+  return (
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-on-surface-variant/60 uppercase tracking-wide text-[10px]">
+            <th className="text-left pb-2 pr-3 font-semibold">Client</th>
+            <th className="text-left pb-2 pr-3 font-semibold">Session</th>
+            <th className="text-right pb-2 pr-3 font-semibold">Gross</th>
+            {showNet && <th className="text-right pb-2 pr-3 font-semibold">After fees</th>}
+            <th className="text-left pb-2 pr-3 font-semibold">Status</th>
+            <th className="text-left pb-2 font-semibold">Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-outline-variant/10">
+          {payments.map(p => (
+            <tr key={p.id}>
+              <td className="py-2 pr-3 font-medium text-on-surface truncate max-w-[100px]">{p.clientName}</td>
+              <td className="py-2 pr-3 text-on-surface-variant truncate max-w-[120px]">{p.sessionType}</td>
+              <td className="py-2 pr-3 text-right font-semibold text-on-surface tabular-nums">{fmt$(p.amount)}</td>
+              {showNet && (
+                <td className="py-2 pr-3 text-right font-semibold text-emerald-600 tabular-nums">
+                  {p.net != null ? fmt$(p.net) : "—"}
+                </td>
+              )}
+              <td className="py-2 pr-3">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold uppercase tracking-wide">
+                  {p.status}
+                </span>
+              </td>
+              <td className="py-2 text-on-surface-variant tabular-nums">
+                {new Date(p.date).toLocaleDateString("en", { month: "short", day: "numeric" })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const {
@@ -208,6 +304,10 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
     completedCount, conversionRate, avgPrice, avgBudget,
     returningClients, monthlyData, stateData, placements, sizes, requestTypes,
     stripeRevenue, stripeCount, stripeMonthly,
+    stripeThisMonth, stripeLastMonth, stripeOutstanding, stripeConversionRate,
+    stripeRecentPayments,
+    revenueThisMonth, revenueThisYear, clientsThisMonth, clientsThisYear,
+    sessionsThisMonth, sessionsThisYear,
   } = data;
 
   const hasRevenue = totalRevenue > 0;
@@ -224,30 +324,44 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
       {/* ── KPI row ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Revenue"
-          value={fmt$(totalRevenue + totalTips)}
-          sub={totalTips > 0 ? `incl. ${fmt$(totalTips)} in tips` : `${completedCount} completed sessions`}
+        <ToggleKpiCard
+          label="Revenue"
+          monthly={fmt$(revenueThisMonth)}
+          year={fmt$(revenueThisYear)}
+          total={fmt$(totalRevenue + totalTips + (stripeRevenue ?? 0))}
+          monthSub="this calendar month"
+          yearSub={`${new Date().getFullYear()} calendar year`}
+          totalSub={hasStripe
+            ? `incl. ${fmt$(stripeRevenue ?? 0)} in Stripe deposits`
+            : totalTips > 0 ? `incl. ${fmt$(totalTips)} in tips` : `${completedCount} completed sessions`}
           icon={DollarSign}
           accent
         />
-        <KpiCard
-          label="Total Clients"
-          value={String(totalClients)}
-          sub={returningClients > 0 ? `${returningClients} returning` : `${totalBookings} total bookings`}
+        <ToggleKpiCard
+          label="Clients"
+          monthly={String(clientsThisMonth)}
+          year={String(clientsThisYear)}
+          total={String(totalClients)}
+          monthSub="unique this month"
+          yearSub={`unique in ${new Date().getFullYear()}`}
+          totalSub={returningClients > 0 ? `${returningClients} returning` : `${totalBookings} total bookings`}
           icon={Users}
         />
-        <KpiCard
-          label="Conversion Rate"
-          value={pct(conversionRate)}
-          sub="inquiries → completed"
-          icon={TrendingUp}
+        <ToggleKpiCard
+          label="Sessions"
+          monthly={String(sessionsThisMonth)}
+          year={String(sessionsThisYear)}
+          total={String(completedCount)}
+          monthSub="completed this month"
+          yearSub={`completed in ${new Date().getFullYear()}`}
+          totalSub="all completed sessions"
+          icon={Award}
         />
         <KpiCard
           label="Avg Tattoo Price"
           value={avgPrice > 0 ? fmt$(avgPrice) : "—"}
           sub={avgBudget > 0 ? `clients budget ${fmt$(avgBudget)}` : "based on completed sessions"}
-          icon={Award}
+          icon={TrendingUp}
         />
       </div>
 
@@ -488,6 +602,47 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           )}
         </Section>
       </div>
+
+      {/* ── Payment link metrics (only shown when Stripe is connected) ──── */}
+      {hasStripe && (
+        <>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">This Month</p>
+              <p className="text-2xl font-bold font-heading text-on-surface">
+                {stripeThisMonth !== null ? fmt$(stripeThisMonth) : "—"}
+              </p>
+              <p className="text-xs text-on-surface-variant/60">Stripe revenue</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Last Month</p>
+              <p className="text-2xl font-bold font-heading text-on-surface">
+                {stripeLastMonth !== null ? fmt$(stripeLastMonth) : "—"}
+              </p>
+              <p className="text-xs text-on-surface-variant/60">Stripe revenue</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Outstanding</p>
+              </div>
+              <p className="text-2xl font-bold font-heading text-amber-600">{stripeOutstanding}</p>
+              <p className="text-xs text-on-surface-variant/60">links sent, awaiting payment</p>
+            </div>
+            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Link Conversion</p>
+              <p className="text-2xl font-bold font-heading text-on-surface">
+                {stripeConversionRate !== null ? pct(stripeConversionRate) : "—"}
+              </p>
+              <p className="text-xs text-on-surface-variant/60">paid / links sent</p>
+            </div>
+          </div>
+
+          <Section title="Recent Payments">
+            <RecentPaymentsTable payments={stripeRecentPayments} />
+          </Section>
+        </>
+      )}
 
     </div>
   );

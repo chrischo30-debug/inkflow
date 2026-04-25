@@ -13,7 +13,6 @@ import {
   Link2,
   FileText,
   MessageSquare,
-  Mail,
   Settings,
   HelpCircle,
   ShieldAlert,
@@ -60,7 +59,6 @@ const NAV_GROUPS: NavGroup[] = [
         ],
       },
       { href: "/contact-form",    label: "Contact Form",  icon: MessageSquare },
-      { href: "/newsletter-form", label: "Newsletter",    icon: Mail },
     ],
   },
   {

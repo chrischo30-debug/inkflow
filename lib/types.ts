@@ -4,7 +4,10 @@ export type BookingState =
   | 'inquiry'
   | 'follow_up'
   | 'accepted'
-  | 'confirmed'
+  | 'sent_deposit'
+  | 'sent_calendar'
+  | 'booked'
+  | 'confirmed'   // legacy — treated as 'booked' in the pipeline
   | 'completed'
   | 'rejected'
   | 'cancelled';
@@ -45,8 +48,10 @@ export interface Booking {
   has_unread_reply?: boolean;
   deposit_paid?: boolean;
   stripe_payment_link_url?: string;
+  scheduling_link_id?: string;
   total_amount?: number;
   tip_amount?: number;
+  payment_source?: string;
   completion_notes?: string;
   completion_image_urls?: string[];
   created_at: string;

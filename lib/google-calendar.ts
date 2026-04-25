@@ -208,6 +208,53 @@ export async function createGoogleCalendarEvent({
   return event.id;
 }
 
+export async function getGoogleFreeBusy({
+  accessToken,
+  timeMin,
+  timeMax,
+  calendarIds: explicitIds,
+}: {
+  accessToken: string;
+  timeMin: string;
+  timeMax: string;
+  calendarIds?: string[];
+}): Promise<Array<{ start: string; end: string }>> {
+  let calendarIds: string[];
+
+  if (explicitIds && explicitIds.length > 0) {
+    calendarIds = explicitIds;
+  } else {
+    // Fetch all calendars so events on secondary/subscribed calendars are included
+    calendarIds = ["primary"];
+    const calRes = await fetch(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50",
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (calRes.ok) {
+      const calData = (await calRes.json()) as { items?: { id: string }[] };
+      const ids = (calData.items ?? []).map(c => c.id).filter(Boolean);
+      if (ids.length > 0) calendarIds = ids;
+    }
+  }
+
+  const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ timeMin, timeMax, items: calendarIds.map(id => ({ id })) }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google freeBusy failed: ${text}`);
+  }
+  const data = (await res.json()) as {
+    calendars?: Record<string, { busy?: Array<{ start: string; end: string }> }>;
+  };
+  return Object.values(data.calendars ?? {}).flatMap(cal => cal.busy ?? []);
+}
+
 export async function deleteGoogleCalendarEvent({
   accessToken,
   eventId,

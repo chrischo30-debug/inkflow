@@ -2,7 +2,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LinksView } from "@/components/links/LinksView";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { normalizePaymentLinks } from "@/lib/pipeline-settings";
+import { normalizePaymentLinks, normalizeSchedulingLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
 
 export default async function LinksPage() {
@@ -16,7 +16,15 @@ export default async function LinksPage() {
     .eq("id", user.id)
     .single();
 
-  const row = artistRow as { payment_links?: unknown; calendar_links?: CalendarLink[] } | null;
+  const row = artistRow as {
+    payment_links?: unknown;
+    calendar_links?: CalendarLink[];
+    scheduling_links?: unknown;
+    blocked_dates?: string[];
+    stripe_api_key?: string;
+    calendar_sync_enabled?: boolean;
+    google_refresh_token?: string;
+  } | null;
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -29,6 +37,11 @@ export default async function LinksPage() {
           <LinksView
             initialPaymentLinks={normalizePaymentLinks(row?.payment_links)}
             initialCalendarLinks={row?.calendar_links ?? []}
+            initialSchedulingLinks={normalizeSchedulingLinks(row?.scheduling_links)}
+            initialBlockedDates={Array.isArray(row?.blocked_dates) ? row.blocked_dates : []}
+            hasStripe={Boolean(row?.stripe_api_key)}
+            isCalendarConnected={Boolean(row?.calendar_sync_enabled && row?.google_refresh_token)}
+            artistId={user.id}
           />
         </div>
       </main>

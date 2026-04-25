@@ -105,6 +105,21 @@
 - **Setup guide**: removed Cal.com from Recommended Tools grid; updated scheduling links step description.
 - **Bug fix**: `.env` had `GOOGLE_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY` concatenated on one line (missing newline), causing `invalid_client` errors from Google OAuth.
 
+### Session — Pipeline V2, Scheduling Links & Availability (2026-04-25)
+- **7-stage pipeline**: Submission → Follow Up → Accepted → Sent Deposit → Sent Calendar → Booked → Completed. `confirmed` kept as legacy alias for `booked` in all views.
+- **SendDepositModal**: email compose + optional Stripe deposit link generator + scheduling link picker (sets `booking.scheduling_link_id` for Stripe automation).
+- **SendCalendarModal**: email compose + scheduling link picker (existing or create new inline).
+- **Stripe webhook automation**: `checkout.session.completed` on a `sent_deposit` booking auto-advances to `sent_calendar` and emails client the scheduling link URL (if `scheduling_link_id` set). Falls back to generic "we'll be in touch" email if no link.
+- **Payment source tracking**: completion modal now captures Cash / Venmo / PayPal / Zelle / Stripe / Other; stored in `bookings.payment_source`.
+- **Webhooks tab removed** from Settings (Stripe webhook is per-artist, configured via Integrations tab).
+- **Scheduling link edits**: pencil icon on Links page opens inline edit form for each link.
+- **Per-link calendar selection**: checkboxes in add/edit form choose which Google Calendars to check for conflicts (default: all).
+- **Full-day session toggle**: per scheduling link — once any booking is confirmed for that day, no more slots shown.
+- **Blocked Dates** (global): date picker section on Links page blocks specific dates across all scheduling links (holidays, days off). Stored in `artists.blocked_dates JSONB`. Fetched in a separate try/catch query in the slots route so a missing column can't break availability.
+- **Availability fix**: removed all-day event scan from slots route (was catching birthday/anniversary/transparent events and blocking every day). Google freeBusy API already handles opaque busy events correctly. Explicit holidays → use Blocked Dates.
+- **Pipeline help tooltip**: `HelpTooltip` upgraded to `createPortal` with fixed positioning (sidebar can't clip it); hover-to-open with 150ms grace; `maxHeight` clamped to viewport. Pipeline tooltip shows per-stage breakdown with dividers.
+- **New migrations**: `20260425_pipeline_v2.sql` (`bookings.scheduling_link_id`, `bookings.payment_source`), `20260425_scheduling_links.sql` (`artists.scheduling_links`), `20260425_blocked_dates.sql` (`artists.blocked_dates`).
+
 ### Session — Bug Fixes & Calendar UX (2026-04-23)
 - **Bookings page default tab**: changed from "Booked" (confirmed) to "All" — submissions were hidden on landing
 - **Dashboard / Bookings empty data bug**: Dashboard and Bookings queries silently returned null when DB columns didn't exist (`stripe_payment_link_url`, `deposit_paid`, `has_unread_reply`, `sent_emails`); Clients query didn't select those columns so it still worked. Fix: run migrations `20260422_sent_emails.sql`, `20260423_booking_notifications.sql`, `20260424_stripe_deposit.sql` in Supabase SQL editor.

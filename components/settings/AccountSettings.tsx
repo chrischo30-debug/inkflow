@@ -16,6 +16,7 @@ const accountSchema = z.object({
     .min(2, "Public URL is required")
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only"),
   studio_name: z.string().optional(),
+  gmail_address: z.string().email("Enter a valid email address"),
 });
 
 type AccountSettingsValues = z.infer<typeof accountSchema>;
@@ -28,6 +29,7 @@ export function AccountSettings({
     slug: string;
     studio_name: string;
     email: string;
+    gmail_address: string;
   };
 }) {
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
@@ -44,6 +46,7 @@ export function AccountSettings({
       name: initialValues.name,
       slug: initialValues.slug,
       studio_name: initialValues.studio_name,
+      gmail_address: initialValues.gmail_address,
     },
   });
 
@@ -176,6 +179,25 @@ export function AccountSettings({
                     className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="gmail_address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-sans tracking-wide text-on-surface-variant">Reply-to Email</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    type="email"
+                    className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
+                  />
+                </FormControl>
+                <p className="text-xs text-on-surface-variant">Where client replies land, and where system notifications are sent. Usually your personal email.</p>
                 <FormMessage />
               </FormItem>
             )}

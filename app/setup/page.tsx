@@ -296,7 +296,7 @@ export default async function SetupPage({
               <StepCard
                 done={hasStripe}
                 title="Connect Stripe for automated deposits"
-                description="Generate per-booking payment links without leaving the dashboard. We auto-mark bookings as paid when your client pays."
+                description="Generate per-booking payment links without leaving the dashboard. Requires a fully activated Stripe account with a bank account connected so payouts actually reach you."
                 note={hasStripe ? "Stripe API key saved" : undefined}
                 action="Add Stripe key"
                 actionHref="/settings?tab=integrations"
@@ -319,12 +319,6 @@ export default async function SetupPage({
                   name="Stripe"
                   description="Accept credit card payments online. Generate a payment link for each deposit request."
                   url="https://stripe.com"
-                />
-                <ToolCard
-                  name="Kit"
-                  description="Email marketing for creators. Grow your client list and send flash announcements."
-                  url="https://kit.com"
-                  tag="Free tier"
                 />
               </div>
             </section>

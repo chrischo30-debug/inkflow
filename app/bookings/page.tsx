@@ -5,6 +5,7 @@ import { BookingsTable } from "@/components/booking/BookingsTable";
 import { CopyFormLinkButton } from "@/components/booking/CopyFormLinkButton";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import type { Booking } from "@/lib/types";
+import { PaymentSSEListener } from "@/components/booking/PaymentSSEListener";
 
 export default async function BookingsPage({
   searchParams,
@@ -52,6 +53,7 @@ export default async function BookingsPage({
           <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} initialExpandId={initialExpandId} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} hasStripe={hasStripe} artistName={(artistData as Record<string,unknown>)?.name as string ?? (artistData as Record<string,unknown>)?.studio_name as string ?? ""} />
         </div>
       </main>
+      <PaymentSSEListener artistId={user.id} />
     </div>
   );
 }

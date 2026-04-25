@@ -9,14 +9,18 @@ import {
 } from "@/lib/google-calendar";
 
 const STATE_FLOW: Partial<Record<BookingState, BookingState>> = {
-  inquiry:   "accepted",
-  follow_up: "accepted",
-  accepted:  "confirmed",
-  confirmed: "completed",
+  inquiry:       "accepted",
+  follow_up:     "accepted",
+  accepted:      "sent_deposit",
+  sent_deposit:  "sent_calendar",
+  sent_calendar: "booked",
+  booked:        "completed",
+  confirmed:     "completed", // legacy
 };
 
 const VALID_STATES: BookingState[] = [
-  "inquiry", "follow_up", "accepted", "confirmed", "completed", "rejected", "cancelled",
+  "inquiry", "follow_up", "accepted", "sent_deposit", "sent_calendar",
+  "booked", "confirmed", "completed", "rejected", "cancelled",
 ];
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -105,9 +109,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!VALID_STATES.includes(targetState)) {
         return NextResponse.json({ error: "Invalid target_state" }, { status: 400 });
       }
+      const moveFields: Record<string, unknown> = { state: targetState, has_unread_reply: false };
+      if (body.scheduling_link_id) moveFields.scheduling_link_id = body.scheduling_link_id;
       const { error: updateErr } = await supabase
         .from("bookings")
-        .update({ state: targetState, has_unread_reply: false })
+        .update(moveFields)
         .eq("id", id)
         .eq("artist_id", user.id);
       if (updateErr) return NextResponse.json({ error: "Failed to update booking" }, { status: 500 });
@@ -154,7 +160,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       await supabase.from("bookings").update({ appointment_date: newDate }).eq("id", id);
 
-      if (booking.state === "confirmed") {
+      if (booking.state === "booked" || booking.state === "confirmed") {
         try {
           const { googleEventId } = await getExtraBookingFields();
           const { data: artist } = await supabase.from("artists").select("google_refresh_token, calendar_sync_enabled, name").eq("id", user.id).single();
@@ -197,7 +203,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!appointmentDate) return NextResponse.json({ error: "appointment_date required" }, { status: 400 });
       const durationMinutes: number = body.duration_minutes ?? 120;
 
-      const updateFields: Record<string, unknown> = { state: "confirmed", appointment_date: appointmentDate };
+      const updateFields: Record<string, unknown> = { state: "booked", appointment_date: appointmentDate };
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
 
       // Google Calendar event creation
@@ -226,7 +232,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       } catch (e) { console.error("Google Calendar sync on confirm failed:", e); }
 
-      return NextResponse.json({ success: true, newState: "confirmed", google_event_id: newEventId });
+      return NextResponse.json({ success: true, newState: "booked", google_event_id: newEventId });
     }
 
     // ── Complete ───────────────────────────────────────────────────────────────
@@ -234,6 +240,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const updateFields: Record<string, unknown> = { state: "completed", has_unread_reply: false };
       if (body.total_amount != null) updateFields.total_amount = body.total_amount;
       if (body.tip_amount != null) updateFields.tip_amount = body.tip_amount;
+      if (body.payment_source != null) updateFields.payment_source = body.payment_source;
       if (body.completion_notes != null) updateFields.completion_notes = body.completion_notes;
 
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
