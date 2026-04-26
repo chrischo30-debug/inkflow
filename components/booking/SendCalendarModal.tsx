@@ -6,6 +6,7 @@ import { CalendarDays, Plus, Eye, Pencil } from "lucide-react";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 import { BodyPreview } from "./EmailComposeModal";
 import { EmailVarChips } from "@/components/shared/EmailVarChips";
+import { FormatToolbar } from "@/components/shared/FormatToolbar";
 
 interface Props {
   bookingId: string;
@@ -286,10 +287,18 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
                     </div>
                   </div>
                   {mode === "edit" ? (
-                    <textarea ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
-                      onFocus={() => { lastFocused.current = "body"; }}
-                      rows={7} placeholder="Email body"
-                      className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors resize-none" />
+                    <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant focus-within:border-primary transition-colors">
+                      <FormatToolbar
+                        textareaRef={textareaRef}
+                        value={body}
+                        onChange={setBody}
+                        onFocus={() => { lastFocused.current = "body"; }}
+                      />
+                      <textarea ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
+                        onFocus={() => { lastFocused.current = "body"; }}
+                        rows={7} placeholder="Email body"
+                        className="w-full border-0 bg-transparent px-4 py-3 text-sm text-on-surface focus:outline-none resize-none" />
+                    </div>
                   ) : (
                     <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text min-h-[140px]" onClick={() => setMode("edit")}>
                       <BodyPreview text={body} />

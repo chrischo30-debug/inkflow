@@ -57,9 +57,9 @@ export const DEFAULT_FORM_FIELDS: FormFieldConfig[] = [
   { field_key: "name", label: "Full Name", enabled: true, required: true, sort_order: 0, placeholder: "Jane Doe", input_type: "text", options: [] },
   { field_key: "email", label: "Email Address", enabled: true, required: true, sort_order: 1, placeholder: "jane@example.com", input_type: "text", options: [] },
   { field_key: "phone", label: "Phone Number", enabled: true, required: true, sort_order: 2, placeholder: "(555) 123-4567", input_type: "text", options: [] },
-  { field_key: "description", label: "Tattoo Description", enabled: true, required: true, sort_order: 3, placeholder: "Describe placement, size, style, and details...", input_type: "textarea", options: [] },
-  { field_key: "size", label: "Size", enabled: true, required: false, sort_order: 4, placeholder: "Palm-sized, half sleeve, etc.", input_type: "text", options: [] },
-  { field_key: "placement", label: "Placement", enabled: true, required: false, sort_order: 5, placeholder: "Forearm, shoulder, back, etc.", input_type: "text", options: [] },
+  { field_key: "description", label: "Tattoo Description", enabled: true, required: true, sort_order: 3, placeholder: "Describe your idea — style, subject, any details that matter to you...", input_type: "textarea", options: [] },
+  { field_key: "size", label: "Size", enabled: true, required: false, sort_order: 4, placeholder: "", input_type: "select", options: ["Tiny (under 2\")", "Small (2–4\")", "Medium (4–6\")", "Large (6–10\")", "Extra large (10\"+)"] },
+  { field_key: "placement", label: "Placement", enabled: true, required: false, sort_order: 5, placeholder: "", input_type: "select", options: ["Arm", "Forearm", "Wrist", "Hand", "Shoulder", "Chest", "Back", "Ribs", "Hip", "Thigh", "Leg", "Calf", "Ankle", "Foot", "Neck", "Other"] },
   { field_key: "reference_images", label: "Reference Images", enabled: true, required: false, sort_order: 6, placeholder: "Paste links or upload images", input_type: "file_or_link", options: [] },
   { field_key: "budget", label: "Budget", enabled: true, required: false, sort_order: 7, placeholder: "300", input_type: "number", options: [] },
 ];

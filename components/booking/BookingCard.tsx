@@ -1,9 +1,10 @@
 "use client";
 
 import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
+import { formatPhone } from "@/lib/format";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, MoreHorizontal, CalendarDays, DollarSign, ExternalLink, Send } from "lucide-react";
+import { Check, Copy, MoreHorizontal, CalendarDays, ExternalLink, Send } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ALL_BOOKING_STATES } from "@/lib/pipeline-settings";
@@ -12,7 +13,7 @@ import type { SchedulingLink } from "@/lib/pipeline-settings";
 const STATE_LABELS: Record<BookingState, string> = {
   inquiry:       "Submission",
   follow_up:     "Follow Up",
-  accepted:      "Accepted",
+  accepted:      "Deposit Pending",
   sent_deposit:  "Sent Deposit",
   sent_calendar: "Sent Calendar",
   booked:        "Booked",
@@ -37,6 +38,10 @@ interface BookingCardProps {
   onDepositPaid?: (bookingId: string) => void;
   dragging?: boolean;
   onDragStart?: (bookingId: string) => void;
+  onDragEnd?: () => void;
+  dropIndicator?: 'above' | 'below' | null;
+  onDragOverCard?: (id: string, position: 'above' | 'below') => void;
+  onDropOnCard?: (targetId: string, position: 'above' | 'below') => void;
   hasStripe?: boolean;
   artistId?: string;
   schedulingLinks?: SchedulingLink[];
@@ -181,10 +186,10 @@ export function BookingCard({
   booking, fieldLabelMap = {}, nextActionLabel,
   onAdvanceState, onAcceptInquiry, onRejectInquiry, onFollowUpInquiry,
   onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid,
-  dragging, onDragStart, hasStripe = false, artistId, schedulingLinks = [],
+  dragging, onDragStart, onDragEnd, dropIndicator, onDragOverCard, onDropOnCard,
+  hasStripe = false, artistId, schedulingLinks = [],
 }: BookingCardProps) {
   const [showDetails, setShowDetails] = useState(false);
-  const [depositCopied, setDepositCopied] = useState(false);
   const [depositPaid, setDepositPaid] = useState(booking.deposit_paid ?? false);
   const [markingPaid, setMarkingPaid] = useState(false);
 
@@ -197,18 +202,26 @@ export function BookingCard({
   const isBooked = booking.state === "booked" || booking.state === "confirmed";
   const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) && (isBooked || booking.state === "completed");
 
-  const copyDepositLink = () => {
-    if (!booking.stripe_payment_link_url) return;
-    navigator.clipboard.writeText(booking.stripe_payment_link_url).then(() => {
-      setDepositCopied(true);
-      setTimeout(() => setDepositCopied(false), 2000);
-    });
-  };
-
   return (
+    <div className="relative">
+      {dropIndicator === 'above' && <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-primary rounded-full pointer-events-none z-10" />}
+      {dropIndicator === 'below' && <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 bg-primary rounded-full pointer-events-none z-10" />}
     <div
       draggable={!!onDragStart}
       onDragStart={e => { onDragStart?.(booking.id); e.dataTransfer.effectAllowed = "move"; }}
+      onDragEnd={() => onDragEnd?.()}
+      onDragOver={e => {
+        e.preventDefault();
+        if (!onDragOverCard) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDragOverCard(booking.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'below');
+      }}
+      onDrop={e => {
+        e.stopPropagation();
+        if (!onDropOnCard) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        onDropOnCard(booking.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'below');
+      }}
       data-coachmark="booking-card"
       className={`bg-surface-container-lowest border border-outline-variant/20 rounded-xl overflow-hidden group hover:shadow-sm hover:border-outline-variant/40 transition-all duration-200 ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} ${dragging ? "opacity-40 scale-[0.98]" : ""}`}
     >
@@ -227,7 +240,7 @@ export function BookingCard({
           </div>
           {booking.client_phone && (
             <div className="flex items-center gap-1">
-              <p className="text-sm text-on-surface-variant">{booking.client_phone}</p>
+              <p className="text-sm text-on-surface-variant">{formatPhone(booking.client_phone)}</p>
               <CopyButton value={booking.client_phone} />
             </div>
           )}
@@ -268,18 +281,10 @@ export function BookingCard({
         )}
 
         {/* Deposit paid badge on sent_deposit/sent_calendar */}
-        {(booking.state === "sent_deposit" || booking.state === "sent_calendar") && (
-          depositPaid || booking.deposit_paid ? (
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5 self-start">
-              <Check className="w-3 h-3" /> Deposit paid
-            </span>
-          ) : booking.stripe_payment_link_url ? (
-            <button type="button" onClick={copyDepositLink}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary border border-primary/30 rounded-full px-2 py-0.5 self-start hover:bg-primary/5 transition-colors">
-              {depositCopied ? <Check className="w-3 h-3 text-emerald-500" /> : <DollarSign className="w-3 h-3" />}
-              {depositCopied ? "Copied" : "Copy deposit link"}
-            </button>
-          ) : null
+        {(booking.state === "sent_deposit" || booking.state === "sent_calendar") && (depositPaid || booking.deposit_paid) && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5 self-start">
+            <Check className="w-3 h-3" /> Deposit paid
+          </span>
         )}
 
         <button type="button"
@@ -330,10 +335,15 @@ export function BookingCard({
               </div>
             )}
             {(typeof booking.total_amount === "number" || typeof booking.tip_amount === "number") && (
-              <div className="pt-1 border-t border-outline-variant/10 flex gap-4 flex-wrap">
-                {typeof booking.total_amount === "number" && <p className="text-on-surface"><span className="font-medium">Total:</span> ${booking.total_amount}</p>}
-                {typeof booking.tip_amount === "number" && <p className="text-on-surface"><span className="font-medium">Tip:</span> ${booking.tip_amount}</p>}
-                {booking.payment_source && <p className="text-on-surface"><span className="font-medium">Paid via:</span> {booking.payment_source}</p>}
+              <div className="pt-1 border-t border-outline-variant/10 space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  {typeof booking.total_amount === "number" && <p className="text-on-surface"><span className="font-medium">Total:</span> ${booking.total_amount}</p>}
+                  {typeof booking.tip_amount === "number" && <p className="text-on-surface"><span className="font-medium">Tip:</span> ${booking.tip_amount}</p>}
+                  {booking.payment_source && <p className="text-on-surface"><span className="font-medium">Paid via:</span> {booking.payment_source}</p>}
+                </div>
+                {typeof booking.total_amount === "number" && typeof booking.tip_amount === "number" && (
+                  <p className="text-on-surface font-semibold">Final: ${booking.total_amount + booking.tip_amount}</p>
+                )}
               </div>
             )}
             {(booking.sent_emails ?? []).length > 0 && (
@@ -349,6 +359,18 @@ export function BookingCard({
             )}
             <div className="pt-1 border-t border-outline-variant/10 text-xs text-on-surface-variant/60">
               Submitted {fmtShort(booking.created_at)}
+            </div>
+            <div className="pt-1 border-t border-outline-variant/10 flex gap-3">
+              <a href={`/bookings?expand=${encodeURIComponent(booking.id)}`}
+                className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" /> View booking
+              </a>
+              {booking.client_email && (
+                <a href={`/past-clients?client=${encodeURIComponent(booking.client_email)}`}
+                  className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                  <ExternalLink className="w-3 h-3" /> View client
+                </a>
+              )}
             </div>
           </div>
         )}
@@ -386,8 +408,9 @@ export function BookingCard({
                 <Check className="w-3 h-3" /> Deposit paid
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-xs text-on-surface-variant/60">
-                <Send className="w-3 h-3" /> Awaiting payment…
+              <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1">
+                <Send className="w-3 h-3 shrink-0" />
+                Stripe will auto-advance when paid
               </span>
             )
           )}
@@ -436,6 +459,7 @@ export function BookingCard({
           />
         </div>
       </div>
+    </div>
     </div>
   );
 }

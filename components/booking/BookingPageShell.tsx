@@ -28,6 +28,7 @@ interface Props {
   headerAlign?: "left" | "center";
   confirmationMessage?: string;
   successRedirectUrl?: string;
+  prefill?: { name?: string; email?: string; phone?: string };
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -128,7 +129,7 @@ export function BookingPageShell({
   layout, font, bgColor, bgImageUrl, textColor, buttonColor, labelColor,
   logoUrl, websiteUrl, socialLinks, showSocialOnBooking,
   fontScale, headerSize, headerAlign = "left",
-  confirmationMessage, successRedirectUrl
+  confirmationMessage, successRedirectUrl, prefill
 }: Props) {
   const bgStyle = bgImageUrl
     ? { backgroundImage: `url(${bgImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -270,6 +271,7 @@ export function BookingPageShell({
           buttonText={buttonText}
           confirmationMessage={confirmationMessage}
           successRedirectUrl={successRedirectUrl}
+          prefill={prefill}
         />
       </div>
     </>

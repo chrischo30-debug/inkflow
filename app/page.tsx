@@ -122,7 +122,7 @@ export default async function DashboardPage() {
                 <ActionCard
                   label="Awaiting confirmation"
                   count={awaitingConfirmation.length}
-                  description="Accepted — needs to schedule"
+                  description="Deposit sent — needs to schedule"
                   urgent={awaitingConfirmation.length > 0}
                   href="/bookings?state=accepted"
                   cta="Confirm"
@@ -150,10 +150,9 @@ export default async function DashboardPage() {
                   {[
                     { stage: "Submission", desc: "New inquiry just came in. Review and choose Accept, Reject, or Follow Up." },
                     { stage: "Follow Up", desc: "You sent a question to the client. Waiting on their reply before deciding." },
-                    { stage: "Accepted", desc: "Client is in. Click Send Deposit to email them a payment link." },
                     { stage: "Sent Deposit", desc: "Deposit email is out. With Stripe, moves to Sent Calendar automatically when they pay." },
                     { stage: "Sent Calendar", desc: "Deposit received. Client gets a link to pick their appointment time." },
-                    { stage: "Booked", desc: "Appointment is locked in. Prepare for the session." },
+                    { stage: "Booked", desc: "Appointment is locked in automatically when the client picks a time slot." },
                     { stage: "Completed", desc: "Session done. Record final payment and notes." },
                   ].map(({ stage, desc }) => (
                     <div key={stage} className="flex items-start gap-3 py-2.5">

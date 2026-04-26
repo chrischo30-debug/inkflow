@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { X, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Ban } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Ban, Copy, Check, ChevronDown, Send, ExternalLink } from "lucide-react";
 
 const BOOKING_STATES = [
   { value: "inquiry",       label: "Submission" },
@@ -301,18 +301,91 @@ const BLANK = {
 
 type PaymentLinkOption = { label: string; url: string };
 
+function SendFormOption({
+  artistSlug, clientName, clientEmail, clientPhone,
+  linkCopied, setLinkCopied, showManual, setShowManual,
+}: {
+  artistSlug: string; clientName: string; clientEmail: string; clientPhone: string;
+  linkCopied: boolean; setLinkCopied: (v: boolean) => void;
+  showManual: boolean; setShowManual: (v: boolean) => void;
+}) {
+  const formUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/${artistSlug}/book?name=${encodeURIComponent(clientName)}&email=${encodeURIComponent(clientEmail)}${clientPhone ? `&phone=${encodeURIComponent(clientPhone)}` : ""}`
+    : "";
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(formUrl).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
+  const firstName = clientName.split(" ")[0];
+  const mailtoHref = `mailto:${clientEmail}?subject=${encodeURIComponent(`Fill out my booking form`)}&body=${encodeURIComponent(`Hi ${firstName},\n\nHere's a link to my booking form — your info is already filled in:\n\n${formUrl}\n\nThanks!`)}`;
+
+  return (
+    <div className="px-6 pt-5 pb-4 space-y-4 border-b border-outline-variant/10">
+      <div className="rounded-xl bg-primary/5 border border-primary/15 p-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-on-surface">Send {firstName} the form</p>
+          <p className="text-xs text-on-surface-variant mt-0.5">Their name, email, and phone are pre-filled — they just fill in the tattoo details and submit.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            readOnly
+            value={formUrl}
+            className="flex-1 min-w-0 px-3 py-2 text-xs text-on-surface-variant bg-surface border border-outline-variant/30 rounded-lg truncate focus:outline-none"
+          />
+          <button type="button" onClick={copyLink}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">
+            {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {linkCopied ? "Copied" : "Copy link"}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={mailtoHref}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+            <Send className="w-3 h-3" /> Email {firstName}
+          </a>
+          <a href={formUrl} target="_blank" rel="noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+            <ExternalLink className="w-3 h-3" /> Preview form
+          </a>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowManual(!showManual)}
+        className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      >
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showManual ? "rotate-180" : ""}`} />
+        {showManual ? "Hide manual entry" : "Or add it manually instead"}
+      </button>
+    </div>
+  );
+}
+
 // Controlled modal — used by CalendarView (click-to-create) and AddBookingModal
 export function BookingFormModal({
   open,
   onClose,
   initialDateTime,
   initialForm,
+  artistSlug,
 }: {
   open: boolean;
   onClose: () => void;
   initialDateTime?: string;
   initialForm?: Partial<typeof BLANK>;
+  artistSlug?: string;
 }) {
+  // "send" = send them a pre-filled form link, "manual" = fill it in yourself
+  const hasClientContext = Boolean(artistSlug && initialForm?.client_email);
+  const [mode, setMode] = useState<"send" | "manual">(hasClientContext ? "send" : "manual");
+  const [showManual, setShowManual] = useState(!hasClientContext);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
   const [formKey, setFormKey] = useState(0);
@@ -333,6 +406,10 @@ export function BookingFormModal({
 
   useEffect(() => {
     if (open) {
+      const hasCtx = Boolean(artistSlug && initialForm?.client_email);
+      setMode(hasCtx ? "send" : "manual");
+      setShowManual(!hasCtx);
+      setLinkCopied(false);
       setStep(1);
       setForm({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
       setFormKey(k => k + 1);
@@ -434,43 +511,71 @@ export function BookingFormModal({
         {step === 1 ? (
           <form onSubmit={handleSubmit}>
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
-              <h2 className="text-base font-semibold text-on-surface">Add booking</h2>
+              <h2 className="text-base font-semibold text-on-surface">
+                {hasClientContext ? `New booking for ${initialForm?.client_name?.split(" ")[0] ?? "client"}` : "Add booking"}
+              </h2>
               <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
-              <BookingFormFields key={formKey} form={form} set={set} />
 
-              {/* Send payment link toggle */}
-              <div className="pt-1 border-t border-outline-variant/10">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={sendPaymentLink}
-                    onClick={() => setSendPaymentLink(v => !v)}
-                    className={`relative w-10 h-6 rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${sendPaymentLink ? "bg-primary" : "bg-outline-variant/50"}`}
-                  >
-                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sendPaymentLink ? "translate-x-4" : "translate-x-0"}`} />
-                  </button>
-                  <div>
-                    <p className="text-sm font-medium text-on-surface">Send payment link</p>
-                    <p className="text-xs text-on-surface-variant">After saving, compose a deposit request email</p>
+            {hasClientContext && (
+              <SendFormOption
+                artistSlug={artistSlug!}
+                clientName={initialForm?.client_name ?? ""}
+                clientEmail={initialForm?.client_email ?? ""}
+                clientPhone={initialForm?.client_phone ?? ""}
+                linkCopied={linkCopied}
+                setLinkCopied={setLinkCopied}
+                showManual={showManual}
+                setShowManual={setShowManual}
+              />
+            )}
+
+            {showManual && (
+              <>
+                <div className="px-6 py-5 space-y-4">
+                  <BookingFormFields key={formKey} form={form} set={set} />
+
+                  {/* Send payment link toggle */}
+                  <div className="pt-1 border-t border-outline-variant/10">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={sendPaymentLink}
+                        onClick={() => setSendPaymentLink(v => !v)}
+                        className={`relative w-10 h-6 rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${sendPaymentLink ? "bg-primary" : "bg-outline-variant/50"}`}
+                      >
+                        <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sendPaymentLink ? "translate-x-4" : "translate-x-0"}`} />
+                      </button>
+                      <div>
+                        <p className="text-sm font-medium text-on-surface">Send payment link</p>
+                        <p className="text-xs text-on-surface-variant">After saving, compose a deposit request email</p>
+                      </div>
+                    </label>
                   </div>
-                </label>
-              </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
-            <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
-              <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
-                Cancel
-              </button>
-              <button type="submit" disabled={saving} className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40">
-                {saving ? "Saving…" : sendPaymentLink ? "Save & compose email →" : "Add booking"}
-              </button>
-            </div>
+                  {error && <p className="text-sm text-destructive">{error}</p>}
+                </div>
+                <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
+                  <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={saving} className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40">
+                    {saving ? "Saving…" : sendPaymentLink ? "Save & compose email →" : "Add booking"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {hasClientContext && !showManual && (
+              <div className="sticky bottom-0 flex justify-end px-6 py-4 border-t border-outline-variant/20 bg-surface">
+                <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                  Done
+                </button>
+              </div>
+            )}
           </form>
         ) : (
           <div>

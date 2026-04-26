@@ -10,10 +10,16 @@ export const revalidate = 0;
 
 export default async function BookPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ artistId: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { artistId: artistSlug } = await params;
+  const sp = await searchParams;
+  const prefill = (sp.name || sp.email || sp.phone)
+    ? { name: sp.name, email: sp.email, phone: sp.phone }
+    : undefined;
   if (!artistSlug) notFound();
 
   const admin = createAdminClient();
@@ -85,7 +91,7 @@ export default async function BookPage({
       formFields={normalizeFormFields(rawFields ?? [])}
       customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
       formHeader={artist.form_header || `Book with ${artistName}`}
-      formSubtext={artist.form_subtext || `Fill out the form below to request an appointment. ${artistName} will review your idea and get back to you.`}
+      formSubtext={artist.form_subtext || `Fill out the form below to request an appointment.<br />I'll review your idea and get back to you.`}
       buttonText={artist.form_button_text || "Submit Inquiry"}
       layout={(artist.booking_layout as "centered" | "banner" | "minimal" | "full") || "centered"}
       font={(artist.booking_font as string) || "Manrope"}
@@ -103,6 +109,7 @@ export default async function BookPage({
       showSocialOnBooking={artist.show_social_on_booking ?? false}
       confirmationMessage={artist.form_confirmation_message || undefined}
       successRedirectUrl={artist.form_success_redirect_url || undefined}
+      prefill={prefill}
     />
   );
 }

@@ -4,9 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { BookingState, EmailTemplate } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Check, ChevronDown, Plus, Trash2, Link2, Calendar, Eye, Pencil } from "lucide-react";
-import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
+import { Check, ChevronDown, Plus, Trash2, Eye, Pencil } from "lucide-react";
+import type { PaymentLink, CalendarLink, SchedulingLink } from "@/lib/pipeline-settings";
+import { templateRequiresEdit } from "@/lib/email";
 import { CoachmarkSequence, type Tip } from "@/components/coachmarks/Coachmark";
+import { EmailVarChips } from "@/components/shared/EmailVarChips";
+import { FormatToolbar } from "@/components/shared/FormatToolbar";
 
 // ── Body preview — resolves variables with sample data ────────────────────────
 
@@ -15,33 +18,147 @@ function resolvePreview(
   artistName: string,
   paymentLinks: PaymentLink[],
   calendarLinks: CalendarLink[],
+  studioAddress: string,
+  schedulingLinks: SchedulingLink[] = [],
+  artistId = "",
 ): string {
   const findByLabel = (links: { label: string; url: string }[], label: string) =>
     links.find(l => l.label.trim().toLowerCase() === label.trim().toLowerCase())?.url ?? null;
 
-  return text
-    .replace(/\{paymentLink:([^}]+)\}/g, (_, label: string) =>
-      findByLabel(paymentLinks, label) ?? paymentLinks[0]?.url ?? "https://pay.example.com")
-    .replace(/\{calendarLink:([^}]+)\}/g, (_, label: string) =>
-      findByLabel(calendarLinks, label) ?? calendarLinks[0]?.url ?? "https://calendly.com/example")
+  // Mirror lib/email.ts: lines whose only meaningful token would render empty
+  // get dropped from the preview so artists see what clients will actually see.
+  const dropEmpty = (s: string): string => {
+    const empties = new Set<string>();
+    if (!studioAddress) empties.add("studioAddress");
+    if (empties.size === 0) return s;
+    return s.split("\n").filter(line => {
+      for (const k of empties) if (line.includes(`{${k}}`)) return false;
+      return true;
+    }).join("\n");
+  };
+
+  return dropEmpty(text)
+    .replace(/\{paymentLink:([^}]+)\}/g, (_, label: string) => {
+      const url = findByLabel(paymentLinks, label) ?? paymentLinks[0]?.url ?? "https://pay.example.com";
+      return `[${label.trim()}](${url})`;
+    })
+    .replace(/\{calendarLink:([^}]+)\}/g, (_, label: string) => {
+      const url = findByLabel(calendarLinks, label) ?? calendarLinks[0]?.url ?? "https://calendly.com/example";
+      return `[${label.trim()}](${url})`;
+    })
     .replace(/\{clientFirstName\}/g, "Jane")
     .replace(/\{clientName\}/g, "Jane Doe")
     .replace(/\{artistName\}/g, artistName || "Your Studio")
-    .replace(/\{paymentLink\}/g, paymentLinks[0]?.url ?? "https://pay.example.com")
-    .replace(/\{calendarLink\}/g, calendarLinks[0]?.url ?? "https://calendly.com/example")
-    .replace(/\{appointmentDate\}/g, "May 3, 2026");
+    .replace(/\{paymentLink\}/g, () => {
+      const url = paymentLinks[0]?.url ?? "https://pay.example.com";
+      const label = paymentLinks[0]?.label ?? "Payment link";
+      return `[${label}](${url})`;
+    })
+    .replace(/\{calendarLink\}/g, () => {
+      const url = calendarLinks[0]?.url ?? "https://calendly.com/example";
+      const label = calendarLinks[0]?.label ?? "Scheduling link";
+      return `[${label}](${url})`;
+    })
+    .replace(/\{appointmentDate\}/g, "May 3, 2026")
+    .replace(/\{schedulingLink\}/g, () => {
+      const label = schedulingLinks[0]?.label ?? "Scheduling link";
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const id = schedulingLinks[0]?.id ?? "";
+      const url = artistId && id ? `${origin}/schedule/${artistId}/${id}` : `${origin}/schedule`;
+      return `[${label}](${url})`;
+    })
+    .replace(/\{studioAddress\}/g, studioAddress || "123 Main St, Brooklyn NY")
+    .replace(/\{studioMapsUrl\}/g, () => {
+      const addr = studioAddress || "123 Main St, Brooklyn NY";
+      return `[Get directions](https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)})`;
+    });
 }
 
-function BodyPreview({ text, artistName, paymentLinks, calendarLinks }: {
+// Combined inline regex for the resolved preview: bold, italic, md-link
+// groups: 1=bold 2=italic 3=mdLabel 4=mdUrl
+const SETTINGS_INLINE_RE = new RegExp(
+  [/\*\*(.+?)\*\*/, /\*(.+?)\*/, /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/].map(r => r.source).join('|'),
+  'g',
+);
+
+type SettingsToken =
+  | { t: 'text'; v: string }
+  | { t: 'bold'; v: string }
+  | { t: 'italic'; v: string }
+  | { t: 'link'; label: string; url: string };
+
+function tokenizeSettingsInline(text: string): SettingsToken[] {
+  const re = new RegExp(SETTINGS_INLINE_RE.source, 'g');
+  const tokens: SettingsToken[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) tokens.push({ t: 'text', v: text.slice(last, m.index) });
+    if (m[0].startsWith('**'))     tokens.push({ t: 'bold', v: m[1] });
+    else if (m[0].startsWith('*')) tokens.push({ t: 'italic', v: m[2] });
+    else                           tokens.push({ t: 'link', label: m[3], url: m[4] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) tokens.push({ t: 'text', v: text.slice(last) });
+  return tokens;
+}
+
+function renderSettingsTokens(tokens: SettingsToken[]): React.ReactNode[] {
+  return tokens.map((tk, i) => {
+    if (tk.t === 'text')   return <span key={i}>{tk.v}</span>;
+    if (tk.t === 'bold')   return <strong key={i} className="font-semibold">{tk.v}</strong>;
+    if (tk.t === 'italic') return <em key={i}>{tk.v}</em>;
+    return (
+      <a key={i} href={tk.url} target="_blank" rel="noreferrer"
+        className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">
+        {tk.label}
+      </a>
+    );
+  });
+}
+
+function BodyPreview({ text, artistName, paymentLinks, calendarLinks, studioAddress, schedulingLinks = [], artistId = "" }: {
   text: string;
   artistName: string;
   paymentLinks: PaymentLink[];
   calendarLinks: CalendarLink[];
+  studioAddress: string;
+  schedulingLinks?: SchedulingLink[];
+  artistId?: string;
 }) {
-  const resolved = resolvePreview(text, artistName, paymentLinks, calendarLinks);
+  const resolved = resolvePreview(text, artistName, paymentLinks, calendarLinks, studioAddress, schedulingLinks, artistId);
+
+  // Process line-by-line: empty lines → explicit <br>, bullets → <ul>, text → <div>
+  const lines = resolved.split('\n');
+  type Segment = { type: 'line'; content: string } | { type: 'bullets'; items: string[] };
+  const segments: Segment[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (/^- /.test(lines[i])) {
+      const items: string[] = [];
+      while (i < lines.length && /^- /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
+      segments.push({ type: 'bullets', items });
+    } else {
+      segments.push({ type: 'line', content: lines[i] });
+      i++;
+    }
+  }
+
   return (
-    <div className="whitespace-pre-wrap text-sm text-on-surface leading-relaxed min-h-[140px]">
-      {resolved}
+    <div className="text-sm text-on-surface leading-relaxed min-h-[140px]">
+      {segments.map((seg, si) => {
+        if (seg.type === 'bullets') {
+          return (
+            <ul key={si} className="list-disc list-inside my-0 space-y-0.5">
+              {seg.items.map((item, li) => (
+                <li key={li}>{renderSettingsTokens(tokenizeSettingsInline(item))}</li>
+              ))}
+            </ul>
+          );
+        }
+        if (seg.content === '') return <br key={si} />;
+        return <div key={si}>{renderSettingsTokens(tokenizeSettingsInline(seg.content))}</div>;
+      })}
     </div>
   );
 }
@@ -49,139 +166,35 @@ function BodyPreview({ text, artistName, paymentLinks, calendarLinks }: {
 const STATE_LABELS: Record<Exclude<BookingState, "cancelled">, string> = {
   inquiry:       "Submission Received",
   follow_up:     "Follow Up",
-  accepted:      "Accepted",
+  accepted:      "Deposit Request",
   sent_deposit:  "Sent Deposit",
-  sent_calendar: "Sent Calendar",
-  booked:        "Booked",
-  confirmed:     "Booked (legacy)",
+  sent_calendar: "Calendar Link (after deposit)",
+  booked:        "Appointment Booked",
+  confirmed:     "Appointment Booked",
   completed:     "Appointment Completed",
   rejected:      "Submission Rejected",
 };
 
-// Static (non-link) variables — link variables are rendered as dropdowns
-const SIMPLE_VARIABLES = [
-  { name: "{clientFirstName}", description: "Client's first name",         example: "Jane" },
-  { name: "{artistName}",      description: "Your artist/studio name",     example: "Ink by Alex" },
-  { name: "{appointmentDate}", description: "Confirmed appointment date",  example: "May 3, 2026" },
-];
-
 type SaveStatus = "idle" | "saving" | "success" | "error";
-
-// ── Variable chips ────────────────────────────────────────────────────────────
-
-function LinkDropdown({
-  icon: Icon,
-  label,
-  variableBase,
-  links,
-  onInsert,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  variableBase: "paymentLink" | "calendarLink";
-  links: { label: string; url: string }[];
-  onInsert: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const pick = (variable: string) => {
-    onInsert(variable);
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="text-xs px-2.5 py-1.5 rounded-md font-mono bg-primary/8 text-primary hover:bg-primary/15 transition-colors inline-flex items-center gap-1.5"
-      >
-        <Icon className="w-3 h-3" /> {label}
-        <ChevronDown className="w-3 h-3" />
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 min-w-[260px] max-w-[320px] rounded-lg border border-outline-variant/30 bg-surface shadow-lg py-1.5">
-          {links.length === 0 && (
-            <p className="px-3 py-2 text-xs text-on-surface-variant/70">
-              No links saved yet.{" "}
-              <a href="/payment-links" className="text-primary hover:underline">Add some →</a>
-            </p>
-          )}
-          {links.length > 0 && links.map((link) => (
-            <button
-              key={link.label}
-              type="button"
-              onClick={() => pick(`{${variableBase}:${link.label}}`)}
-              className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors"
-            >
-              <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
-              <p className="text-[10px] text-on-surface-variant/70 truncate mt-0.5">{link.url}</p>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VarChips({
-  onInsert,
-  paymentLinks,
-  calendarLinks,
-}: {
-  onInsert: (v: string) => void;
-  paymentLinks: PaymentLink[];
-  calendarLinks: CalendarLink[];
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5 items-center">
-      {SIMPLE_VARIABLES.map((v) => (
-        <button
-          key={v.name}
-          type="button"
-          onClick={() => onInsert(v.name)}
-          title={v.description}
-          className="text-xs px-2 py-1 rounded-md font-mono bg-primary/8 text-primary hover:bg-primary/15 transition-colors"
-        >
-          {v.name}
-        </button>
-      ))}
-      <LinkDropdown
-        icon={Link2}
-        label="Payment link"
-        variableBase="paymentLink"
-        links={paymentLinks}
-        onInsert={onInsert}
-      />
-      <LinkDropdown
-        icon={Calendar}
-        label="Scheduling link"
-        variableBase="calendarLink"
-        links={calendarLinks}
-        onInsert={onInsert}
-      />
-    </div>
-  );
-}
 
 // ── Template editor (state-linked) ────────────────────────────────────────────
 
-function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artistName }: { template: EmailTemplate; onSaved: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string }) {
+function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, schedulingLinks = [], artistName, studioAddress, artistId = "" }: { template: EmailTemplate; onSaved: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; schedulingLinks?: SchedulingLink[]; artistName: string; studioAddress: string; artistId?: string }) {
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
   const [autoSend, setAutoSend] = useState(template.auto_send);
+  const [enabled, setEnabled] = useState(template.enabled !== false);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const requiresEdit = templateRequiresEdit(template.state, body);
+
+  type SendMode = "auto" | "manual" | "off";
+  const sendMode: SendMode = !enabled ? "off" : autoSend && !requiresEdit ? "auto" : "manual";
+  const setSendMode = (next: SendMode) => {
+    if (next === "off") { setEnabled(false); }
+    else if (next === "manual") { setEnabled(true); setAutoSend(false); }
+    else { setEnabled(true); setAutoSend(true); }
+  };
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -191,6 +204,7 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
     setSubject(template.subject);
     setBody(template.body);
     setAutoSend(template.auto_send);
+    setEnabled(template.enabled !== false);
     setMode("edit");
   }, [template]);
 
@@ -226,7 +240,7 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
     const res = await fetch("/api/artist/email-templates", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: template.state, subject, body, auto_send: autoSend }),
+      body: JSON.stringify({ state: template.state, subject, body, auto_send: requiresEdit ? false : autoSend, enabled }),
     });
     if (res.ok) { setStatus("success"); onSaved(); setTimeout(() => setStatus("idle"), 3000); }
     else { setStatus("error"); setTimeout(() => setStatus("idle"), 4000); }
@@ -259,27 +273,35 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
           </div>
         </div>
         {mode === "edit" ? (
-          <textarea
-            ref={bodyRef}
-            value={body}
-            onChange={e => setBody(e.target.value)}
-            onFocus={() => { lastFocused.current = "body"; }}
-            rows={1}
-            className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors overflow-hidden min-h-[200px]"
-          />
+          <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant focus-within:border-primary transition-colors">
+            <FormatToolbar
+              textareaRef={bodyRef}
+              value={body}
+              onChange={setBody}
+              onFocus={() => { lastFocused.current = "body"; }}
+            />
+            <textarea
+              ref={bodyRef}
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              onFocus={() => { lastFocused.current = "body"; }}
+              rows={1}
+              className="w-full border-0 bg-transparent px-4 py-3 text-sm text-on-surface resize-none focus:outline-none overflow-hidden min-h-[200px]"
+            />
+          </div>
         ) : (
           <div
             className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text"
             onClick={() => setMode("edit")}
             title="Click to edit"
           >
-            <BodyPreview text={body} artistName={artistName} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+            <BodyPreview text={body} artistName={artistName} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} studioAddress={studioAddress} artistId={artistId} />
           </div>
         )}
       </div>
       <div className="space-y-2" data-coachmark="email-variables">
         <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
-        <VarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+        <EmailVarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} />
         <CoachmarkSequence tips={[{
           id: "emails-tab.variables",
           anchorSelector: '[data-coachmark="email-variables"]',
@@ -291,15 +313,39 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
           </>,
         }]} />
       </div>
-      <div className="flex items-center justify-between">
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <button type="button" role="switch" aria-checked={autoSend} onClick={() => setAutoSend(v => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoSend ? "bg-primary" : "bg-outline-variant"}`}>
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoSend ? "translate-x-6" : "translate-x-1"}`} />
-          </button>
-          <span className="text-sm text-on-surface">Auto-send on state change</span>
-        </label>
-        <div className="flex items-center gap-3">
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-on-surface-variant tracking-wide">When this stage is reached</p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { mode: "auto",   label: "Auto-send",   desc: "Goes out without asking",            disabled: requiresEdit },
+            { mode: "manual", label: "Manual edit", desc: "Pop the editor so I can review",     disabled: false },
+            { mode: "off",    label: "Off",         desc: "No email at all on this transition", disabled: false },
+          ] as { mode: SendMode; label: string; desc: string; disabled: boolean }[]).map(opt => {
+            const isActive = sendMode === opt.mode;
+            return (
+              <button
+                key={opt.mode}
+                type="button"
+                disabled={opt.disabled}
+                onClick={() => setSendMode(opt.mode)}
+                className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                  isActive
+                    ? "border-primary bg-primary/8"
+                    : "border-outline-variant/30 hover:border-outline-variant/60 hover:bg-surface-container-low"
+                } ${opt.disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+              >
+                <p className={`text-sm font-medium ${isActive ? "text-primary" : "text-on-surface"}`}>{opt.label}</p>
+                <p className="text-[11px] text-on-surface-variant mt-0.5 leading-tight">{opt.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+        {requiresEdit && (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Replace the highlighted instructions before this can auto-send.
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-3 pt-1">
           {status === "success" && <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600"><Check className="w-3.5 h-3.5" /> Saved</span>}
           {status === "error" && <span className="text-xs font-medium text-destructive">Failed to save</span>}
           <Button type="button" onClick={save} disabled={status === "saving"}
@@ -314,7 +360,7 @@ function TemplateEditor({ template, onSaved, paymentLinks, calendarLinks, artist
 
 // ── Custom template editor ────────────────────────────────────────────────────
 
-function CustomTemplateEditor({ template, onSaved, onDelete, paymentLinks, calendarLinks }: { template: EmailTemplate; onSaved: () => void; onDelete: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[] }) {
+function CustomTemplateEditor({ template, onSaved, onDelete, paymentLinks, calendarLinks, schedulingLinks = [] }: { template: EmailTemplate; onSaved: () => void; onDelete: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; schedulingLinks?: SchedulingLink[] }) {
   const [name, setName] = useState(template.name ?? "");
   const [subject, setSubject] = useState(template.subject);
   const [body, setBody] = useState(template.body);
@@ -374,18 +420,26 @@ function CustomTemplateEditor({ template, onSaved, onDelete, paymentLinks, calen
         placeholder="Subject"
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
       />
-      <textarea
-        ref={bodyRef}
-        value={body}
-        onChange={e => setBody(e.target.value)}
-        onFocus={() => { lastFocused.current = "body"; }}
-        rows={5}
-        placeholder="Message body"
-        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
-      />
+      <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant focus-within:border-primary transition-colors">
+        <FormatToolbar
+          textareaRef={bodyRef}
+          value={body}
+          onChange={setBody}
+          onFocus={() => { lastFocused.current = "body"; }}
+        />
+        <textarea
+          ref={bodyRef}
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          onFocus={() => { lastFocused.current = "body"; }}
+          rows={5}
+          placeholder="Message body"
+          className="w-full border-0 bg-transparent px-4 py-3 text-sm text-on-surface resize-none focus:outline-none"
+        />
+      </div>
       <div className="space-y-1.5">
         <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
-        <VarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+        <EmailVarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} />
       </div>
       <div className="flex items-center justify-between">
         <button type="button" onClick={del} className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-destructive transition-colors">
@@ -406,7 +460,7 @@ function CustomTemplateEditor({ template, onSaved, onDelete, paymentLinks, calen
 
 // ── New template form ─────────────────────────────────────────────────────────
 
-function NewTemplateForm({ onCreated, paymentLinks, calendarLinks }: { onCreated: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[] }) {
+function NewTemplateForm({ onCreated, paymentLinks, calendarLinks, schedulingLinks = [] }: { onCreated: () => void; paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; schedulingLinks?: SchedulingLink[] }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -463,18 +517,26 @@ function NewTemplateForm({ onCreated, paymentLinks, calendarLinks }: { onCreated
         placeholder="Subject"
         className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-4 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
       />
-      <textarea
-        ref={bodyRef}
-        value={body}
-        onChange={e => setBody(e.target.value)}
-        onFocus={() => { lastFocused.current = "body"; }}
-        rows={4}
-        placeholder="Message body"
-        className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface resize-none focus:outline-none focus:border-primary transition-colors"
-      />
+      <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant focus-within:border-primary transition-colors">
+        <FormatToolbar
+          textareaRef={bodyRef}
+          value={body}
+          onChange={setBody}
+          onFocus={() => { lastFocused.current = "body"; }}
+        />
+        <textarea
+          ref={bodyRef}
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          onFocus={() => { lastFocused.current = "body"; }}
+          rows={4}
+          placeholder="Message body"
+          className="w-full border-0 bg-transparent px-4 py-3 text-sm text-on-surface resize-none focus:outline-none"
+        />
+      </div>
       <div className="space-y-1.5">
         <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
-        <VarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+        <EmailVarChips onInsert={insertVar} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} />
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button type="button" onClick={create} disabled={saving}
@@ -487,14 +549,12 @@ function NewTemplateForm({ onCreated, paymentLinks, calendarLinks }: { onCreated
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName, initialAutoEmailsEnabled }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; artistName: string; initialAutoEmailsEnabled: boolean }) {
+export function EmailTemplatesSettings({ paymentLinks, calendarLinks, schedulingLinks = [], artistName, studioAddress, artistId = "" }: { paymentLinks: PaymentLink[]; calendarLinks: CalendarLink[]; schedulingLinks?: SchedulingLink[]; artistName: string; studioAddress: string; artistId?: string }) {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [customTemplates, setCustomTemplates] = useState<EmailTemplate[]>([]);
   const [openState, setOpenState] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [autoEmailsEnabled, setAutoEmailsEnabled] = useState(initialAutoEmailsEnabled);
-  const [autoEmailsSaving, setAutoEmailsSaving] = useState(false);
 
   const load = async () => {
     const res = await fetch("/api/artist/email-templates");
@@ -506,38 +566,11 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName
     setLoading(false);
   };
 
-  const toggleAutoEmails = async () => {
-    const next = !autoEmailsEnabled;
-    setAutoEmailsEnabled(next);
-    setAutoEmailsSaving(true);
-    try {
-      const res = await fetch("/api/artist/auto-emails", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_emails_enabled: next }),
-      });
-      if (!res.ok) setAutoEmailsEnabled(!next); // rollback on failure
-    } finally {
-      setAutoEmailsSaving(false);
-    }
-  };
-
   useEffect(() => { load(); }, []);
 
   if (loading) return <p className="text-sm text-on-surface-variant">Loading templates…</p>;
 
   const tips: Tip[] = [
-    {
-      id: "emails-tab.auto-toggle",
-      anchorSelector: '[data-coachmark="email-auto-toggle"]',
-      title: "Decide when emails send",
-      body: (
-        <>
-          <p>Leave this on to send emails automatically as bookings move through stages.</p>
-          <p>Turn it off if you&apos;d rather hit Send yourself on each booking.</p>
-        </>
-      ),
-    },
     {
       id: "emails-tab.stage-card",
       anchorSelector: '[data-coachmark="email-stage-card"]',
@@ -554,54 +587,39 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName
   return (
     <div className="space-y-6">
       <CoachmarkSequence tips={tips} />
-      {/* Master auto-send toggle */}
-      <div className={`rounded-xl border px-5 py-4 transition-colors ${autoEmailsEnabled ? "border-outline-variant/20 bg-surface-container-lowest" : "border-amber-300/60 bg-amber-50/60"}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-base font-medium text-on-surface">Send automatic emails</p>
-            <div className="text-sm text-on-surface-variant leading-relaxed space-y-2">
-              <p>When off, nothing goes out on its own.</p>
-              <p>That means no stage emails, no deposit-paid emails, no scheduling confirmations, and no reschedule notices.</p>
-              <p>You can still send manually from any booking.</p>
-              <p className="text-xs text-on-surface-variant/80">Reminders have their own toggle on the Reminders tab.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoEmailsEnabled}
-            onClick={toggleAutoEmails}
-            disabled={autoEmailsSaving}
-            data-coachmark="email-auto-toggle"
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${autoEmailsEnabled ? "bg-primary" : "bg-outline-variant"}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoEmailsEnabled ? "translate-x-6" : "translate-x-1"}`} />
-          </button>
-        </div>
-      </div>
 
       {/* State-linked templates */}
-      <div className={`space-y-2 ${autoEmailsEnabled ? "" : "opacity-60"}`}>
+      <div className="space-y-2">
         <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-3">Stage templates</p>
         {templates.map((t, idx) => {
           const state = t.state as Exclude<BookingState, "cancelled">;
           const isOpen = openState === state;
+          const needsEdit = templateRequiresEdit(t.state, t.body);
+          const isOff = t.enabled === false;
+          const badgeClass = isOff
+            ? "bg-surface-container text-on-surface-variant/70 border border-outline-variant/40"
+            : needsEdit
+              ? "bg-amber-100 text-amber-700 border border-amber-200/60"
+              : t.auto_send
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-surface-container text-on-surface-variant border border-outline-variant/30";
+          const badgeLabel = isOff ? "Off" : needsEdit ? "Manual — needs edit" : t.auto_send ? "Auto-send on" : "Manual";
           return (
-            <div key={state} className="rounded-xl border border-outline-variant/20 overflow-hidden" {...(idx === 0 ? { "data-coachmark": "email-stage-card" } : {})}>
+            <div key={state} className={`rounded-xl border border-outline-variant/20 overflow-hidden transition-opacity ${isOff ? "opacity-60" : ""}`} {...(idx === 0 ? { "data-coachmark": "email-stage-card" } : {})}>
               <button type="button"
                 className="w-full flex items-center justify-between px-5 py-4 bg-surface-container-low hover:bg-surface-container transition-colors text-left"
                 onClick={() => setOpenState(isOpen ? null : state)}>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-on-surface">{STATE_LABELS[state]}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.auto_send ? "bg-emerald-100 text-emerald-700" : "bg-surface-container text-on-surface-variant border border-outline-variant/30"}`}>
-                    {t.auto_send ? "Auto-send on" : "Manual"}
+                  <span className={`text-sm font-medium ${isOff ? "text-on-surface-variant line-through decoration-on-surface-variant/40" : "text-on-surface"}`}>{STATE_LABELS[state]}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeClass}`}>
+                    {badgeLabel}
                   </span>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
               {isOpen && (
                 <div className="px-5 pb-5 pt-4 bg-surface-container-lowest border-t border-outline-variant/10">
-                  <TemplateEditor template={t} onSaved={load} paymentLinks={paymentLinks} calendarLinks={calendarLinks} artistName={artistName} />
+                  <TemplateEditor template={t} onSaved={load} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} artistName={artistName} studioAddress={studioAddress} artistId={artistId} />
                 </div>
               )}
             </div>
@@ -626,7 +644,7 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName
                 </button>
                 {isOpen && (
                   <div className="px-5 pb-5 pt-4 bg-surface-container-lowest border-t border-outline-variant/10">
-                    <CustomTemplateEditor template={t} onSaved={load} onDelete={() => { setOpenState(null); load(); }} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+                    <CustomTemplateEditor template={t} onSaved={load} onDelete={() => { setOpenState(null); load(); }} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} />
                   </div>
                 )}
               </div>
@@ -637,7 +655,7 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, artistName
 
       {/* New template */}
       {showNewForm ? (
-        <NewTemplateForm onCreated={() => { setShowNewForm(false); load(); }} paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
+        <NewTemplateForm onCreated={() => { setShowNewForm(false); load(); }} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={schedulingLinks} />
       ) : (
         <button type="button" onClick={() => setShowNewForm(true)}
           className="flex items-center gap-2 text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">

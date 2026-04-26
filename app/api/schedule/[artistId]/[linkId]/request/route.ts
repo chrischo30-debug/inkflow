@@ -4,10 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 import { sendEmail, buildTemplateVars } from "@/lib/email";
+import { getGoogleAccessToken, createGoogleCalendarEvent } from "@/lib/google-calendar";
 
 export const dynamic = "force-dynamic";
 
 const SENDING_DOMAIN = process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || `https://${SENDING_DOMAIN}`;
 const resend = new Resend(process.env.RESEND_API_KEY || "re_mock_key");
 
 function buildMapsUrl(address: string): string {
@@ -58,7 +60,7 @@ export async function POST(
   const admin = createAdminClient();
   const { data: artist } = await admin
     .from("artists")
-    .select("scheduling_links, email, name, gmail_address, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
+    .select("scheduling_links, email, name, gmail_address, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, google_refresh_token, calendar_sync_enabled")
     .eq("id", artistId)
     .single();
 
@@ -79,10 +81,11 @@ export async function POST(
   // Also capture client details so we can send them a confirmation email below.
   let clientEmailToConfirm: string | null = null;
   let clientNameToConfirm: string | null = null;
+  let scheduleThreadMessageId: string | undefined = undefined;
   if (body.bid) {
     const { data: booking } = await admin
       .from("bookings")
-      .select("id, state, artist_id, client_email, client_name")
+      .select("id, state, artist_id, client_email, client_name, thread_message_id")
       .eq("id", body.bid)
       .eq("artist_id", artistId)
       .single();
@@ -102,6 +105,7 @@ export async function POST(
 
       clientEmailToConfirm = booking.client_email;
       clientNameToConfirm = booking.client_name;
+      scheduleThreadMessageId = (booking as { thread_message_id?: string | null }).thread_message_id ?? undefined;
     }
   }
 
@@ -113,27 +117,54 @@ export async function POST(
     .formatToParts(new Date())
     .find(p => p.type === "timeZoneName")?.value ?? link.timezone;
 
-  const emailText = [
-    `A client booked: ${link.label}`,
-    ``,
-    `Date: ${formattedDate}`,
-    `Time: ${formattedStart} to ${formattedEnd} (${tzLabel})`,
-    ``,
-    body.bid
-      ? `The booking is now in Booked.`
-      : `Log in to FlashBooker to find the booking.`,
-  ].join("\n");
+  // Create Google Calendar event if connected
+  let calHtmlLink: string | null = null;
+  if (body.bid && (artist as { calendar_sync_enabled?: boolean | null }).calendar_sync_enabled && (artist as { google_refresh_token?: string | null }).google_refresh_token) {
+    try {
+      const accessToken = await getGoogleAccessToken(admin, artistId, (artist as { google_refresh_token: string }).google_refresh_token);
+      if (accessToken) {
+        const startISO = toAppointmentISO(body.date, body.start, link.timezone);
+        const endISO = toAppointmentISO(body.date, body.end, link.timezone);
+        const calResult = await createGoogleCalendarEvent({
+          accessToken,
+          summary: `${clientNameToConfirm ?? "Client"} – ${link.label}`,
+          startDateTime: startISO,
+          endDateTime: endISO,
+        });
+        calHtmlLink = calResult.htmlLink;
+        if (calResult.id) {
+          await admin.from("bookings").update({ google_event_id: calResult.id }).eq("id", body.bid);
+        }
+      }
+    } catch (e) { console.error("Calendar event creation on schedule failed:", e); }
+  }
+
+  const bookingUrl = body.bid ? `${APP_URL}/bookings/${body.bid}` : null;
+  const clientDisplay = clientNameToConfirm ?? "A client";
 
   try {
     if (process.env.NODE_ENV === "production" || process.env.RESEND_API_KEY) {
+      const linksHtml = [
+        bookingUrl ? `<a href="${bookingUrl}" style="color:#4f46e5">View booking →</a>` : null,
+        calHtmlLink ? `<a href="${calHtmlLink}" style="color:#4f46e5">View in Google Calendar →</a>` : null,
+      ].filter(Boolean).join(" &nbsp;·&nbsp; ");
+
       await resend.emails.send({
         from: `FlashBooker <noreply@${SENDING_DOMAIN}>`,
         to: [artist.email],
-        subject: `New booking confirmed: ${link.label} – ${formattedDate}`,
-        text: emailText,
+        subject: `New booking: ${clientDisplay} – ${link.label}`,
+        html: `<div style="font-family:sans-serif;font-size:14px;color:#111;padding:24px">
+<p style="margin:0 0 16px"><strong>${clientDisplay}</strong> booked a session.</p>
+<table style="border-collapse:collapse;margin-bottom:16px">
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Type</td><td>${link.label}</td></tr>
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Date</td><td>${formattedDate}</td></tr>
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Time</td><td>${formattedStart} – ${formattedEnd} (${tzLabel})</td></tr>
+</table>
+${linksHtml ? `<p style="margin:0">${linksHtml}</p>` : ""}
+</div>`,
       });
     } else {
-      console.log("[MOCK SCHEDULING EMAIL]", { to: artist.email, text: emailText });
+      console.log("[MOCK SCHEDULING EMAIL]", { to: artist.email, clientDisplay, link: link.label, formattedDate });
     }
   } catch (err) {
     console.error("Scheduling notification email failed:", err);
@@ -162,7 +193,7 @@ export async function POST(
       }
       bodyLines.push(``, `Reply to this email if you need to reschedule.`, ``, artistName);
 
-      await sendEmail({
+      const { messageId: schedMsgId } = await sendEmail({
         toEmail: clientEmailToConfirm,
         vars: buildTemplateVars({
           clientName: clientNameToConfirm,
@@ -180,7 +211,11 @@ export async function POST(
           logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
           logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
         },
+        threadMessageId: scheduleThreadMessageId,
       });
+      if (schedMsgId && !scheduleThreadMessageId && body.bid) {
+        await admin.from("bookings").update({ thread_message_id: schedMsgId }).eq("id", body.bid);
+      }
     } catch (err) {
       console.error("Client confirmation email failed:", err);
     }

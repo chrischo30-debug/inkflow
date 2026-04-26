@@ -759,7 +759,8 @@ export function FormBuilderSettings({
             <label className={labelHeadingCls}>Subtext</label>
             <textarea className={`${inputCls} min-h-[64px] resize-y`}
               value={formSubtext} onChange={(e) => setFormSubtext(e.target.value)}
-              placeholder="Fill out the form below to request an appointment..." />
+              placeholder={"Fill out the form below to request an appointment.\nI'll review your idea and get back to you."} />
+            <p className="text-[11px] text-on-surface-variant/70">Use a blank line or &lt;br&gt; for line breaks.</p>
           </div>
           <div className="p-4 space-y-1.5">
             <label className={labelHeadingCls}>Submit Button Text</label>

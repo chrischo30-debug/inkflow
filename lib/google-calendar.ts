@@ -204,8 +204,8 @@ export async function createGoogleCalendarEvent({
     throw new Error(`Google event creation failed: ${text}`);
   }
 
-  const event = (await res.json()) as { id: string };
-  return event.id;
+  const event = (await res.json()) as { id: string; htmlLink?: string };
+  return { id: event.id, htmlLink: event.htmlLink ?? null };
 }
 
 export async function getGoogleFreeBusy({

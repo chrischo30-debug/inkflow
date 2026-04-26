@@ -74,7 +74,7 @@ export default async function FormBuilderPreviewPage({
         formFields={normalizeFormFields(rawFields ?? [])}
         customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
         formHeader={(settings.form_header as string) ?? artist.form_header ?? `Book with ${artistName}`}
-        formSubtext={(settings.form_subtext as string) ?? artist.form_subtext ?? ""}
+        formSubtext={(settings.form_subtext as string) ?? artist.form_subtext ?? `Fill out the form below to request an appointment.<br />I'll review your idea and get back to you.`}
         buttonText={(settings.form_button_text as string) ?? artist.form_button_text ?? "Submit Inquiry"}
         layout={(settings.booking_layout as "centered" | "banner" | "minimal" | "full") ?? artist.booking_layout ?? "centered"}
         font={(settings.booking_font as string) ?? artist.booking_font ?? "Manrope"}

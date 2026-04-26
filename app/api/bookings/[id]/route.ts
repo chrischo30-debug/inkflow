@@ -44,7 +44,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: booking, error: fetchErr } = await supabase
       .from("bookings")
-      .select("state, client_email, client_name, artist_id, appointment_date, description")
+      .select("state, client_email, client_name, artist_id, appointment_date, description, thread_message_id")
       .eq("id", id)
       .eq("artist_id", user.id)
       .single();
@@ -52,6 +52,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (fetchErr || !booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
+
+    const threadMessageId = (booking as { thread_message_id?: string | null }).thread_message_id ?? undefined;
 
     // Fetch optional columns that may not exist in older DB instances
     const getExtraBookingFields = async () => {
@@ -66,6 +68,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         gmailThreadId: row?.gmail_thread_id ?? null,
         sentEmails: (row?.sent_emails ?? []) as {label:string;sent_at:string}[],
       };
+    };
+
+    // Store thread_message_id on the booking if this is the first threaded email we've sent
+    const storeThreadRoot = async (messageId: string | undefined) => {
+      if (!messageId || threadMessageId) return;
+      try {
+        await supabase.from("bookings").update({ thread_message_id: messageId }).eq("id", id).eq("artist_id", user.id);
+      } catch { /* column may not exist yet */ }
     };
 
     // Append a sent email entry — separate update so it degrades gracefully if column not yet migrated
@@ -241,7 +251,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             bodyLines.push(``, `Reply to this email if the new time doesn't work.`, ``, artistName);
 
             const sendDateLabel = new Date(newDate).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-            const { subject: sentSubject } = await sendEmail({
+            const { subject: sentSubject, messageId: reschedMsgId } = await sendEmail({
               toEmail: booking.client_email,
               vars: buildTemplateVars({
                 clientName: booking.client_name,
@@ -259,12 +269,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
                 logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
               },
+              threadMessageId,
             });
             await supabase
               .from("bookings")
               .update({ last_email_sent_at: new Date().toISOString() })
               .eq("id", id);
             await appendSentEmail(sentSubject ?? "Appointment rescheduled");
+            await storeThreadRoot(reschedMsgId);
 
             // Notify the artist too
             try {
@@ -365,7 +377,7 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
         try {
           const { sendStateTransitionEmail } = await import("@/lib/email");
           const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-          const { subject: sentSubject } = await sendStateTransitionEmail({
+          const { subject: sentSubject, messageId: completeMsgId } = await sendStateTransitionEmail({
             toEmail: booking.client_email,
             clientName: booking.client_name,
             newState: "completed",
@@ -375,11 +387,13 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
             template: templateRow ?? null,
             artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
             branding: { logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null, logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false, logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark" },
+            threadMessageId,
           });
           await supabase.from("bookings").update({
             last_email_sent_at: new Date().toISOString(),
           }).eq("id", id);
           await appendSentEmail(sentSubject ?? "Appointment Completed");
+          await storeThreadRoot(completeMsgId);
         } catch (e) { console.error("Completion email failed:", e); }
       }
 
@@ -416,9 +430,9 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
     const shouldAutoEmail = masterAutoOn && advanceEnabled && (templateRow ? templateRow.auto_send : stageDefault);
     if (shouldAutoEmail) {
       try {
-        const { sendStateTransitionEmail } = await import("@/lib/email");
+        const { sendStateTransitionEmail, THREADING_STATES } = await import("@/lib/email");
         const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
-        const { subject: sentSubject } = await sendStateTransitionEmail({
+        const { subject: sentSubject, messageId: advanceMsgId } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
           newState: nextState,
@@ -429,11 +443,13 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
           template: templateRow ?? null,
           artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
           branding: { logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null, logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false, logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark" },
+          threadMessageId: THREADING_STATES.has(nextState) ? threadMessageId : undefined,
         });
         await supabase.from("bookings").update({
           last_email_sent_at: new Date().toISOString(),
         }).eq("id", id);
         await appendSentEmail(sentSubject ?? SENT_EMAIL_LABELS[nextState] ?? nextState);
+        if (THREADING_STATES.has(nextState)) await storeThreadRoot(advanceMsgId);
       } catch (e) { console.error("Email transition failed:", e); }
     }
 

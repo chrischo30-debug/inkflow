@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { formatPhone } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -23,7 +24,7 @@ const ACTIVE_STATES = new Set(["inquiry", "follow_up", "sent_deposit", "accepted
 const STATE_LABEL: Record<string, string> = {
   inquiry:       "Submission",
   follow_up:     "Follow Up",
-  accepted:      "Sent Deposit", // legacy
+  accepted:      "Deposit Pending", // legacy
   sent_deposit:  "Sent Deposit",
   sent_calendar: "Sent Calendar",
   booked:        "Booked",
@@ -363,7 +364,7 @@ type EmailCompose = {
   previewVars?: Record<string, string>;
 };
 
-export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[] }) {
+export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { bookings: Booking[]; artistSlug?: string }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<Tab>("all");
@@ -376,10 +377,17 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
   const [emailLoadingFor, setEmailLoadingFor] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   useEffect(() => {
     const clientParam = searchParams.get("client");
-    if (clientParam) setExpandedEmail(clientParam.toLowerCase());
+    if (!clientParam) return;
+    const key = clientParam.toLowerCase();
+    setExpandedEmail(key);
+    // Defer until the row is rendered
+    requestAnimationFrame(() => {
+      rowRefs.current.get(key)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }, [searchParams]);
 
   const openEmailCompose = async (client: Client) => {
@@ -532,6 +540,7 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
                 return (
                   <React.Fragment key={client.email}>
                     <tr
+                      ref={el => { if (el) rowRefs.current.set(client.email.toLowerCase(), el); else rowRefs.current.delete(client.email.toLowerCase()); }}
                       className={`border-b border-outline-variant/10 hover:bg-surface-container-low/40 transition-colors cursor-pointer ${expanded ? "bg-surface-container-low/60" : ""}`}
                       onClick={() => setExpandedEmail(expanded ? null : client.email.toLowerCase())}
                     >
@@ -542,7 +551,7 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
                         <p className="text-sm font-medium text-on-surface">{client.name}</p>
                         <div className="flex flex-col gap-1.5 mt-2">
                           <CopyText text={client.email} className="text-sm text-on-surface-variant" />
-                          {client.phone && <CopyText text={client.phone} className="text-sm text-on-surface-variant" />}
+                          {client.phone && <CopyText text={formatPhone(client.phone)} className="text-sm text-on-surface-variant" />}
                         </div>
                       </td>
                       <td className="px-4 py-4 hidden sm:table-cell">
@@ -753,6 +762,7 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
           client_email: newSessionClient.email,
           client_phone: newSessionClient.phone ?? "",
         } : undefined}
+        artistSlug={artistSlug}
       />
 
       {emailCompose && (

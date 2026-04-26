@@ -59,24 +59,26 @@ export async function POST(
       try {
         const resend = new Resend(resendKey);
         const fromAddress = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
-        const phoneLine = parsed.phone?.trim() ? `\nPhone: ${parsed.phone.trim()}` : "";
         const visitorEmail = parsed.email.trim();
         const visitorName = parsed.name.trim();
+        const phoneRow = parsed.phone?.trim()
+          ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Phone</td><td>${parsed.phone.trim()}</td></tr>`
+          : "";
         await resend.emails.send({
           from: `FlashBooker <${fromAddress}>`,
           to: [artist.email],
-          // Named format maximises Reply-To support across clients
           replyTo: `${visitorName} <${visitorEmail}>`,
-          subject: `New contact from ${visitorName} (${visitorEmail})`,
-          text: [
-            `You have a new contact form submission.`,
-            ``,
-            `From: ${visitorName}`,
-            `Reply to: ${visitorEmail}${phoneLine}`,
-            ``,
-            `Message:`,
-            parsed.message.trim(),
-          ].join("\n"),
+          subject: `New contact from ${visitorName}`,
+          html: `<div style="font-family:sans-serif;font-size:14px;color:#111;padding:24px">
+<p style="margin:0 0 16px">You have a new contact form submission.</p>
+<table style="border-collapse:collapse;margin-bottom:16px">
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">From</td><td>${visitorName}</td></tr>
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Email</td><td><a href="mailto:${visitorEmail}" style="color:#4f46e5">${visitorEmail}</a></td></tr>
+${phoneRow}
+</table>
+<p style="margin:0 0 8px;font-weight:600">Message</p>
+<p style="margin:0;white-space:pre-wrap">${parsed.message.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+</div>`,
         });
       } catch (emailErr) {
         // Don't fail the submission if notification fails

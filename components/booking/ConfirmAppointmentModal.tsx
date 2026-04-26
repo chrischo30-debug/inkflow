@@ -149,7 +149,8 @@ export function ConfirmAppointmentModal({
 
   const selectedStart = date && time ? new Date(`${date}T${time}:00`) : null;
   const selectedEnd = selectedStart ? new Date(selectedStart.getTime() + duration * 60_000) : null;
-  const timeOverlaps = selectedStart && selectedEnd
+  const originalStart = initialAppointmentDate ? new Date(initialAppointmentDate) : null;
+  const allTimeOverlaps = selectedStart && selectedEnd
     ? selectedDayEvents.filter(ev => {
         if (!ev.start.includes("T")) return false;
         const evStart = new Date(ev.start);
@@ -157,6 +158,11 @@ export function ConfirmAppointmentModal({
         return evStart < selectedEnd && evEnd > selectedStart;
       })
     : [];
+  // When editing, separate the original appointment's event from real conflicts
+  const originalOverlap = isEdit && originalStart
+    ? allTimeOverlaps.find(ev => Math.abs(new Date(ev.start).getTime() - originalStart.getTime()) < 60_000)
+    : null;
+  const timeOverlaps = allTimeOverlaps.filter(ev => ev !== originalOverlap);
 
   const handleConfirm = async () => {
     if (!date) return;
@@ -343,14 +349,23 @@ export function ConfirmAppointmentModal({
               )}
 
               {/* Time overlap warning */}
+              {originalOverlap && (
+                <div className="flex items-start gap-2 rounded-lg bg-surface-container border border-outline-variant/30 px-2.5 py-2">
+                  <CalendarDays className="w-3.5 h-3.5 text-on-surface-variant shrink-0 mt-0.5" />
+                  <p className="text-xs text-on-surface-variant">
+                    Original time: {formatTime(originalOverlap.start)}
+                    {originalOverlap.end ? ` – ${formatTime(originalOverlap.end)}` : ""}
+                  </p>
+                </div>
+              )}
               {timeOverlaps.length > 0 && (
                 <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2.5 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700">
                     {timeOverlaps.length === 1
-                      ? `"${timeOverlaps[0].title.replace(/^Appointment:\s*/, "")}" overlaps this time.`
+                      ? `"${timeOverlaps[0].title.replace(/^Appointment:\s*/, "")}" overlaps this time slot.`
                       : `${timeOverlaps.length} events overlap this time slot.`}
-                    {" "}You can still schedule.
+                    {" "}You can still schedule, but this may cause a conflict.
                   </p>
                 </div>
               )}

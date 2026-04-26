@@ -66,7 +66,6 @@ export default async function SettingsPage({
         studioAddress={extended.studio_address ?? ""}
         emailLogoEnabled={extended.email_logo_enabled ?? true}
         emailLogoBg={extended.email_logo_bg ?? "light"}
-        autoEmailsEnabled={extended.auto_emails_enabled !== false}
         hasLogo={Boolean(extended.logo_url)}
         logoUrl={extended.logo_url ?? null}
         email={user.email ?? ""}

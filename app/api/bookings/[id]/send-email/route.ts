@@ -1,29 +1,24 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
-import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES } from '@/lib/email';
-import type { CalendarLink } from '@/lib/pipeline-settings';
+import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES, STAGE_AUTOSEND_DEFAULTS, templateRequiresEdit } from '@/lib/email';
+import type { CalendarLink, SchedulingLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
 
 async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, bookingId: string, userId: string) {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date')
+    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date, scheduling_link_id')
     .eq('id', bookingId)
     .eq('artist_id', userId)
     .single();
 
   if (error || !booking) return null;
 
-  const [{ data: artistCore }, { data: artistExtra }, { data: templateRows }] = await Promise.all([
+  const [{ data: artistRaw }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, studio_name, payment_links, gmail_address, email')
-      .eq('id', userId)
-      .single(),
-    supabase
-      .from('artists')
-      .select('calendar_links, logo_url, email_logo_enabled, email_logo_bg')
+      .select('*')
       .eq('id', userId)
       .single(),
     supabase
@@ -32,18 +27,31 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
       .eq('artist_id', userId),
   ]);
 
-  const artist = artistCore ? {
-    ...artistCore,
-    calendar_links: artistExtra?.calendar_links ?? [],
-    logo_url: (artistExtra as { logo_url?: string | null } | null)?.logo_url ?? null,
-    email_logo_enabled: (artistExtra as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false,
-    email_logo_bg: ((artistExtra as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark",
+  type ArtistRow = {
+    name?: string; studio_name?: string; payment_links?: unknown; gmail_address?: string; email?: string;
+    calendar_links?: CalendarLink[]; scheduling_links?: SchedulingLink[];
+    logo_url?: string | null; email_logo_enabled?: boolean | null; email_logo_bg?: "light" | "dark" | null;
+    studio_address?: string | null;
+  };
+  const a = artistRaw as ArtistRow | null;
+  const artist = a ? {
+    name: a.name,
+    studio_name: a.studio_name,
+    payment_links: a.payment_links,
+    gmail_address: a.gmail_address,
+    email: a.email,
+    calendar_links: Array.isArray(a.calendar_links) ? a.calendar_links : [],
+    scheduling_links: Array.isArray(a.scheduling_links) ? a.scheduling_links : [] as SchedulingLink[],
+    logo_url: a.logo_url ?? null,
+    email_logo_enabled: a.email_logo_enabled !== false,
+    email_logo_bg: (a.email_logo_bg ?? "light") as "light" | "dark",
+    studio_address: a.studio_address ?? '',
   } : null;
 
   return { booking, artist, templateRows: templateRows ?? [] };
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -57,6 +65,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
+
+  const allSchedulingLinks: SchedulingLink[] = artist?.scheduling_links ?? [];
+  const bookingSchedulingLinkId = (booking as { scheduling_link_id?: string | null }).scheduling_link_id;
+  const matchedLink = bookingSchedulingLinkId
+    ? allSchedulingLinks.find(l => l.id === bookingSchedulingLinkId)
+    : allSchedulingLinks[0]; // fall back to first link if none assigned
+  const appOrigin = new URL(req.url).origin;
+  const schedulingUrl = matchedLink
+    ? `${appOrigin}/schedule/${user.id}/${matchedLink.id}?bid=${id}`
+    : '';
+
   const vars = buildTemplateVars({
     clientName: booking.client_name,
     artistName: artist?.name || artist?.studio_name || 'Your Artist',
@@ -64,6 +83,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     calendarLinksList,
     primaryPaymentLink: booking.payment_link_sent ?? undefined,
     appointmentDate: booking.appointment_date ?? undefined,
+    studioAddress: artist?.studio_address ?? undefined,
+    schedulingLink: schedulingUrl,
+    schedulingLinkLabel: matchedLink?.label,
   });
 
   // Build the full template list for the picker — return RAW (unresolved) text so variables
@@ -72,19 +94,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const savedByState = new Map(templateRows.filter(r => r.state).map(r => [r.state as string, r]));
   const customTemplates = templateRows.filter(r => !r.state);
 
-  // State-linked templates (one per emailable state, in pipeline order)
-  const STATE_ORDER = ['inquiry', 'follow_up', 'accepted', 'confirmed', 'completed', 'rejected'];
+  // State-linked templates (one per emailable state, in pipeline order). Includes
+  // auto_send so the frontend can decide whether to auto-fire or pop the modal.
+  const STATE_ORDER = ['inquiry', 'follow_up', 'accepted', 'sent_calendar', 'booked', 'completed', 'rejected'];
   const stateTemplates = STATE_ORDER
     .filter(state => savedByState.has(state) || !!stateDefaults[state])
     .map(state => {
       const saved = savedByState.get(state);
       const raw = saved ?? stateDefaults[state];
+      const stageDefault = STAGE_AUTOSEND_DEFAULTS[state as keyof typeof STAGE_AUTOSEND_DEFAULTS] ?? false;
+      const rawAutoSend = saved ? saved.auto_send : stageDefault;
+      const autoSend = templateRequiresEdit(state, raw.body) ? false : rawAutoSend;
+      const enabled = saved ? (saved as { enabled?: boolean | null }).enabled !== false : true;
       return {
         id: saved?.id ?? null,
         name: saved?.name ?? stateLabel(state),
         state,
         subject: raw.subject,
         body: raw.body,
+        auto_send: autoSend,
+        enabled,
       };
     });
 
@@ -95,6 +124,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     state: null,
     subject: t.subject,
     body: t.body,
+    auto_send: t.auto_send,
+    enabled: (t as { enabled?: boolean | null }).enabled !== false,
   }));
 
   const allTemplates = [...stateTemplates, ...custom];
@@ -110,6 +141,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     templates: allTemplates,
     paymentLinks: paymentLinksList,
     calendarLinks: calendarLinksList,
+    schedulingLinks: allSchedulingLinks.map(l => ({ id: l.id, label: l.label })),
     previewVars: vars as unknown as Record<string, string>,
   });
 }
@@ -146,6 +178,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // subject/body may contain {variable} tokens — sendEmail resolves them at send time
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
+  const bookingSchedulingLinkIdPost = (booking as { scheduling_link_id?: string | null }).scheduling_link_id;
+  const matchedLinkPost = bookingSchedulingLinkIdPost
+    ? artist?.scheduling_links.find(l => l.id === bookingSchedulingLinkIdPost)
+    : artist?.scheduling_links[0];
+  const appOriginPost = new URL(req.url).origin;
+  const schedulingUrlPost = matchedLinkPost ? `${appOriginPost}/schedule/${user.id}/${matchedLinkPost.id}?bid=${id}` : '';
   const vars = buildTemplateVars({
     clientName: booking.client_name,
     artistName: artist?.name || artist?.studio_name || 'Your Artist',
@@ -153,6 +191,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     calendarLinksList,
     primaryPaymentLink: booking.payment_link_sent ?? undefined,
     appointmentDate: booking.appointment_date ?? undefined,
+    studioAddress: artist?.studio_address ?? undefined,
+    schedulingLink: schedulingUrlPost,
+    schedulingLinkLabel: matchedLinkPost?.label,
   });
 
   await sendEmail({

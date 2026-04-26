@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { BookingState, StandardBookingField } from "@/lib/types";
+import { sendInquiryAutoEmail } from "@/lib/inquiry-auto-email";
 
 const STANDARD_FIELDS = new Set<StandardBookingField>([
   "client_name",
@@ -123,6 +124,14 @@ export async function POST(
     console.error("Webhook booking insert error:", error);
     return NextResponse.json({ error: "Failed to create booking" }, { status: 500 });
   }
+
+  sendInquiryAutoEmail({
+    admin,
+    artistId: source.artist_id,
+    bookingId: data.id,
+    clientName: String(booking.client_name ?? ""),
+    clientEmail: String(booking.client_email ?? ""),
+  }).catch(err => console.error("Inquiry auto-email failed:", err));
 
   return NextResponse.json({ success: true, bookingId: data.id }, { status: 201 });
 }

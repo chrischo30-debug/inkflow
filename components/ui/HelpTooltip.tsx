@@ -59,7 +59,8 @@ export function HelpTooltip({ title, body, children }: Props) {
       const placement: "top" | "bottom" =
         ph > spaceBelow && spaceAbove > spaceBelow ? "top" : "bottom";
 
-      const top = placement === "top" ? r.top - ph - MARGIN : r.bottom + MARGIN;
+      const rawTop = placement === "top" ? r.top - ph - MARGIN : r.bottom + MARGIN;
+      const top = Math.max(EDGE, Math.min(rawTop, vh - ph - EDGE));
       const btnCenter = r.left + r.width / 2;
       let left = btnCenter - pw / 2;
       left = Math.max(EDGE, Math.min(left, vw - pw - EDGE));

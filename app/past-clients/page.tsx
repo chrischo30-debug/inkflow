@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ClientsTable } from "@/components/booking/ClientsTable";
@@ -9,13 +10,17 @@ export default async function PastClientsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return redirect("/login");
 
-  const { data: bookingsData } = await supabase
-    .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, total_amount, tip_amount, completion_notes, completion_image_urls, created_at, updated_at")
-    .eq("artist_id", user.id)
-    .order("created_at", { ascending: false });
+  const [{ data: bookingsData }, { data: artistData }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, total_amount, tip_amount, completion_notes, completion_image_urls, created_at, updated_at")
+      .eq("artist_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("artists").select("slug").eq("id", user.id).single(),
+  ]);
 
   const bookings: Booking[] = (bookingsData ?? []) as Booking[];
+  const artistSlug: string = (artistData as { slug?: string } | null)?.slug ?? "";
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -25,7 +30,9 @@ export default async function PastClientsPage() {
           <h1 className="text-xl font-heading font-semibold text-on-surface">Clients</h1>
         </header>
         <div className="flex-1 overflow-hidden">
-          <ClientsTable bookings={bookings} />
+          <Suspense>
+            <ClientsTable bookings={bookings} artistSlug={artistSlug} />
+          </Suspense>
         </div>
       </main>
     </div>

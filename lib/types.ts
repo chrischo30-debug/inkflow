@@ -54,6 +54,7 @@ export interface Booking {
   payment_source?: string;
   completion_notes?: string;
   completion_image_urls?: string[];
+  sort_order?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +78,9 @@ export interface EmailTemplate {
   subject: string;
   body: string;
   auto_send: boolean;
+  // When false, the template is fully off: no auto-send, no modal pop on transition.
+  // Defaults to true on the DB side so existing rows behave as before.
+  enabled?: boolean;
 }
 
 export type StandardBookingField =

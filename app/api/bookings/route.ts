@@ -3,6 +3,7 @@ import { BookingState } from "@/lib/types";
 import { z, ZodError } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeCustomFormFields, normalizeFormFields } from "@/lib/form-fields";
+import { sendInquiryAutoEmail } from "@/lib/inquiry-auto-email";
 
 const createBookingSchema = z.object({
   artist_id: z.string().min(1),
@@ -173,7 +174,13 @@ export async function POST(req: Request) {
       throw error;
     }
 
-    // TODO: Send automated confirmation email via lib/email.ts if configured
+    sendInquiryAutoEmail({
+      admin,
+      artistId: parsed.artist_id,
+      bookingId: data.id,
+      clientName: safeName,
+      clientEmail: safeEmail,
+    }).catch(err => console.error("Inquiry auto-email failed:", err));
 
     return NextResponse.json({ success: true, bookingId: data.id }, { status: 201 });
   } catch (error: unknown) {

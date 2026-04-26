@@ -165,8 +165,10 @@ export function AcceptModal({
       const acceptedTpl = data.templates.find(t => t.state === "accepted");
       const baseBody = acceptedTpl?.body ?? data.body;
       const baseSubject = acceptedTpl?.subject ?? data.subject;
+      const depositLabel =
+        data.paymentLinks.find(l => l.url === effectiveDepositUrl)?.label ?? "Pay deposit";
       const bodyWithDeposit = effectiveDepositUrl
-        ? baseBody.replace(/\{paymentLink(?::[^}]+)?\}/g, effectiveDepositUrl)
+        ? baseBody.replace(/\{paymentLink(?::[^}]+)?\}/g, `[${depositLabel}](${effectiveDepositUrl})`)
         : baseBody;
       setData({ ...data, subject: baseSubject, body: bodyWithDeposit });
     }

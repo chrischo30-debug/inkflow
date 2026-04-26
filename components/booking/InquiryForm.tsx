@@ -131,6 +131,7 @@ export function InquiryForm({
   buttonText = "Submit Inquiry",
   confirmationMessage,
   successRedirectUrl,
+  prefill,
 }: {
   artistId: string;
   formFields: FormFieldConfig[];
@@ -138,6 +139,7 @@ export function InquiryForm({
   buttonText?: string;
   confirmationMessage?: string;
   successRedirectUrl?: string;
+  prefill?: { name?: string; email?: string; phone?: string };
 }) {
   const [isPending, startTransition] = useTransition();
   const [isSuccess, setIsSuccess] = useState(false);
@@ -160,9 +162,9 @@ export function InquiryForm({
   const form = useForm<InquiryFormValues>({
     resolver: zodResolver(inquirySchema) as Resolver<InquiryFormValues>,
     defaultValues: {
-      client_name: "",
-      client_email: "",
-      client_phone: "",
+      client_name: prefill?.name ?? "",
+      client_email: prefill?.email ?? "",
+      client_phone: prefill?.phone ?? "",
       description: "",
       size: "",
       placement: "",

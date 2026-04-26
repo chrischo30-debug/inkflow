@@ -383,9 +383,12 @@ export function PipelineView({
           anchorSelector: '[data-coachmark="pipeline-first-column"]',
           title: "This is your pipeline",
           body: <>
-            <p>Bookings move left to right: Submission, Accepted, Booked, Completed.</p>
-            <p>Drag a card across, or use the action button on each card.</p>
-            <p>Each stage has its own email, which sends automatically if you have auto emails on.</p>
+            <p><strong>Submission →</strong> client filled out your form. Review it and accept or reject.</p>
+            <p><strong>Sent Deposit →</strong> you&apos;ve requested a deposit. If Stripe is connected, it auto-advances once they pay.</p>
+            <p><strong>Sent Calendar →</strong> deposit is in. Client gets a scheduling link to pick their time.</p>
+            <p><strong>Booked →</strong> appointment is locked. This happens automatically as soon as the client picks a time slot.</p>
+            <p><strong>Completed →</strong> session is done. Log the final amount and any notes.</p>
+            <p>Each stage sends its own email automatically — or you can trigger it manually from the card.</p>
           </>,
         },
         {

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Eye, Pencil, Link2 } from "lucide-react";
 import { EmailVarChips } from "@/components/shared/EmailVarChips";
+import { FormatToolbar } from "@/components/shared/FormatToolbar";
 import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
 
 export interface ResolvedTemplate {
@@ -40,12 +41,44 @@ interface Props {
   onClose: () => void;
 }
 
-// Group 1: varName, Group 2: optional :Label suffix
-const VAR_RE = /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|appointmentDate|studioAddress|studioMapsUrl|schedulingLink)(?::([^}]+))?\}/g;
-// Highlight any "REPLACE THIS" instruction (with or without ✏️ prefix) up to end of line
-const TODO_RE = /(?:✏️ ?)?REPLACE THIS[^\n]*/g;
-// Group 3 & 4 in combined (after VAR_RE's 2 groups): label, url
-const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+// Inline token types for BodyPreview parsing
+// Combined regex groups: 1=bold 2=italic 3=varName 4=varLabel 5=mdLabel 6=mdUrl
+const INLINE_RE = new RegExp(
+  [
+    /\*\*(.+?)\*\*/,           // bold (group 1)
+    /\*(.+?)\*/,               // italic (group 2)
+    /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|appointmentDate|studioAddress|studioMapsUrl|schedulingLink)(?::([^}]+))?\}/, // var (groups 3,4)
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/, // md link (groups 5,6)
+    /(?:✏️ ?)?REPLACE THIS[^\n]*/, // todo (no groups)
+  ].map(r => r.source).join('|'),
+  'g',
+);
+
+type InlineToken =
+  | { t: 'text'; v: string }
+  | { t: 'bold'; v: string }
+  | { t: 'italic'; v: string }
+  | { t: 'var'; name: string; label?: string }
+  | { t: 'link'; label: string; url: string }
+  | { t: 'todo'; v: string };
+
+function tokenizeInline(text: string): InlineToken[] {
+  const re = new RegExp(INLINE_RE.source, 'g');
+  const tokens: InlineToken[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) tokens.push({ t: 'text', v: text.slice(last, m.index) });
+    if (m[0].startsWith('**'))       tokens.push({ t: 'bold', v: m[1] });
+    else if (m[0].startsWith('*'))   tokens.push({ t: 'italic', v: m[2] });
+    else if (m[0].startsWith('{'))   tokens.push({ t: 'var', name: m[3], label: m[4] });
+    else if (m[0].startsWith('['))   tokens.push({ t: 'link', label: m[5], url: m[6] });
+    else                             tokens.push({ t: 'todo', v: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) tokens.push({ t: 'text', v: text.slice(last) });
+  return tokens;
+}
 
 export function BodyPreview({ text, vars, resolved, compact, paymentLinks = [], calendarLinks = [] }: {
   text: string;
@@ -55,67 +88,83 @@ export function BodyPreview({ text, vars, resolved, compact, paymentLinks = [], 
   paymentLinks?: InsertLink[];
   calendarLinks?: InsertLink[];
 }) {
-  type Part = { text: string; varName?: string; varLabel?: string; isTodo?: boolean; mdLabel?: string; mdUrl?: string };
-  const parts: Part[] = [];
-  // VAR_RE has 2 capture groups; MD_LINK_RE groups become m[3] and m[4]
-  const combined = new RegExp(`${VAR_RE.source}|${MD_LINK_RE.source}|${TODO_RE.source}`, 'g');
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = combined.exec(text)) !== null) {
-    if (m.index > last) parts.push({ text: text.slice(last, m.index) });
-    if (m[0].includes('REPLACE THIS')) {
-      parts.push({ text: m[0], isTodo: true });
-    } else if (m[3] !== undefined) {
-      parts.push({ text: m[0], mdLabel: m[3], mdUrl: m[4] });
+  // Build per-line segments: each line is either a bullet-group start or a single line.
+  // Empty lines become explicit <br> so spacing above/below bullets is preserved.
+  const lines = text.split('\n');
+  type Segment = { type: 'line'; content: string } | { type: 'bullets'; items: string[] };
+  const segments: Segment[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (/^- /.test(lines[i])) {
+      const items: string[] = [];
+      while (i < lines.length && /^- /.test(lines[i])) { items.push(lines[i].slice(2)); i++; }
+      segments.push({ type: 'bullets', items });
     } else {
-      parts.push({ text: m[0], varName: m[1], varLabel: m[2] });
+      segments.push({ type: 'line', content: lines[i] });
+      i++;
     }
-    last = m.index + m[0].length;
   }
-  if (last < text.length) parts.push({ text: text.slice(last) });
-  return (
-    <div className={`whitespace-pre-wrap text-sm text-on-surface leading-relaxed ${compact ? "" : "min-h-[140px]"}`}>
-      {parts.map((p, i) => {
-        if (p.isTodo) {
-          return <mark key={i} className="bg-amber-500/15 text-amber-700 dark:text-amber-400 not-italic rounded px-1 py-0.5 text-xs font-medium">{p.text}</mark>;
+
+  function renderTokens(tokens: InlineToken[], prefix: string): React.ReactNode[] {
+    return tokens.map((tk, ki) => {
+      const key = `${prefix}-${ki}`;
+      if (tk.t === 'text')   return <span key={key}>{tk.v}</span>;
+      if (tk.t === 'bold')   return <strong key={key} className="font-semibold">{tk.v}</strong>;
+      if (tk.t === 'italic') return <em key={key}>{tk.v}</em>;
+      if (tk.t === 'todo')   return <mark key={key} className="bg-amber-500/15 text-amber-700 dark:text-amber-400 not-italic rounded px-1 py-0.5 text-xs font-medium">{tk.v}</mark>;
+      if (tk.t === 'link') {
+        if (resolved) return <a key={key} href={tk.url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{tk.label}</a>;
+        return (
+          <span key={key} className="inline-flex items-center gap-1 rounded bg-primary/10 text-primary px-1 py-0.5 text-xs font-medium border border-primary/20">
+            <Link2 className="w-3 h-3" />{tk.label}
+          </span>
+        );
+      }
+      // var token
+      const name = (tk as Extract<InlineToken, { t: 'var' }>).name;
+      const varLabel = (tk as Extract<InlineToken, { t: 'var' }>).label;
+      if (resolved && vars) {
+        if (name === 'paymentLink' || name === 'calendarLink') {
+          const links = name === 'paymentLink' ? paymentLinks : calendarLinks;
+          const url = varLabel
+            ? (links.find(l => l.label.toLowerCase() === varLabel.toLowerCase())?.url ?? vars[name])
+            : vars[name];
+          const displayLabel = varLabel || links.find(l => l.url === url)?.label
+            || (name === 'paymentLink' ? 'Payment link' : 'Scheduling link');
+          return url
+            ? <a key={key} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{displayLabel}</a>
+            : <mark key={key} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">{name === 'paymentLink' ? 'payment link needed' : 'scheduling link needed'}</mark>;
         }
-        if (p.mdLabel && p.mdUrl) {
-          if (resolved) {
-            return <a key={i} href={p.mdUrl} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{p.mdLabel}</a>;
-          }
+        if (name === 'schedulingLink') {
+          const url = vars.schedulingLink;
+          const label = vars.schedulingLinkLabel || 'Scheduling link';
+          return url
+            ? <a key={key} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{label}</a>
+            : <mark key={key} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">scheduling link needed</mark>;
+        }
+        const val = vars[name];
+        return val
+          ? <span key={key} className="font-medium text-on-surface">{val}</span>
+          : <mark key={key} className="bg-destructive/10 text-destructive rounded px-0.5 text-xs italic">not set</mark>;
+      }
+      return <mark key={key} className="bg-primary/15 text-primary not-italic rounded px-0.5 font-mono text-xs">{`{${name}${varLabel ? ':' + varLabel : ''}}`}</mark>;
+    });
+  }
+
+  return (
+    <div className={`text-sm text-on-surface leading-relaxed ${compact ? '' : 'min-h-[140px]'}`}>
+      {segments.map((seg, si) => {
+        if (seg.type === 'bullets') {
           return (
-            <span key={i} className="inline-flex items-center gap-1 rounded bg-primary/10 text-primary px-1 py-0.5 text-xs font-medium border border-primary/20">
-              <Link2 className="w-3 h-3" />
-              {p.mdLabel}
-            </span>
+            <ul key={si} className="list-disc list-inside my-0 space-y-0.5">
+              {seg.items.map((item, li) => (
+                <li key={li}>{renderTokens(tokenizeInline(item), `${si}-${li}`)}</li>
+              ))}
+            </ul>
           );
         }
-        if (!p.varName) return <span key={i}>{p.text}</span>;
-        if (resolved && vars) {
-          if (p.varName === 'paymentLink' || p.varName === 'calendarLink') {
-            const links = p.varName === 'paymentLink' ? paymentLinks : calendarLinks;
-            const url = p.varLabel
-              ? (links.find(l => l.label.toLowerCase() === p.varLabel!.toLowerCase())?.url ?? vars[p.varName])
-              : vars[p.varName];
-            const displayLabel = p.varLabel || links.find(l => l.url === url)?.label
-              || (p.varName === 'paymentLink' ? 'Payment link' : 'Scheduling link');
-            return url
-              ? <a key={i} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{displayLabel}</a>
-              : <mark key={i} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">{p.varName === 'paymentLink' ? 'payment link needed' : 'scheduling link needed'}</mark>;
-          }
-          if (p.varName === 'schedulingLink') {
-            const url = vars.schedulingLink;
-            const label = vars.schedulingLinkLabel || 'Scheduling link';
-            return url
-              ? <a key={i} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{label}</a>
-              : <mark key={i} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">scheduling link needed</mark>;
-          }
-          const val = vars[p.varName];
-          return val
-            ? <span key={i} className="font-medium text-on-surface">{val}</span>
-            : <mark key={i} className="bg-destructive/10 text-destructive rounded px-0.5 text-xs italic">not set</mark>;
-        }
-        return <mark key={i} className="bg-primary/15 text-primary not-italic rounded px-0.5 font-mono text-xs">{p.text}</mark>;
+        if (seg.content === '') return <br key={si} />;
+        return <div key={si}>{renderTokens(tokenizeInline(seg.content), `${si}`)}</div>;
       })}
     </div>
   );
@@ -291,14 +340,22 @@ export function EmailComposeModal({
               </div>
             </div>
             {mode === "edit" ? (
-              <textarea
-                ref={textareaRef}
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                onFocus={() => { lastFocused.current = "body"; }}
-                rows={1}
-                className={`${fieldClass} resize-none overflow-hidden min-h-[160px]`}
-              />
+              <div className="bg-surface-container-high/40 rounded-t-lg border-b border-outline-variant focus-within:border-primary transition-colors">
+                <FormatToolbar
+                  textareaRef={textareaRef}
+                  value={body}
+                  onChange={setBody}
+                  onFocus={() => { lastFocused.current = "body"; }}
+                />
+                <textarea
+                  ref={textareaRef}
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  onFocus={() => { lastFocused.current = "body"; }}
+                  rows={1}
+                  className="w-full border-0 bg-transparent px-4 py-3 text-sm text-on-surface resize-none focus:outline-none overflow-hidden min-h-[160px]"
+                />
+              </div>
             ) : (
               <div
                 className={previewClass}

@@ -8,6 +8,39 @@ const SENDING_DOMAIN = process.env.FLASHBOOKER_SENDING_DOMAIN || 'flashbooker.ap
 const SENDING_LOCAL = process.env.FLASHBOOKER_SENDING_LOCAL || 'bookings';
 const APP_NAME = 'FlashBooker';
 
+// States whose automated emails thread together in the client's inbox.
+// follow_up is intentionally excluded — it's back-and-forth conversation.
+export const THREADING_STATES = new Set<string>([
+  'inquiry', 'sent_deposit', 'sent_calendar', 'booked', 'confirmed', 'completed', 'rejected',
+]);
+
+function generateMessageId(): string {
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `<flashbooker-${Date.now()}-${rand}@flashbooker.app>`;
+}
+
+// Per-stage default for auto-send when the artist has not saved a template row.
+// Stages whose default body contains "REPLACE THIS" must never auto-send: the
+// artist has to fill in something specific before it goes out.
+export const STAGE_AUTOSEND_DEFAULTS: Record<Exclude<BookingState, 'cancelled'>, boolean> = {
+  inquiry:       true,   // submission received — sent automatically when form comes in
+  follow_up:     false,  // contains REPLACE THIS — must be edited
+  accepted:      false,  // deposit request — artist should confirm deposit link first
+  sent_deposit:  false,
+  sent_calendar: true,   // calendar link — sent automatically when Stripe deposit clears
+  booked:        true,
+  confirmed:     true,
+  completed:     true,
+  rejected:      false,
+};
+
+// Stages that the artist must edit before sending (REPLACE THIS markers, etc).
+// The settings UI hides the auto-send toggle for these.
+export function templateRequiresEdit(state: string | null | undefined, body: string): boolean {
+  if (state === 'follow_up') return true;
+  return /REPLACE THIS/.test(body);
+}
+
 export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>, { subject: string; body: string }> = {
   inquiry: {
     subject: `Got your submission`,
@@ -18,8 +51,8 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
     body: `Hi {clientFirstName},\n\nThanks for sending this over. Before I can quote it, a few quick questions:\n\nREPLACE THIS with your questions\n\nReply whenever you can.\n\n{artistName}`,
   },
   accepted: {
-    subject: `Ready to book`,
-    body: `Hi {clientFirstName},\n\nI'd like to do this one. To save your spot, send the deposit here:\n{paymentLink}\n\nOnce that's in I'll send a link to pick your appointment time.\n\n{artistName}`,
+    subject: `Save your spot — deposit to book`,
+    body: `Hi {clientFirstName},\n\nI'd love to do this tattoo. To save your spot, send the deposit here:\n{paymentLink}\n\nOnce the deposit is in, you'll get a link to pick your appointment time.\n\n{artistName}`,
   },
   sent_deposit: {
     subject: `Deposit reminder`,
@@ -31,11 +64,11 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
   },
   booked: {
     subject: `You're booked`,
-    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}. See you then.\n\n{artistName}`,
+    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}.\n\n{studioAddress}\n{studioMapsUrl}\n\nSee you then.\n\n{artistName}`,
   },
   confirmed: {
     subject: `You're booked`,
-    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}. See you then.\n\n{artistName}`,
+    body: `Hi {clientFirstName},\n\nYou're booked for {appointmentDate}.\n\n{studioAddress}\n{studioMapsUrl}\n\nSee you then.\n\n{artistName}`,
   },
   completed: {
     subject: `Thanks for coming in`,
@@ -55,6 +88,10 @@ export interface TemplateVars {
   calendarLink: string;     // first calendar link URL (or empty)
   appointmentDate: string;
   stripePaymentLink: string; // Stripe-generated payment link for this booking (or empty)
+  schedulingLink: string;      // per-booking scheduling URL (or empty)
+  schedulingLinkLabel: string; // label for the matched scheduling link (or empty)
+  studioAddress: string;     // artist's saved studio address (or empty)
+  studioMapsUrl: string;     // Google Maps search URL for studioAddress (or empty)
   // Full link lists used by the {paymentLink:Label} and {calendarLink:Label}
   // placeholder resolver. Not meant to be inserted as a single token.
   paymentLinksList: PaymentLink[];
@@ -69,6 +106,9 @@ export function buildTemplateVars(opts: {
   appointmentDate?: string;
   primaryPaymentLink?: string;
   stripePaymentLink?: string;
+  schedulingLink?: string;
+  schedulingLinkLabel?: string;
+  studioAddress?: string;
 }): TemplateVars {
   const paymentLink = opts.primaryPaymentLink || opts.paymentLinksList[0]?.url || '';
   const calendarLink = opts.calendarLinksList[0]?.url || '';
@@ -81,6 +121,12 @@ export function buildTemplateVars(opts: {
     calendarLink,
     appointmentDate: opts.appointmentDate ?? '',
     stripePaymentLink: opts.stripePaymentLink ?? '',
+    schedulingLink: opts.schedulingLink ?? '',
+    schedulingLinkLabel: opts.schedulingLinkLabel ?? '',
+    studioAddress: opts.studioAddress ?? '',
+    studioMapsUrl: opts.studioAddress
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(opts.studioAddress)}`
+      : '',
     paymentLinksList: opts.paymentLinksList,
     calendarLinksList: opts.calendarLinksList,
   };
@@ -99,6 +145,9 @@ function stripLinesWithEmptyPlaceholders(template: string, vars: TemplateVars): 
   if (!vars.calendarLink) empty.push("calendarLink");
   if (!vars.appointmentDate) empty.push("appointmentDate");
   if (!vars.stripePaymentLink) empty.push("stripePaymentLink");
+  if (!vars.schedulingLink) empty.push("schedulingLink");
+  if (!vars.studioAddress) empty.push("studioAddress");
+  if (!vars.studioMapsUrl) empty.push("studioMapsUrl");
   if (empty.length === 0) return template;
 
   return template
@@ -124,19 +173,37 @@ export function applyPlaceholders(template: string, vars: TemplateVars): string 
   const cleaned = stripLinesWithEmptyPlaceholders(template, vars);
   return cleaned
     // Labeled link variables: {paymentLink:Label} / {calendarLink:Label}
+    // Resolve to [Label](url) markdown so textToHtmlBody renders the label, not the bare URL.
     .replace(/\{paymentLink:([^}]+)\}/g, (_match, rawLabel: string) => {
-      return findLinkByLabel(vars.paymentLinksList, rawLabel) ?? vars.paymentLink;
+      const url = findLinkByLabel(vars.paymentLinksList, rawLabel) ?? vars.paymentLink;
+      return url ? `[${rawLabel.trim()}](${url})` : rawLabel.trim();
     })
     .replace(/\{calendarLink:([^}]+)\}/g, (_match, rawLabel: string) => {
-      return findLinkByLabel(vars.calendarLinksList, rawLabel) ?? vars.calendarLink;
+      const url = findLinkByLabel(vars.calendarLinksList, rawLabel) ?? vars.calendarLink;
+      return url ? `[${rawLabel.trim()}](${url})` : rawLabel.trim();
     })
     .replace(/\{clientFirstName\}/g, vars.clientFirstName)
     .replace(/\{clientName\}/g, vars.clientName)
     .replace(/\{artistName\}/g, vars.artistName)
-    .replace(/\{paymentLink\}/g, vars.paymentLink)
-    .replace(/\{calendarLink\}/g, vars.calendarLink)
+    .replace(/\{paymentLink\}/g, () => {
+      const url = vars.paymentLink;
+      const label = vars.paymentLinksList[0]?.label ?? 'Payment link';
+      return url ? `[${label}](${url})` : url;
+    })
+    .replace(/\{calendarLink\}/g, () => {
+      const url = vars.calendarLink;
+      const label = vars.calendarLinksList[0]?.label ?? 'Scheduling link';
+      return url ? `[${label}](${url})` : url;
+    })
     .replace(/\{appointmentDate\}/g, vars.appointmentDate)
-    .replace(/\{stripePaymentLink\}/g, vars.stripePaymentLink);
+    .replace(/\{stripePaymentLink\}/g, vars.stripePaymentLink)
+    .replace(/\{schedulingLink\}/g, () => {
+      const url = vars.schedulingLink;
+      const label = vars.schedulingLinkLabel || 'Scheduling link';
+      return url ? `[${label}](${url})` : url;
+    })
+    .replace(/\{studioAddress\}/g, vars.studioAddress)
+    .replace(/\{studioMapsUrl\}/g, vars.studioMapsUrl);
 }
 
 function buildFromHeader(artistName: string): string {
@@ -156,11 +223,13 @@ interface SendEmailPayload {
   template: { subject: string; body: string };
   artistReplyTo?: string | null;
   branding?: EmailBranding;
+  threadMessageId?: string;
 }
 
 interface SendEmailResult {
   subject?: string;
   providerMessageId?: string;
+  messageId?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -172,15 +241,79 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-// Convert a plain-text body into safe HTML: escape, then linkify URLs and
-// preserve line breaks. Used for the HTML version when a logo header is shown.
-function textToHtmlBody(text: string): string {
-  const escaped = escapeHtml(text);
-  const linkified = escaped.replace(
+// Process a single inline segment: escape HTML, apply **bold** / *italic*, linkify bare URLs.
+// Markdown link tokens [label](url) are handled separately before this is called.
+function processInlineHtml(s: string): string {
+  let t = escapeHtml(s);
+  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Linkify remaining bare URLs (after bold/italic so * inside URLs isn't parsed)
+  t = t.replace(
     /(https?:\/\/[^\s<]+)/g,
     '<a href="$1" style="color:#2563eb;text-decoration:underline;word-break:break-all">$1</a>',
   );
-  return linkified.replace(/\n/g, '<br>');
+  return t;
+}
+
+// Convert a markdown-formatted plain-text body into safe HTML.
+// Supports: [label](url) links, **bold**, *italic*, - bullet lists, bare URLs.
+function textToHtmlBody(text: string): string {
+  const lines = text.split('\n');
+  const htmlParts: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const bulletMatch = lines[i].match(/^- (.*)$/);
+    if (bulletMatch) {
+      // Collect consecutive bullet lines into a <ul>
+      const items: string[] = [];
+      while (i < lines.length) {
+        const bm = lines[i].match(/^- (.*)$/);
+        if (!bm) break;
+        items.push(bm[1]);
+        i++;
+      }
+      const listItems = items
+        .map(item => `<li style="margin:2px 0">${processLine(item)}</li>`)
+        .join('');
+      htmlParts.push(`<ul style="margin:4px 0;padding-left:1.5em">${listItems}</ul>`);
+    } else {
+      htmlParts.push(processLine(lines[i]));
+      i++;
+    }
+  }
+
+  return htmlParts.join('<br>');
+}
+
+// Process one line: split on [label](url) markdown links, then apply inline formatting.
+function processLine(line: string): string {
+  const MD = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  const parts: { kind: 'text' | 'link'; text?: string; label?: string; url?: string }[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = MD.exec(line)) !== null) {
+    if (m.index > last) parts.push({ kind: 'text', text: line.slice(last, m.index) });
+    parts.push({ kind: 'link', label: m[1], url: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) parts.push({ kind: 'text', text: line.slice(last) });
+  return parts
+    .map(p =>
+      p.kind === 'link'
+        ? `<a href="${escapeHtml(p.url!)}" style="color:#2563eb;text-decoration:underline;word-break:break-word">${escapeHtml(p.label!)}</a>`
+        : processInlineHtml(p.text!),
+    )
+    .join('');
+}
+
+// For the plain-text email part, render [label](url) as "label (url)" and strip
+// markdown bold/italic markers so plain-text clients see clean copy.
+function markdownLinksToText(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, label: string, url: string) => `${label} (${url})`)
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1');
 }
 
 function buildHtmlEmail(bodyText: string, branding?: EmailBranding): string {
@@ -204,16 +337,24 @@ ${logoBlock}
 }
 
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
-  const { toEmail, vars, template, artistReplyTo, branding } = payload;
+  const { toEmail, vars, template, artistReplyTo, branding, threadMessageId } = payload;
 
   const subject = applyPlaceholders(template.subject, vars);
-  const text = applyPlaceholders(template.body, vars);
+  const resolved = applyPlaceholders(template.body, vars);
   const from = buildFromHeader(vars.artistName);
-  const html = buildHtmlEmail(text, branding);
+  const html = buildHtmlEmail(resolved, branding);
+  const text = markdownLinksToText(resolved);
+  const messageId = generateMessageId();
+
+  const headers: Record<string, string> = { 'Message-ID': messageId };
+  if (threadMessageId) {
+    headers['In-Reply-To'] = threadMessageId;
+    headers['References'] = threadMessageId;
+  }
 
   if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
-    console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo: artistReplyTo, text });
-    return { subject };
+    console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo: artistReplyTo, messageId, threadMessageId, text });
+    return { subject, messageId };
   }
 
   try {
@@ -223,12 +364,13 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
       subject,
       text,
       html,
+      headers,
       ...(artistReplyTo ? { replyTo: artistReplyTo } : {}),
     });
-    return { subject, providerMessageId: result.data?.id };
+    return { subject, providerMessageId: result.data?.id, messageId };
   } catch (error) {
     console.error('Failed to send email via Resend:', error);
-    return { subject };
+    return { subject, messageId };
   }
 }
 
@@ -242,9 +384,11 @@ export async function sendStateTransitionEmail(payload: {
   calendarLinksList: CalendarLink[];
   primaryPaymentLink?: string;
   appointmentDate?: string;
+  studioAddress?: string;
   template?: EmailTemplate | null;
   artistReplyTo?: string | null;
   branding?: EmailBranding;
+  threadMessageId?: string;
 }): Promise<SendEmailResult> {
   const { newState } = payload;
   if (newState === 'cancelled') return {};
@@ -259,6 +403,7 @@ export async function sendStateTransitionEmail(payload: {
     calendarLinksList: payload.calendarLinksList,
     primaryPaymentLink: payload.primaryPaymentLink,
     appointmentDate: payload.appointmentDate,
+    studioAddress: payload.studioAddress,
   });
 
   return sendEmail({
@@ -269,5 +414,6 @@ export async function sendStateTransitionEmail(payload: {
       : defaults,
     artistReplyTo: payload.artistReplyTo,
     branding: payload.branding,
+    threadMessageId: payload.threadMessageId,
   });
 }

@@ -24,15 +24,17 @@ export default async function BookingsPage({
   const [{ data: bookingsData }, { data: baseFields }, { data: customFields }, { data: artistData }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, stripe_payment_link_url, total_amount, tip_amount, completion_notes, completion_image_urls, created_at, updated_at")
+      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, stripe_payment_link_url, total_amount, tip_amount, completion_notes, completion_image_urls, sort_order, created_at, updated_at")
       .eq("artist_id", user.id)
+      .order("sort_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false }),
     supabase.from("form_fields").select("field_key, label").eq("artist_id", user.id),
     supabase.from("custom_form_fields").select("field_key, label").eq("artist_id", user.id),
-    supabase.from("artists").select("calendar_sync_enabled, slug, stripe_api_key, name, studio_name").eq("id", user.id).single(),
+    supabase.from("artists").select("calendar_sync_enabled, slug, stripe_api_key, name, studio_name, scheduling_links").eq("id", user.id).single(),
   ]);
 
   const hasStripe = Boolean((artistData as Record<string, unknown>)?.stripe_api_key);
+  const schedulingLinks = (artistData as { scheduling_links?: unknown } | null)?.scheduling_links ?? [];
 
   const bookings: Booking[] = (bookingsData ?? []) as Booking[];
   const fieldLabelMap: Record<string, string> = {};
@@ -61,7 +63,7 @@ export default async function BookingsPage({
           </div>
         </header>
         <div className="flex-1 overflow-hidden">
-          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} initialExpandId={initialExpandId} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} hasStripe={hasStripe} artistName={(artistData as Record<string,unknown>)?.name as string ?? (artistData as Record<string,unknown>)?.studio_name as string ?? ""} />
+          <BookingsTable bookings={bookings} fieldLabelMap={fieldLabelMap} initialState={initialState} initialExpandId={initialExpandId} calendarSyncEnabled={artistData?.calendar_sync_enabled ?? false} hasStripe={hasStripe} artistName={(artistData as Record<string,unknown>)?.name as string ?? (artistData as Record<string,unknown>)?.studio_name as string ?? ""} artistId={user.id} schedulingLinks={schedulingLinks as never} />
         </div>
       </main>
       <PaymentSSEListener artistId={user.id} />

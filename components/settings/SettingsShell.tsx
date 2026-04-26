@@ -29,7 +29,6 @@ export interface SettingsShellProps {
   gmailAddress: string;
   emailLogoEnabled: boolean;
   emailLogoBg: "light" | "dark";
-  autoEmailsEnabled: boolean;
   hasLogo: boolean;
   logoUrl: string | null;
   accentTheme: "crimson" | "blue";
@@ -133,14 +132,16 @@ export function SettingsShell(props: SettingsShellProps) {
                 title="Email Templates"
                 description={[
                   "Customize the message that goes out at each booking stage.",
-                  "Toggle auto-send to control whether emails go out on their own, or only when you click Send.",
+                  "Toggle auto-send per template to control whether each one goes out on its own.",
                 ]}
               />
               <EmailTemplatesSettings
                 paymentLinks={props.paymentLinks}
                 calendarLinks={props.calendarLinks}
+                schedulingLinks={props.schedulingLinks}
                 artistName={props.artistName}
-                initialAutoEmailsEnabled={props.autoEmailsEnabled}
+                studioAddress={props.studioAddress}
+                artistId={props.artistId}
               />
             </div>
           )}

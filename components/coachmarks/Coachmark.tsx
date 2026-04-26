@@ -99,7 +99,8 @@ export function Coachmark({
         rect.top >= cardHeight + margin ? "top" : "bottom";
       let left = rect.left + rect.width / 2 - cardWidth / 2;
       left = Math.max(12, Math.min(left, window.innerWidth - cardWidth - 12));
-      const top = placement === "top" ? rect.top - cardHeight - margin : rect.bottom + margin;
+      const rawTop = placement === "top" ? rect.top - cardHeight - margin : rect.bottom + margin;
+      const top = Math.max(12, Math.min(rawTop, window.innerHeight - cardHeight - 12));
       setPos({ top, left, placement });
     };
     compute();
@@ -162,7 +163,7 @@ export function Coachmark({
       ref={cardRef}
       role="dialog"
       aria-label={title}
-      className="fixed z-[10002] w-96 max-w-[calc(100vw-24px)] rounded-xl bg-white shadow-2xl border border-gray-200 p-5"
+      className="fixed z-[10002] w-96 max-w-[calc(100vw-24px)] max-h-[80vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-200 p-5"
       style={{ top: pos.top, left: pos.left }}
       onMouseDown={e => e.stopPropagation()}
     >

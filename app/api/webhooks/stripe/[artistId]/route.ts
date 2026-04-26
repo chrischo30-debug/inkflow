@@ -1,19 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pushSseEvent } from "@/lib/sse-registry";
-import { sendEmail, buildTemplateVars } from "@/lib/email";
+import { sendEmail, buildTemplateVars, DEFAULT_EMAIL_TEMPLATES } from "@/lib/email";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 
-const CALENDAR_EMAIL_TEMPLATE = {
-  subject: `Deposit received, pick your time`,
-  body: `Hi {clientFirstName},
-
-Got your deposit, thanks. Pick a time that works for you here:
-{schedulingLink}
-
-{artistName}`,
-};
-
+// Fallback when the artist has no scheduling_link set on the booking — we have
+// nothing to send the client to, so just acknowledge receipt.
 const CALENDAR_EMAIL_NO_LINK_TEMPLATE = {
   subject: `Deposit received`,
   body: `Hi {clientFirstName},
@@ -36,7 +28,7 @@ export async function POST(
   const supabase = createAdminClient();
   const { data: artist } = await supabase
     .from("artists")
-    .select("stripe_webhook_secret, stripe_api_key, name, scheduling_links, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
+    .select("stripe_webhook_secret, stripe_api_key, name, scheduling_links, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address")
     .eq("id", artistId)
     .single();
 
@@ -63,10 +55,12 @@ export async function POST(
       // Fetch the booking to get scheduling_link_id and current state
       const { data: booking } = await supabase
         .from("bookings")
-        .select("client_email, client_name, state, scheduling_link_id")
+        .select("client_email, client_name, state, scheduling_link_id, thread_message_id")
         .eq("id", bookingId)
         .eq("artist_id", artistId)
         .single();
+
+      const stripeThreadMessageId = (booking as { thread_message_id?: string | null } | null)?.thread_message_id ?? undefined;
 
       // Mark deposit paid + move to sent_calendar if currently in sent_deposit
       const updates: Record<string, unknown> = {
@@ -101,15 +95,41 @@ export async function POST(
           logoEnabled: (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
           logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null }).email_logo_bg ?? "light") as "light" | "dark",
         };
-        if (schedulingUrl) {
-          const vars = {
-            ...buildTemplateVars({ clientName, artistName, paymentLinksList: [], calendarLinksList: [] }),
-            schedulingLink: schedulingUrl,
-          };
-          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_TEMPLATE, artistReplyTo, branding });
-        } else {
-          const vars = buildTemplateVars({ clientName, artistName, paymentLinksList: [], calendarLinksList: [] });
-          await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_NO_LINK_TEMPLATE, artistReplyTo, branding });
+
+        // Prefer the artist's saved sent_calendar template (auto_send respected),
+        // falling back to the built-in default. When no scheduling URL exists for
+        // this booking, send the no-link acknowledgement instead.
+        const { data: savedTpl } = await supabase
+          .from("email_templates")
+          .select("subject, body, auto_send, enabled")
+          .eq("artist_id", artistId)
+          .eq("state", "sent_calendar")
+          .maybeSingle();
+
+        const stageAutoOn = savedTpl ? savedTpl.auto_send : true;
+        const stageEnabled = savedTpl ? (savedTpl as { enabled?: boolean | null }).enabled !== false : true;
+        if (stageEnabled && stageAutoOn) {
+          const studioAddress = (artist as { studio_address?: string | null }).studio_address ?? '';
+          if (schedulingUrl) {
+            const vars = buildTemplateVars({
+              clientName, artistName, paymentLinksList: [], calendarLinksList: [],
+              schedulingLink: schedulingUrl,
+              studioAddress,
+            });
+            const template = savedTpl
+              ? { subject: savedTpl.subject, body: savedTpl.body }
+              : DEFAULT_EMAIL_TEMPLATES.sent_calendar;
+            const { messageId: stripeMsgId } = await sendEmail({ toEmail: clientEmail, vars, template, artistReplyTo, branding, threadMessageId: stripeThreadMessageId });
+            if (stripeMsgId && !stripeThreadMessageId) {
+              await supabase.from("bookings").update({ thread_message_id: stripeMsgId }).eq("id", bookingId).eq("artist_id", artistId);
+            }
+          } else {
+            const vars = buildTemplateVars({ clientName, artistName, paymentLinksList: [], calendarLinksList: [], studioAddress });
+            const { messageId: stripeMsgId } = await sendEmail({ toEmail: clientEmail, vars, template: CALENDAR_EMAIL_NO_LINK_TEMPLATE, artistReplyTo, branding, threadMessageId: stripeThreadMessageId });
+            if (stripeMsgId && !stripeThreadMessageId) {
+              await supabase.from("bookings").update({ thread_message_id: stripeMsgId }).eq("id", bookingId).eq("artist_id", artistId);
+            }
+          }
         }
       }
 

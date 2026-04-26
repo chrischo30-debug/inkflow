@@ -3,6 +3,7 @@
 import { useState, Fragment, useMemo, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
+import { formatPhone } from "@/lib/format";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
 import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays, Send } from "lucide-react";
@@ -611,7 +612,7 @@ export function BookingsTable({
                       {booking.client_phone && (
                         <>
                           <span className="text-on-surface-variant/60">·</span>
-                          <span className="text-sm text-on-surface-variant">{booking.client_phone}</span>
+                          <span className="text-sm text-on-surface-variant">{formatPhone(booking.client_phone)}</span>
                           <InlineCopyButton value={booking.client_phone} />
                         </>
                       )}

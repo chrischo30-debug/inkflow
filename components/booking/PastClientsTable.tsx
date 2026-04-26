@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Booking } from "@/lib/types";
+import { formatPhone } from "@/lib/format";
 import { Search, ChevronRight } from "lucide-react";
 
 function fmtDate(iso: string): string {
@@ -167,7 +168,7 @@ export function PastClientsTable({ bookings }: { bookings: Booking[] }) {
                         <td colSpan={5} className="px-4 pb-5 pt-2">
                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-sm">
                             {booking.client_phone && (
-                              <div><p className="font-medium text-on-surface-variant mb-0.5">Phone</p><p className="text-on-surface">{booking.client_phone}</p></div>
+                              <div><p className="font-medium text-on-surface-variant mb-0.5">Phone</p><p className="text-on-surface">{formatPhone(booking.client_phone)}</p></div>
                             )}
                             {booking.appointment_date && (
                               <div><p className="font-medium text-on-surface-variant mb-0.5">Appointment</p><p className="text-on-surface">{fmtDate(booking.appointment_date)}</p></div>

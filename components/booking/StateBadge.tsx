@@ -3,7 +3,7 @@ import { BookingState } from "@/lib/types";
 const stateConfig: Record<BookingState, { label: string; colorClass: string }> = {
   inquiry:   { label: "Submission", colorClass: "bg-outline-variant/30 text-on-surface-variant border-outline-variant/50" },
   follow_up: { label: "Follow Ups", colorClass: "bg-secondary-container/40 text-on-secondary-container border-secondary-container/60" },
-  accepted:      { label: "Accepted",      colorClass: "bg-surface-tint/20 text-surface-tint border-surface-tint/30" },
+  accepted:      { label: "Deposit Pending", colorClass: "bg-tertiary/10 text-tertiary border-tertiary/20" },
   sent_deposit:  { label: "Sent Deposit",  colorClass: "bg-tertiary/10 text-tertiary border-tertiary/20" },
   sent_calendar: { label: "Sent Calendar", colorClass: "bg-secondary-container/40 text-on-secondary-container border-secondary-container/60" },
   booked:        { label: "Booked",        colorClass: "bg-primary/10 text-primary border-primary/20" },

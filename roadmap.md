@@ -122,6 +122,19 @@
 - **Tooltip text upsized**: Coachmark card width `w-80 → w-96`, title `text-sm → text-base`, body `text-xs → text-sm` with `space-y-2.5` for paragraph breaks.
 - **New migration**: `20260425_studio_address_and_email_logo.sql` (`studio_address`, `email_logo_enabled`, `email_logo_bg`, `auto_emails_enabled`).
 
+### Session — Polish, Email Threading & UX Fixes (2026-04-26)
+- **Email threading**: notification emails now thread in the client's inbox using RFC 2822 `In-Reply-To` / `References` headers via Resend `headers` field. Every outgoing email gets a `Message-ID`; the first email's ID is stored in `bookings.thread_message_id`; subsequent state-transition emails reference it. Manual compose ("Follow Up", reject) and scheduling confirmation emails are excluded — those may be conversational. New `THREADING_STATES` set in `lib/email.ts`. Migration: `20260426_email_threading.sql`.
+- **Default form fields — select type**: size and placement fields now default to `select` type to showcase different field types. Artists who hadn't customized these fields get updated via migration `20260426_form_fields_select_defaults.sql`.
+- **Richer seed data**: `deploy/seed-demo.mjs` — every booking now has `size`, `placement`, `budget`, `reference_urls`; state names corrected to pipeline v2 values; removed stale `accepted` + `ideal_date` fields; added `rejected` example.
+- **Sent Deposit card**: replaced small "Awaiting payment…" text with a prominent pill ("Stripe will auto-advance when paid") in primary tint. Removed "Copy deposit link" button — link is still on the modal.
+- **View client scroll-to-row**: "View client" from BookingCard now scrolls and expands the matching client row in the Clients table. `ClientsTable` uses a `rowRefs` Map + `requestAnimationFrame` + `scrollIntoView({ behavior: "smooth", block: "center" })` keyed on email. URL search param `?expand=email` triggers the effect.
+- **New booking from client view**: `AddBookingModal` adds a "Send them the form" primary option with the form URL pre-filled with name/email/phone (Copy link, mailto, and Preview form actions). Manual entry is collapsible ("Or add it manually instead"). Booking page reads `?name=&email=&phone=` and passes them as `prefill` to `InquiryForm` defaultValues.
+- **Pipeline tooltip update**: removed "Accepted" stage row; added note that booking moves to Booked automatically when client picks a time; reformatted as per-stage rows with bold labels for readability.
+- **Coachmark viewport clamping**: Coachmark `top` clamped to `[12, vh - cardHeight - 12]`; card gets `max-h-[80vh] overflow-y-auto` for very tall tip content.
+- **HelpTooltip viewport clamping**: `top` now clamped the same way — `Math.max(EDGE, Math.min(rawTop, vh - ph - EDGE))` — so the `?` tooltip near the top of the screen no longer clips above the viewport.
+- **Phone formatting**: new `lib/format.ts` `formatPhone()` normalizes any stored phone string to `(NXX) NXX-XXXX`. Applied to display in BookingCard, BookingsTable, ClientsTable, PastClientsTable.
+- **"Accepted" label cleanup**: `StateBadge`, `BookingCard` STATE_LABELS, `ClientsTable` STATE_LABEL, and the dashboard `HelpTooltip` pipeline list all now show "Deposit Pending" for legacy `accepted` rows instead of "Accepted".
+
 ### Session — Pipeline Cleanup, Bookings Consistency & Email UX (2026-04-26)
 - **Removed "accepted" stage**: pipeline is now 6 stages — Submission → Follow Up → Sent Deposit → Sent Calendar → Booked → Completed. Accept action goes directly to Sent Deposit; no intermediate holding state. Legacy `accepted` DB rows folded into Sent Deposit in all UI views.
 - **DB enum gap fixed**: `sent_deposit`, `sent_calendar`, `booked` added to `booking_state` enum via `20260425_remove_accepted_state.sql`. Must be run in two steps in Supabase SQL editor (ALTER TYPE first, UPDATE separately — Postgres transaction constraint).
