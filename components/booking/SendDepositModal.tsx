@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Check, DollarSign } from "lucide-react";
+import { Check, DollarSign, Eye, Pencil } from "lucide-react";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
+import { BodyPreview } from "./EmailComposeModal";
+import { EmailVarChips } from "@/components/shared/EmailVarChips";
 
 interface Props {
   bookingId: string;
   clientName: string;
+  existingDepositUrl?: string;
   hasStripe: boolean;
   schedulingLinks: SchedulingLink[];
   artistId: string;
@@ -17,17 +20,22 @@ interface Props {
 
 interface Template { state: string | null; subject: string; body: string; }
 
-export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingLinks, artistId, onSent, onClose }: Props) {
+export function SendDepositModal({ bookingId, clientName, existingDepositUrl, hasStripe, schedulingLinks, artistId, onSent, onClose }: Props) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedState, setSelectedState] = useState<string>("accepted");
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
 
   // Stripe deposit link generation
   const [depositAmount, setDepositAmount] = useState("");
-  const [depositUrl, setDepositUrl] = useState("");
+  const [depositUrl, setDepositUrl] = useState(existingDepositUrl ?? "");
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkError, setLinkError] = useState("");
@@ -41,16 +49,42 @@ export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingL
       .then(data => {
         const all: Template[] = data.templates ?? [];
         setTemplates(all);
-        const depositTpl = all.find(t => t.state === "sent_deposit") ?? all[0];
-        if (depositTpl) { setSubject(depositTpl.subject); setBody(depositTpl.body); }
+        const tpl = all.find(t => t.state === "accepted") ?? all.find(t => t.state === "sent_deposit") ?? all[0];
+        if (tpl) { setSubject(tpl.subject); setBody(tpl.body); setSelectedState(tpl.state ?? ""); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [bookingId]);
 
-  const selectTemplate = (state: string | null) => {
+  const selectTemplate = (state: string) => {
+    setSelectedState(state);
     const t = templates.find(x => x.state === state);
     if (t) { setSubject(t.subject); setBody(t.body); }
+  };
+
+  const insertAtCursor = (text: string) => {
+    if (mode === "preview") setMode("edit");
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : textareaRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
+    if (!el) {
+      if (isSubject) setSubject(v => v + text);
+      else setBody(v => v + (v.endsWith("\n") || v === "" ? "" : "\n") + text);
+      return;
+    }
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const before = val.slice(0, start);
+    const needsNewline = !isSubject && before.length > 0 && !before.endsWith("\n");
+    const insert = (needsNewline ? "\n" : "") + text;
+    const newVal = before + insert + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
+    requestAnimationFrame(() => {
+      el.selectionStart = start + insert.length;
+      el.selectionEnd = start + insert.length;
+      el.focus();
+    });
   };
 
   const generateDepositLink = async () => {
@@ -112,10 +146,27 @@ export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingL
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
-          {/* Stripe deposit link generator */}
+          {/* Stripe deposit link */}
           {hasStripe && (
             <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3">
-              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Generate Stripe deposit link</p>
+              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Stripe deposit link</p>
+
+              {/* Existing link */}
+              {existingDepositUrl && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] text-on-surface-variant">Previously generated link:</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[11px] font-mono text-on-surface-variant/70 truncate flex-1">{existingDepositUrl}</p>
+                    <button type="button" onClick={copyLink}
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">
+                      {linkCopied ? "✓ Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant/60">Or generate a new one below:</p>
+                </div>
+              )}
+
+              {/* Generate new */}
               <div className="flex gap-2">
                 <div className="flex items-center gap-1 flex-1 rounded-lg border border-outline-variant/30 bg-surface px-3 py-2 focus-within:border-primary transition-colors">
                   <span className="text-sm text-on-surface-variant">$</span>
@@ -124,13 +175,13 @@ export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingL
                     onKeyDown={e => e.key === "Enter" && generateDepositLink()}
                     className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
                 </div>
-                <button type="button" onClick={depositUrl ? copyLink : generateDepositLink}
+                <button type="button" onClick={depositUrl && !existingDepositUrl ? copyLink : generateDepositLink}
                   disabled={generatingLink}
                   className="px-3 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-50 transition-opacity whitespace-nowrap">
-                  {generatingLink ? "Creating…" : depositUrl ? (linkCopied ? "✓ Copied" : "Copy link") : "Generate & copy"}
+                  {generatingLink ? "Creating…" : (depositUrl && !existingDepositUrl) ? (linkCopied ? "✓ Copied" : "Copy link") : "Generate & copy"}
                 </button>
               </div>
-              {depositUrl && (
+              {depositUrl && !existingDepositUrl && (
                 <p className="text-[11px] font-mono text-on-surface-variant/60 truncate">{depositUrl}</p>
               )}
               {linkError && <p className="text-xs text-destructive">{linkError}</p>}
@@ -165,9 +216,8 @@ export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingL
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Email to client</p>
               {templates.length > 1 && (
-                <select onChange={e => selectTemplate(e.target.value || null)}
+                <select value={selectedState} onChange={e => selectTemplate(e.target.value)}
                   className="text-xs text-on-surface-variant bg-transparent border border-outline-variant/30 rounded-md px-2 py-1 focus:outline-none">
-                  <option value="">Choose template…</option>
                   {templates.map(t => <option key={t.state} value={t.state ?? ""}>{t.state ?? "Default"}</option>)}
                 </select>
               )}
@@ -176,10 +226,53 @@ export function SendDepositModal({ bookingId, clientName, hasStripe, schedulingL
               <p className="text-xs text-on-surface-variant/60">Loading template…</p>
             ) : (
               <>
-                <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
-                  className="w-full px-3 py-2 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary" />
-                <textarea rows={7} value={body} onChange={e => setBody(e.target.value)} placeholder="Email body"
-                  className="w-full px-3 py-2 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none font-mono" />
+                {/* Subject */}
+                <div>
+                  <label className="text-xs font-medium text-on-surface-variant tracking-wide mb-1.5 block">Subject</label>
+                  {mode === "edit" ? (
+                    <input ref={subjectRef} type="text" value={subject} onChange={e => setSubject(e.target.value)}
+                      onFocus={() => { lastFocused.current = "subject"; }}
+                      placeholder="Subject"
+                      className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors" />
+                  ) : (
+                    <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text" onClick={() => setMode("edit")}>
+                      <BodyPreview text={subject} compact />
+                    </div>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
+                    <div className="flex items-center gap-0.5 bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/20">
+                      <button type="button" onClick={() => setMode("edit")}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "edit" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button type="button" onClick={() => setMode("preview")}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "preview" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+                        <Eye className="w-3 h-3" /> Preview
+                      </button>
+                    </div>
+                  </div>
+                  {mode === "edit" ? (
+                    <textarea ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
+                      onFocus={() => { lastFocused.current = "body"; }}
+                      rows={7} placeholder="Email body"
+                      className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors resize-none" />
+                  ) : (
+                    <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text min-h-[140px]" onClick={() => setMode("edit")}>
+                      <BodyPreview text={body} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Variable chips */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={[]} calendarLinks={[]} schedulingLinks={[]} />
+                </div>
               </>
             )}
           </div>

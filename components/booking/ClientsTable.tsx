@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Search, ChevronRight, Plus, Pencil, Trash2, X, Mail, Copy, Check, ExternalLink } from "lucide-react";
+import { Search, ChevronRight, Plus, Pencil, Trash2, X, Mail, Copy, Check, ExternalLink, Send } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import { BookingFormModal } from "./AddBookingModal";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
@@ -18,16 +18,19 @@ type Client = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const ACTIVE_STATES = new Set(["inquiry", "follow_up", "accepted", "confirmed"]);
+const ACTIVE_STATES = new Set(["inquiry", "follow_up", "sent_deposit", "accepted", "sent_calendar", "booked", "confirmed"]);
 
 const STATE_LABEL: Record<string, string> = {
-  inquiry:   "Submission",
-  follow_up: "Follow Up",
-  accepted:  "Accepted",
-  confirmed: "Booked",
-  completed: "Completed",
-  rejected:  "Rejected",
-  cancelled: "Cancelled",
+  inquiry:       "Submission",
+  follow_up:     "Follow Up",
+  accepted:      "Sent Deposit", // legacy
+  sent_deposit:  "Sent Deposit",
+  sent_calendar: "Sent Calendar",
+  booked:        "Booked",
+  confirmed:     "Booked",
+  completed:     "Completed",
+  rejected:      "Rejected",
+  cancelled:     "Cancelled",
 };
 
 const STATE_STYLE: Record<string, string> = {
@@ -372,17 +375,27 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
   const [emailCompose, setEmailCompose] = useState<EmailCompose | null>(null);
   const [emailLoadingFor, setEmailLoadingFor] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const clientParam = searchParams.get("client");
+    if (clientParam) setExpandedEmail(clientParam.toLowerCase());
+  }, [searchParams]);
 
   const openEmailCompose = async (client: Client) => {
     const session = client.sessions[0];
     if (!session) return;
-    setEmailLoadingFor(client.email);
+    await openEmailComposeForSession(session.id, client.email);
+  };
+
+  const openEmailComposeForSession = async (sessionId: string, loadingKey: string) => {
+    setEmailLoadingFor(loadingKey);
     try {
-      const res = await fetch(`/api/bookings/${session.id}/send-email`);
+      const res = await fetch(`/api/bookings/${sessionId}/send-email`);
       if (!res.ok) return;
       const data = await res.json();
       setEmailCompose({
-        bookingId: session.id,
+        bookingId: sessionId,
         subject: "",
         body: "",
         templates: data.templates ?? [],
@@ -609,8 +622,9 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
                               {client.sessions.map(session => (
                                 <div
                                   key={session.id}
-                                  className="flex items-start justify-between gap-3 px-4 py-3 rounded-xl bg-surface-container-low/40 border border-outline-variant/15 hover:border-outline-variant/30 transition-colors"
+                                  className="rounded-xl bg-surface-container-low/40 border border-outline-variant/15 hover:border-outline-variant/30 transition-colors"
                                 >
+                                  <div className="flex items-start justify-between gap-3 px-4 py-3">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATE_STYLE[session.state] ?? "bg-surface-container-high text-on-surface-variant"}`}>
@@ -640,6 +654,15 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      title="Send email about this booking"
+                                      disabled={emailLoadingFor === session.id}
+                                      onClick={() => openEmailComposeForSession(session.id, session.id)}
+                                      className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors disabled:opacity-40"
+                                    >
+                                      <Send className="w-3.5 h-3.5" />
+                                    </button>
                                     <Link
                                       href={`/bookings?expand=${session.id}`}
                                       title="View in bookings"
@@ -656,6 +679,33 @@ export function ClientsTable({ bookings: initialBookings }: { bookings: Booking[
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
+                                  </div>
+                                {(session.sent_emails ?? []).length > 0 && (
+                                  <div className="px-4 pb-3 border-t border-outline-variant/10 pt-2">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Emails sent</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      {(session.sent_emails ?? []).map((entry, i) => (
+                                        <div key={i} className="flex items-center justify-between gap-3 group">
+                                          <span className="text-xs text-on-surface-variant truncate">{entry.label}</span>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[11px] text-on-surface-variant/60">{fmtDate(entry.sent_at)}</span>
+                                            <button
+                                              type="button"
+                                              title="Resend"
+                                              disabled={emailLoadingFor === session.id}
+                                              onClick={() => openEmailComposeForSession(session.id, session.id)}
+                                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-primary disabled:opacity-30"
+                                            >
+                                              <Send className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 </div>
                               ))}
                             </div>

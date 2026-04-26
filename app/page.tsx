@@ -25,9 +25,10 @@ export default async function DashboardPage() {
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, stripe_payment_link_url, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, stripe_payment_link_url, sort_order, created_at, updated_at")
     .eq("artist_id", user.id)
     .neq("state", "cancelled")
+    .order("sort_order", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 
   const { data: baseFields } = await supabase.from("form_fields").select("field_key, label").eq("artist_id", user.id);
@@ -51,7 +52,7 @@ export default async function DashboardPage() {
 
   const newInquiries = bookings.filter(b => b.state === "inquiry");
   const followUps = bookings.filter(b => b.state === "follow_up");
-  const awaitingConfirmation = bookings.filter(b => b.state === "accepted");
+  const awaitingConfirmation = bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted");
   const weekAppointments = bookings.filter(b => {
     const d = b.appointment_date?.slice(0, 10);
     return b.state === "confirmed" && d && d >= weekStart && d <= weekEnd;

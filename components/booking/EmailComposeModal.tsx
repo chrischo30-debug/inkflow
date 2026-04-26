@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, Link2, Plus, Eye, Pencil, Braces } from "lucide-react";
+import { X, Eye, Pencil, Link2 } from "lucide-react";
+import { EmailVarChips } from "@/components/shared/EmailVarChips";
+import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
 
 export interface ResolvedTemplate {
   id?: string | null;
@@ -10,6 +12,8 @@ export interface ResolvedTemplate {
   state?: string | null;
   subject: string;
   body: string;
+  auto_send?: boolean;
+  enabled?: boolean;
 }
 
 export interface InsertLink {
@@ -17,35 +21,54 @@ export interface InsertLink {
   url: string;
 }
 
+export interface SchedulingLinkOption {
+  id: string;
+  label: string;
+}
+
 interface Props {
   templates: ResolvedTemplate[];
   initialSubject: string;
   initialBody: string;
   defaultTemplateState?: string | null;
-  paymentLinks?: InsertLink[];
-  calendarLinks?: InsertLink[];
+  paymentLinks?: PaymentLink[];
+  calendarLinks?: CalendarLink[];
+  schedulingLinks?: SchedulingLinkOption[];
   previewVars?: Record<string, string>;
   onSend: (subject: string, body: string) => Promise<void>;
   onSkip?: () => void;
   onClose: () => void;
 }
 
-const VAR_RE = /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|appointmentDate)(?::[^}]+)?\}/g;
-const TODO_RE = /✏️ REPLACE THIS:[^\n]*/g;
+// Group 1: varName, Group 2: optional :Label suffix
+const VAR_RE = /\{(clientFirstName|clientName|artistName|paymentLink|calendarLink|appointmentDate|studioAddress|studioMapsUrl|schedulingLink)(?::([^}]+))?\}/g;
+// Highlight any "REPLACE THIS" instruction (with or without ✏️ prefix) up to end of line
+const TODO_RE = /(?:✏️ ?)?REPLACE THIS[^\n]*/g;
+// Group 3 & 4 in combined (after VAR_RE's 2 groups): label, url
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
 
-function BodyPreview({ text, vars, resolved, compact }: { text: string; vars?: Record<string, string>; resolved?: boolean; compact?: boolean }) {
-  type Part = { text: string; varName?: string; isTodo?: boolean };
+export function BodyPreview({ text, vars, resolved, compact, paymentLinks = [], calendarLinks = [] }: {
+  text: string;
+  vars?: Record<string, string>;
+  resolved?: boolean;
+  compact?: boolean;
+  paymentLinks?: InsertLink[];
+  calendarLinks?: InsertLink[];
+}) {
+  type Part = { text: string; varName?: string; varLabel?: string; isTodo?: boolean; mdLabel?: string; mdUrl?: string };
   const parts: Part[] = [];
-  // Combined regex to find both {vars} and ✏️ REPLACE THIS: lines in order
-  const combined = new RegExp(`${VAR_RE.source}|${TODO_RE.source}`, 'g');
+  // VAR_RE has 2 capture groups; MD_LINK_RE groups become m[3] and m[4]
+  const combined = new RegExp(`${VAR_RE.source}|${MD_LINK_RE.source}|${TODO_RE.source}`, 'g');
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = combined.exec(text)) !== null) {
     if (m.index > last) parts.push({ text: text.slice(last, m.index) });
-    if (m[0].startsWith('✏️')) {
+    if (m[0].includes('REPLACE THIS')) {
       parts.push({ text: m[0], isTodo: true });
+    } else if (m[3] !== undefined) {
+      parts.push({ text: m[0], mdLabel: m[3], mdUrl: m[4] });
     } else {
-      parts.push({ text: m[0], varName: m[1] });
+      parts.push({ text: m[0], varName: m[1], varLabel: m[2] });
     }
     last = m.index + m[0].length;
   }
@@ -56,8 +79,37 @@ function BodyPreview({ text, vars, resolved, compact }: { text: string; vars?: R
         if (p.isTodo) {
           return <mark key={i} className="bg-amber-500/15 text-amber-700 dark:text-amber-400 not-italic rounded px-1 py-0.5 text-xs font-medium">{p.text}</mark>;
         }
+        if (p.mdLabel && p.mdUrl) {
+          if (resolved) {
+            return <a key={i} href={p.mdUrl} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{p.mdLabel}</a>;
+          }
+          return (
+            <span key={i} className="inline-flex items-center gap-1 rounded bg-primary/10 text-primary px-1 py-0.5 text-xs font-medium border border-primary/20">
+              <Link2 className="w-3 h-3" />
+              {p.mdLabel}
+            </span>
+          );
+        }
         if (!p.varName) return <span key={i}>{p.text}</span>;
         if (resolved && vars) {
+          if (p.varName === 'paymentLink' || p.varName === 'calendarLink') {
+            const links = p.varName === 'paymentLink' ? paymentLinks : calendarLinks;
+            const url = p.varLabel
+              ? (links.find(l => l.label.toLowerCase() === p.varLabel!.toLowerCase())?.url ?? vars[p.varName])
+              : vars[p.varName];
+            const displayLabel = p.varLabel || links.find(l => l.url === url)?.label
+              || (p.varName === 'paymentLink' ? 'Payment link' : 'Scheduling link');
+            return url
+              ? <a key={i} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{displayLabel}</a>
+              : <mark key={i} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">{p.varName === 'paymentLink' ? 'payment link needed' : 'scheduling link needed'}</mark>;
+          }
+          if (p.varName === 'schedulingLink') {
+            const url = vars.schedulingLink;
+            const label = vars.schedulingLinkLabel || 'Scheduling link';
+            return url
+              ? <a key={i} href={url} target="_blank" rel="noreferrer" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">{label}</a>
+              : <mark key={i} className="bg-amber-500/15 text-amber-700 not-italic rounded px-1 py-0.5 text-xs font-medium">scheduling link needed</mark>;
+          }
           const val = vars[p.varName];
           return val
             ? <span key={i} className="font-medium text-on-surface">{val}</span>
@@ -69,96 +121,6 @@ function BodyPreview({ text, vars, resolved, compact }: { text: string; vars?: R
   );
 }
 
-function InlineLinkAdder({
-  type,
-  existing,
-  onAdd,
-}: {
-  type: "payment" | "calendar";
-  existing: InsertLink[];
-  onAdd: (link: InsertLink) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState("");
-  const [url, setUrl] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const handleAdd = async () => {
-    if (!label.trim() || !url.trim()) return;
-    setSaving(true);
-    const newLink = { label: label.trim(), url: url.trim() };
-    try {
-      if (type === "payment") {
-        await fetch("/api/artist/payment-links", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ links: [...existing, newLink] }),
-        });
-      } else {
-        await fetch("/api/artist/pipeline-settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ calendar_links: [...existing, newLink] }),
-        });
-      }
-      onAdd(newLink);
-      setLabel("");
-      setUrl("");
-      setOpen(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-surface-container-high border border-outline-variant/30 text-on-surface-variant hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
-      >
-        <Plus className="w-3 h-3" />
-        {type === "payment" ? "Add payment link" : "Add calendar link"}
-      </button>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <input
-        autoFocus
-        type="text"
-        placeholder="Label"
-        value={label}
-        onChange={e => setLabel(e.target.value)}
-        className="w-24 px-2 py-1 text-xs text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-md focus:outline-none focus:border-primary"
-      />
-      <input
-        type="text"
-        placeholder="URL"
-        value={url}
-        onChange={e => setUrl(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setOpen(false); }}
-        className="w-40 px-2 py-1 text-xs text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-md focus:outline-none focus:border-primary"
-      />
-      <button
-        type="button"
-        onClick={handleAdd}
-        disabled={saving || !label.trim() || !url.trim()}
-        className="px-2 py-1 text-xs font-medium rounded-md bg-on-surface text-surface hover:opacity-80 disabled:opacity-40 transition-opacity"
-      >
-        {saving ? "…" : "Save"}
-      </button>
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        className="px-2 py-1 text-xs text-on-surface-variant hover:text-on-surface transition-colors"
-      >
-        Cancel
-      </button>
-    </div>
-  );
-}
 
 export function EmailComposeModal({
   templates,
@@ -167,6 +129,7 @@ export function EmailComposeModal({
   defaultTemplateState,
   paymentLinks: initialPaymentLinks = [],
   calendarLinks: initialCalendarLinks = [],
+  schedulingLinks = [],
   previewVars,
   onSend,
   onSkip,
@@ -177,11 +140,21 @@ export function EmailComposeModal({
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
-  const [paymentLinks, setPaymentLinks] = useState<InsertLink[]>(initialPaymentLinks);
-  const [calendarLinks, setCalendarLinks] = useState<InsertLink[]>(initialCalendarLinks);
+  const paymentLinks = initialPaymentLinks;
+  const calendarLinks = initialCalendarLinks;
+  const subjectRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
 
   const selectedName = templates.find(t => t.subject === subject && t.body === body)?.name ?? "Custom";
+
+  // Auto-resize textarea to content
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [body]);
 
   const pick = (t: ResolvedTemplate) => {
     setSubject(t.subject);
@@ -191,18 +164,22 @@ export function EmailComposeModal({
 
   const insertAtCursor = (text: string) => {
     if (mode === "preview") setMode("edit");
-    const el = textareaRef.current;
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : textareaRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
     if (!el) {
-      setBody(prev => prev + (prev.endsWith("\n") || prev === "" ? "" : "\n") + text);
+      if (isSubject) setSubject(v => v + text);
+      else setBody(v => v + (v.endsWith("\n") || v === "" ? "" : "\n") + text);
       return;
     }
-    const start = el.selectionStart ?? body.length;
-    const end = el.selectionEnd ?? body.length;
-    const before = body.slice(0, start);
-    const needsNewline = before.length > 0 && !before.endsWith("\n");
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const before = val.slice(0, start);
+    const needsNewline = !isSubject && before.length > 0 && !before.endsWith("\n");
     const insert = (needsNewline ? "\n" : "") + text;
-    const newBody = before + insert + body.slice(end);
-    setBody(newBody);
+    const newVal = before + insert + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
     requestAnimationFrame(() => {
       el.selectionStart = start + insert.length;
       el.selectionEnd = start + insert.length;
@@ -219,12 +196,15 @@ export function EmailComposeModal({
     }
   };
 
-  const hasLinks = paymentLinks.length > 0 || calendarLinks.length > 0;
+  const hasUnreplacedTodo = /REPLACE THIS/.test(body) || /REPLACE THIS/.test(subject);
+
+  const fieldClass = "w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors";
+  const previewClass = "px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text";
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="bg-surface border border-outline-variant/20 rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-3xl mx-0 sm:mx-4 flex flex-col overflow-hidden max-h-[92vh]"
+        className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-3xl flex flex-col overflow-hidden max-h-[92vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -239,7 +219,7 @@ export function EmailComposeModal({
           {/* Template picker */}
           {templates.length > 1 && (
             <div className="px-5 pt-4 relative">
-              <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Template</label>
+              <label className="text-xs font-medium text-on-surface-variant tracking-wide mb-1.5 block">Template</label>
               <button
                 type="button"
                 onClick={() => setTemplatePickerOpen(v => !v)}
@@ -268,21 +248,23 @@ export function EmailComposeModal({
 
           {/* Subject */}
           <div className="px-5 pt-4">
-            <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Subject</label>
+            <label className="text-xs font-medium text-on-surface-variant tracking-wide mb-1.5 block">Subject</label>
             {mode === "edit" ? (
               <input
+                ref={subjectRef}
                 type="text"
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
+                onFocus={() => { lastFocused.current = "subject"; }}
+                className={fieldClass}
               />
             ) : (
               <div
-                className="px-3 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg cursor-text"
+                className={previewClass}
                 onClick={() => setMode("edit")}
                 title="Click to edit"
               >
-                <BodyPreview text={subject} vars={previewVars} resolved compact />
+                <BodyPreview text={subject} vars={previewVars} resolved compact paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
               </div>
             )}
           </div>
@@ -290,7 +272,7 @@ export function EmailComposeModal({
           {/* Body — edit / preview toggle */}
           <div className="px-5 pt-4">
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide">Message</label>
+              <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
               <div className="flex items-center gap-0.5 bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/20">
                 <button
                   type="button"
@@ -313,98 +295,30 @@ export function EmailComposeModal({
                 ref={textareaRef}
                 value={body}
                 onChange={e => setBody(e.target.value)}
-                rows={8}
-                className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none font-mono"
+                onFocus={() => { lastFocused.current = "body"; }}
+                rows={1}
+                className={`${fieldClass} resize-none overflow-hidden min-h-[160px]`}
               />
             ) : (
               <div
-                className="px-3 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg cursor-text"
+                className={previewClass}
                 onClick={() => setMode("edit")}
                 title="Click to edit"
               >
-                <BodyPreview text={body} vars={previewVars} resolved />
+                <BodyPreview text={body} vars={previewVars} resolved paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
               </div>
             )}
           </div>
 
           {/* Variable chips */}
-          <div className="px-5 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1 text-xs text-on-surface-variant/70 shrink-0">
-                <Braces className="w-3 h-3" />
-                Variables:
-              </span>
-              {([
-                ["clientFirstName", "First Name"],
-                ["clientName", "Full Name"],
-                ["artistName", "Artist Name"],
-                ["appointmentDate", "Appointment"],
-                ["paymentLink", "Payment Link"],
-                ["calendarLink", "Calendar Link"],
-              ] as [string, string][]).map(([varName, label]) => (
-                <button
-                  key={varName}
-                  type="button"
-                  onClick={() => insertAtCursor(`{${varName}}`)}
-                  className="px-2 py-0.5 text-xs font-mono rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                  title={`Insert {${varName}}`}
-                >
-                  {"{" + label + "}"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Insert links toolbar */}
           <div className="px-5 pt-3 pb-4 space-y-2">
-            {(hasLinks || true) && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1 text-xs text-on-surface-variant/70 shrink-0">
-                  <Link2 className="w-3 h-3" />
-                  Insert:
-                </span>
-                {paymentLinks.map(link => (
-                  <button
-                    key={link.url}
-                    type="button"
-                    onClick={() => insertAtCursor(link.url)}
-                    title={link.url}
-                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-surface-container-high text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                ))}
-                {calendarLinks.map(link => (
-                  <button
-                    key={link.url}
-                    type="button"
-                    onClick={() => insertAtCursor(link.url)}
-                    title={link.url}
-                    className="px-2.5 py-1 text-xs font-medium rounded-md bg-surface-container-high text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <InlineLinkAdder
-                type="payment"
-                existing={paymentLinks}
-                onAdd={link => {
-                  setPaymentLinks(prev => [...prev, link]);
-                  insertAtCursor(link.url);
-                }}
-              />
-              <InlineLinkAdder
-                type="calendar"
-                existing={calendarLinks}
-                onAdd={link => {
-                  setCalendarLinks(prev => [...prev, link]);
-                  insertAtCursor(link.url);
-                }}
-              />
-            </div>
+            <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+            <EmailVarChips
+              onInsert={insertAtCursor}
+              paymentLinks={paymentLinks}
+              calendarLinks={calendarLinks}
+              schedulingLinks={schedulingLinks}
+            />
           </div>
         </div>
 
@@ -418,6 +332,9 @@ export function EmailComposeModal({
             Cancel
           </button>
           <div className="flex items-center gap-3">
+            {hasUnreplacedTodo && (
+              <span className="text-xs text-amber-700 dark:text-amber-400">Fill in the highlighted instructions first</span>
+            )}
             {onSkip && (
               <button
                 type="button"
@@ -430,7 +347,8 @@ export function EmailComposeModal({
             <button
               type="button"
               onClick={handleSend}
-              disabled={sending}
+              disabled={sending || hasUnreplacedTodo}
+              title={hasUnreplacedTodo ? "Replace the highlighted instructions before sending" : undefined}
               className="px-5 py-2.5 text-sm font-medium rounded-xl bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40"
             >
               {sending ? "Sending…" : "Send"}

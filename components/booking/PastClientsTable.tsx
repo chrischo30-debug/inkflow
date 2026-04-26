@@ -9,24 +9,30 @@ function fmtDate(iso: string): string {
 }
 
 const STATE_LABEL: Record<string, string> = {
-  accepted: "Deposit Pending",
-  confirmed: "Scheduled",
-  completed: "Completed",
+  accepted:      "Deposit Pending", // legacy
+  sent_deposit:  "Deposit Pending",
+  sent_calendar: "Scheduling",
+  booked:        "Scheduled",
+  confirmed:     "Scheduled",
+  completed:     "Completed",
 };
 
 const STATE_STYLE: Record<string, string> = {
-  accepted: "bg-amber-100 text-amber-700",
-  confirmed: "bg-blue-100 text-blue-700",
-  completed: "bg-emerald-100 text-emerald-700",
+  accepted:      "bg-amber-100 text-amber-700",
+  sent_deposit:  "bg-amber-100 text-amber-700",
+  sent_calendar: "bg-amber-100 text-amber-700",
+  booked:        "bg-blue-100 text-blue-700",
+  confirmed:     "bg-blue-100 text-blue-700",
+  completed:     "bg-emerald-100 text-emerald-700",
 };
 
-type Tab = "all" | "accepted" | "confirmed" | "completed";
+type Tab = "all" | "sent_deposit" | "booked" | "completed";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "all", label: "All Clients" },
-  { id: "accepted", label: "Deposit Pending" },
-  { id: "confirmed", label: "Scheduled" },
-  { id: "completed", label: "Completed" },
+  { id: "all",          label: "All Clients" },
+  { id: "sent_deposit", label: "Deposit Pending" },
+  { id: "booked",       label: "Scheduled" },
+  { id: "completed",    label: "Completed" },
 ];
 
 export function PastClientsTable({ bookings }: { bookings: Booking[] }) {
@@ -35,7 +41,13 @@ export function PastClientsTable({ bookings }: { bookings: Booking[] }) {
   const [tab, setTab] = useState<Tab>("all");
 
   const q = search.trim().toLowerCase();
-  const byTab = tab === "all" ? bookings : bookings.filter(b => b.state === tab);
+  const byTab = tab === "all"
+    ? bookings
+    : tab === "sent_deposit"
+      ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted" || b.state === "sent_calendar")
+      : tab === "booked"
+        ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
+        : bookings.filter(b => b.state === tab);
   const visible = q
     ? byTab.filter(b =>
         b.client_name.toLowerCase().includes(q) ||
@@ -44,7 +56,13 @@ export function PastClientsTable({ bookings }: { bookings: Booking[] }) {
       )
     : byTab;
 
-  const countFor = (t: Tab) => t === "all" ? bookings.length : bookings.filter(b => b.state === t).length;
+  const countFor = (t: Tab) => t === "all"
+    ? bookings.length
+    : t === "sent_deposit"
+      ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted" || b.state === "sent_calendar").length
+      : t === "booked"
+        ? bookings.filter(b => b.state === "booked" || b.state === "confirmed").length
+        : bookings.filter(b => b.state === t).length;
 
   return (
     <div className="flex flex-col h-full">

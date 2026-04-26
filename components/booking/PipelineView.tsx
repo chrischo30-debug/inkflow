@@ -2,7 +2,7 @@
 
 import { Booking, BookingState } from "@/lib/types";
 import { BookingCard } from "./BookingCard";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { PIPELINE_COLUMNS, COLUMN_LABELS } from "@/lib/pipeline-settings";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
@@ -31,6 +31,7 @@ type EmailCompose = {
   afterSendState?: BookingState;
   paymentLinks?: InsertLink[];
   calendarLinks?: InsertLink[];
+  schedulingLinks?: { id: string; label: string }[];
   previewVars?: Record<string, string>;
 };
 
@@ -45,9 +46,48 @@ export function PipelineView({
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<BookingState | null>(null);
+  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<'above' | 'below'>('below');
+  const [columnOrder, setColumnOrder] = useState<Record<string, string[]>>(() => {
+    const result: Record<string, string[]> = {};
+    PIPELINE_COLUMNS.forEach(col => {
+      const colBookings = col === "booked"
+        ? initialBookings.filter(b => b.state === "booked" || b.state === "confirmed")
+        : col === "sent_deposit"
+          ? initialBookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
+          : initialBookings.filter(b => b.state === col);
+      result[col] = colBookings.map(b => b.id);
+    });
+    return result;
+  });
   // Tracks the column the user just dropped a card into, so the first-drag
   // coachmark has something to point at.
   const [firstDropColumn, setFirstDropColumn] = useState<BookingState | null>(null);
+
+  const normalizeCol = (state: BookingState): BookingState =>
+    state === "confirmed" ? "booked" : state;
+
+  // Keep columnOrder in sync when bookings change columns. Preserves manual
+  // reorder within columns; appends newly arrived bookings at the end.
+  useEffect(() => {
+    setColumnOrder(prev => {
+      const next = { ...prev };
+      PIPELINE_COLUMNS.forEach(col => {
+        const colIds = new Set(
+          (col === "booked"
+            ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
+            : col === "sent_deposit"
+              ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
+              : bookings.filter(b => b.state === col)
+          ).map(b => b.id)
+        );
+        const existing = (prev[col] ?? []).filter(id => colIds.has(id));
+        const added = [...colIds].filter(id => !existing.includes(id));
+        next[col] = [...existing, ...added];
+      });
+      return next;
+    });
+  }, [bookings]);
   const { hasSeen } = useCoachmarks();
 
   // Modals
@@ -73,8 +113,10 @@ export function PipelineView({
   const handleAcceptInquiry = (bookingId: string) => setAcceptModal({ bookingId });
 
   const handleAcceptSent = (bookingId: string) => {
+    // AcceptModal now collects scheduling link + deposit upfront and moves directly
+    // to sent_deposit; the rest is automatic via Stripe webhook + scheduling page.
     setBookings(prev => prev.map(b =>
-      b.id === bookingId ? { ...b, state: "accepted", last_email_sent_at: new Date().toISOString() } : b
+      b.id === bookingId ? { ...b, state: "sent_deposit", last_email_sent_at: new Date().toISOString() } : b
     ));
     setAcceptModal(null);
   };
@@ -117,7 +159,6 @@ export function PipelineView({
 
   // ── Complete (booked → completed) ─────────────────────────────────────────
   const handleAdvanceState = (bookingId: string, currentState: BookingState) => {
-    if (currentState === "accepted") { handleSendDeposit(bookingId); return; }
     if (currentState === "sent_deposit") { handleSendCalendar(bookingId); return; }
     if (currentState === "sent_calendar") { handleMarkBooked(bookingId); return; }
     if (currentState === "booked" || currentState === "confirmed") {
@@ -173,6 +214,7 @@ export function PipelineView({
         defaultTemplateState: defaultState ?? data.defaultTemplateState,
         paymentLinks: data.paymentLinks ?? [],
         calendarLinks: data.calendarLinks ?? [],
+        schedulingLinks: data.schedulingLinks ?? [],
         previewVars: data.previewVars,
       });
     } finally { setEmailLoading(false); }
@@ -202,15 +244,51 @@ export function PipelineView({
 
   const handleMoveState = async (bookingId: string, targetState: BookingState) => {
     if (targetState === "follow_up") { await handleFollowUpInquiry(bookingId); return; }
-    if (targetState === "accepted") { handleAcceptInquiry(bookingId); return; }
     if (targetState === "sent_deposit") { handleSendDeposit(bookingId); return; }
     if (targetState === "sent_calendar") { handleSendCalendar(bookingId); return; }
     try { await moveTo(bookingId, targetState); }
     catch { alert("Failed to update booking status"); }
   };
 
+  const handleDragOverCard = (targetId: string, position: 'above' | 'below') => {
+    setDragOverCardId(targetId);
+    setDragPosition(position);
+  };
+
+  const handleDropOnCard = (targetId: string, position: 'above' | 'below') => {
+    setDragOverCardId(null);
+    if (!draggingId || draggingId === targetId) { setDraggingId(null); return; }
+    const draggedBooking = bookings.find(b => b.id === draggingId);
+    const targetBooking = bookings.find(b => b.id === targetId);
+    if (!draggedBooking || !targetBooking) { setDraggingId(null); return; }
+    const draggedCol = normalizeCol(draggedBooking.state);
+    const targetCol = normalizeCol(targetBooking.state);
+    if (draggedCol !== targetCol) {
+      handleDrop(targetCol);
+      return;
+    }
+    // Build the full ordered list for this column synchronously so we can save it.
+    const colBookingIds = (draggedCol === "booked"
+      ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
+      : bookings.filter(b => b.state === draggedCol)
+    ).map(b => b.id);
+    const prev = columnOrder[draggedCol] ?? [];
+    const base = [...prev.filter(id => colBookingIds.includes(id)), ...colBookingIds.filter(id => !prev.includes(id))];
+    const from = base.indexOf(draggingId!);
+    if (from !== -1) base.splice(from, 1);
+    const to = base.indexOf(targetId);
+    base.splice(to === -1 ? base.length : position === 'above' ? to : to + 1, 0, draggingId!);
+    setColumnOrder(prev => ({ ...prev, [draggedCol]: base }));
+    setDraggingId(null);
+    fetch('/api/bookings/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds: base }),
+    }).catch(() => {});
+  };
+
   const handleDrop = async (targetState: BookingState) => {
     setDropTargetId(null);
+    setDragOverCardId(null);
     if (!draggingId) return;
     const booking = bookings.find(b => b.id === draggingId);
     if (!booking || booking.state === targetState) { setDraggingId(null); return; }
@@ -223,7 +301,6 @@ export function PipelineView({
     }
 
     if (targetState === "follow_up") { handleFollowUpInquiry(bookingId); return; }
-    if (targetState === "accepted" && (booking.state === "inquiry" || booking.state === "follow_up")) { handleAcceptInquiry(bookingId); return; }
     if (targetState === "sent_deposit") { handleSendDeposit(bookingId); return; }
     if (targetState === "sent_calendar") { handleSendCalendar(bookingId); return; }
     if (targetState === "booked" && booking.state === "sent_calendar") { handleMarkBooked(bookingId); return; }
@@ -267,17 +344,23 @@ export function PipelineView({
   };
 
   const nextActionLabel = (state: BookingState): string | null => {
-    if (state === "accepted") return "Send Deposit";
     if (state === "sent_deposit") return "Send Calendar";
     if (state === "sent_calendar") return "Mark Booked";
     if (state === "booked" || state === "confirmed") return "Complete";
     return null;
   };
 
-  // "booked" column shows both booked + legacy confirmed bookings
+  // "booked" column shows both booked + legacy confirmed bookings, ordered by columnOrder
   const columnBookings = (colId: BookingState) => {
-    if (colId === "booked") return bookings.filter(b => b.state === "booked" || b.state === "confirmed");
-    return bookings.filter(b => b.state === colId);
+    const order = columnOrder[colId] ?? [];
+    const all = colId === "booked"
+      ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
+      : colId === "sent_deposit"
+        ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
+        : bookings.filter(b => b.state === colId);
+    const ordered = order.map(id => all.find(b => b.id === id)).filter((b): b is Booking => b != null);
+    const unordered = all.filter(b => !order.includes(b.id));
+    return [...ordered, ...unordered];
   };
 
   return (
@@ -361,6 +444,10 @@ export function PipelineView({
                     onDepositPaid={id => setBookings(prev => prev.map(b => b.id === id ? { ...b, deposit_paid: true } : b))}
                     dragging={draggingId === booking.id}
                     onDragStart={setDraggingId}
+                    onDragEnd={() => { setDraggingId(null); setDragOverCardId(null); }}
+                    dropIndicator={dragOverCardId === booking.id ? dragPosition : null}
+                    onDragOverCard={handleDragOverCard}
+                    onDropOnCard={handleDropOnCard}
                     hasStripe={hasStripe}
                     artistId={artistId}
                     schedulingLinks={schedulingLinks}
@@ -381,6 +468,11 @@ export function PipelineView({
       {acceptModal && (
         <AcceptModal
           bookingId={acceptModal.bookingId}
+          clientName={bookings.find(b => b.id === acceptModal.bookingId)?.client_name}
+          hasStripe={hasStripe}
+          schedulingLinks={schedulingLinks}
+          artistId={artistId ?? ""}
+          isCalendarConnected={calendarSyncEnabled}
           onSent={() => handleAcceptSent(acceptModal.bookingId)}
           onClose={() => setAcceptModal(null)}
         />
@@ -391,6 +483,7 @@ export function PipelineView({
         <SendDepositModal
           bookingId={sendDepositModal.bookingId}
           clientName={bookings.find(b => b.id === sendDepositModal.bookingId)?.client_name ?? ""}
+          existingDepositUrl={bookings.find(b => b.id === sendDepositModal.bookingId)?.stripe_payment_link_url ?? undefined}
           hasStripe={hasStripe}
           schedulingLinks={schedulingLinks}
           artistId={artistId ?? ""}
@@ -494,6 +587,7 @@ export function PipelineView({
           defaultTemplateState={emailCompose.defaultTemplateState}
           paymentLinks={emailCompose.paymentLinks}
           calendarLinks={emailCompose.calendarLinks}
+          schedulingLinks={emailCompose.schedulingLinks}
           previewVars={emailCompose.previewVars}
           onSend={sendComposedEmail}
           onSkip={emailCompose.afterSendState ? async () => {

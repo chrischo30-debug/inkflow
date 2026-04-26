@@ -34,15 +34,22 @@ export async function GET(request: Request) {
 
     const { data: bookingRows } = await supabase
       .from("bookings")
-      .select("id, client_name, description, appointment_date, state")
+      .select("id, client_name, description, appointment_date, state, google_event_id")
       .eq("artist_id", user.id)
-      .eq("state", "confirmed")
+      .in("state", ["booked", "confirmed"])
       .gte("appointment_date", start)
       .lte("appointment_date", end)
       .order("appointment_date", { ascending: true });
 
-    const bookingEvents: CalendarEvent[] = ((bookingRows ?? []) as Partial<Booking>[])
-      .filter((row) => typeof row.id === "string" && typeof row.client_name === "string" && typeof row.appointment_date === "string")
+    const calendarConnected = Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token);
+
+    const bookingEvents: CalendarEvent[] = ((bookingRows ?? []) as (Partial<Booking> & { google_event_id?: string | null })[])
+      .filter((row) => {
+        if (typeof row.id !== "string" || typeof row.client_name !== "string" || typeof row.appointment_date !== "string") return false;
+        // Skip FlashBooker events that are already synced to Google Calendar — they'll appear as Google events
+        if (calendarConnected && row.google_event_id) return false;
+        return true;
+      })
       .map((row) => {
         const startDate = row.appointment_date as string;
         const endDate = new Date(new Date(startDate).getTime() + 1000 * 60 * 60 * 2).toISOString();
@@ -84,7 +91,7 @@ export async function GET(request: Request) {
 
     const events = [...bookingEvents, ...googleEvents].sort((a, b) => a.start.localeCompare(b.start));
     return NextResponse.json({
-      connected: Boolean(artist?.calendar_sync_enabled && artist?.google_refresh_token),
+      connected: calendarConnected,
       google_sync_error: googleSyncError || undefined,
       events,
     });

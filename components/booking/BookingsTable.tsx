@@ -5,16 +5,16 @@ import { createPortal } from "react-dom";
 import type { Booking, BookingState } from "@/lib/types";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays } from "lucide-react";
+import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays, Send } from "lucide-react";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
+import type { SchedulingLink } from "@/lib/pipeline-settings";
 
 const STATE_TABS: { value: string; label: string }[] = [
   { value: "all",           label: "All" },
   { value: "inquiry",       label: "Submissions" },
   { value: "follow_up",     label: "Follow Ups" },
-  { value: "accepted",      label: "Accepted" },
   { value: "sent_deposit",  label: "Sent Deposit" },
   { value: "sent_calendar", label: "Sent Calendar" },
   { value: "booked",        label: "Booked" },
@@ -26,7 +26,6 @@ const STATE_TABS: { value: string; label: string }[] = [
 const MOVE_STATES: { value: BookingState; label: string }[] = [
   { value: "inquiry",       label: "Submission" },
   { value: "follow_up",     label: "Follow Up" },
-  { value: "accepted",      label: "Accepted" },
   { value: "sent_deposit",  label: "Sent Deposit" },
   { value: "sent_calendar", label: "Sent Calendar" },
   { value: "booked",        label: "Booked" },
@@ -38,7 +37,7 @@ const MOVE_STATES: { value: BookingState; label: string }[] = [
 const STATE_FLOW: Record<BookingState, { label: string } | null> = {
   inquiry:       { label: "Accept" },
   follow_up:     { label: "Accept" },
-  accepted:      { label: "Send Deposit" },
+  accepted:      { label: "Send Calendar" }, // legacy
   sent_deposit:  { label: "Send Calendar" },
   sent_calendar: { label: "Mark Booked" },
   booked:        { label: "Complete" },
@@ -46,6 +45,16 @@ const STATE_FLOW: Record<BookingState, { label: string } | null> = {
   completed:     null,
   rejected:      null,
   cancelled:     null,
+};
+
+const NEXT_STATE: Partial<Record<BookingState, BookingState>> = {
+  inquiry:       "sent_deposit",
+  follow_up:     "sent_deposit",
+  accepted:      "sent_calendar", // legacy
+  sent_deposit:  "sent_calendar",
+  sent_calendar: "booked",
+  booked:        "completed",
+  confirmed:     "completed",
 };
 
 function timeAgo(iso: string): string {
@@ -89,6 +98,7 @@ type EmailCompose = {
   afterSendState?: BookingState;
   paymentLinks?: InsertLink[];
   calendarLinks?: InsertLink[];
+  schedulingLinks?: { id: string; label: string }[];
   previewVars?: Record<string, string>;
 };
 
@@ -129,6 +139,8 @@ export function BookingsTable({
   calendarSyncEnabled = false,
   hasStripe = false,
   artistName = "",
+  artistId = "",
+  schedulingLinks = [],
 }: {
   bookings: Booking[];
   fieldLabelMap: Record<string, string>;
@@ -137,6 +149,8 @@ export function BookingsTable({
   calendarSyncEnabled?: boolean;
   hasStripe?: boolean;
   artistName?: string;
+  artistId?: string;
+  schedulingLinks?: SchedulingLink[];
 }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [activeTab, setActiveTab] = useState(initialState);
@@ -212,7 +226,13 @@ export function BookingsTable({
   };
 
   const q = search.trim().toLowerCase();
-  const tabFiltered = activeTab === "all" ? bookings : bookings.filter(b => b.state === activeTab);
+  const tabFiltered = activeTab === "all"
+    ? bookings
+    : activeTab === "booked"
+      ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
+      : activeTab === "sent_deposit"
+        ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
+        : bookings.filter(b => b.state === activeTab);
   const visible = q
     ? tabFiltered.filter(b =>
         b.client_name.toLowerCase().includes(q) ||
@@ -221,9 +241,9 @@ export function BookingsTable({
       )
     : tabFiltered;
 
-  // For the Confirmed tab, group by appointment date
+  // For the Booked tab, group by appointment date
   const confirmedGroups = useMemo(() => {
-    if (activeTab !== "confirmed") return null;
+    if (activeTab !== "booked") return null;
     const sorted = [...visible].sort((a, b) => {
       if (!a.appointment_date && !b.appointment_date) return 0;
       if (!a.appointment_date) return 1;
@@ -246,7 +266,16 @@ export function BookingsTable({
   }, [activeTab, visible]);
 
   const counts = Object.fromEntries(
-    STATE_TABS.map(t => [t.value, t.value === "all" ? bookings.length : bookings.filter(b => b.state === t.value).length])
+    STATE_TABS.map(t => [
+      t.value,
+      t.value === "all"
+        ? bookings.length
+        : t.value === "booked"
+          ? bookings.filter(b => b.state === "booked" || b.state === "confirmed").length
+          : t.value === "sent_deposit"
+            ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted").length
+            : bookings.filter(b => b.state === t.value).length,
+    ])
   );
 
   const moveTo = async (id: string, targetState: BookingState) => {
@@ -266,15 +295,42 @@ export function BookingsTable({
   };
 
   const advance = async (id: string, currentState: BookingState) => {
-    if (currentState === "confirmed") {
+    if (currentState === "confirmed" || currentState === "booked") {
       setCompletionData({ total_amount: "", tip_amount: "", notes: "" });
       setCompletionModal({ bookingId: id, images: [] });
       return;
     }
-    if (currentState === "accepted") {
-      setConfirmModal({ bookingId: id });
-      return;
+    // For other transitions (sent_deposit → sent_calendar, sent_calendar → booked):
+    // check the next stage's template. If off → advance silently with no email.
+    // If on but auto_send=false → pop the compose modal so the artist can edit + send.
+    // If auto_send=true → server PATCH advance handles the silent send.
+    const nextState = NEXT_STATE[currentState];
+    if (nextState) {
+      const tplRes = await fetch(`/api/bookings/${id}/send-email`);
+      if (tplRes.ok) {
+        const data = await tplRes.json();
+        const tpl = (data.templates ?? []).find((t: ResolvedTemplate) => t.state === nextState);
+        // Template fully off → just advance, no modal, no email
+        if (tpl && tpl.enabled === false) {
+          // fall through to PATCH advance below
+        } else if (tpl && tpl.auto_send === false) {
+          setEmailCompose({
+            bookingId: id,
+            subject: tpl.subject,
+            body: tpl.body,
+            templates: data.templates ?? [],
+            defaultTemplateState: nextState,
+            afterSendState: nextState,
+            paymentLinks: data.paymentLinks ?? [],
+            calendarLinks: data.calendarLinks ?? [],
+            schedulingLinks: data.schedulingLinks ?? [],
+            previewVars: data.previewVars,
+          });
+          return;
+        }
+      }
     }
+
     const res = await fetch(`/api/bookings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -291,9 +347,9 @@ export function BookingsTable({
       b.id === bookingId
         ? {
             ...b,
-            state: "accepted",
+            state: "sent_deposit",
             last_email_sent_at: nowIso,
-            sent_emails: [...(b.sent_emails ?? []), { label: "Submission Accepted", sent_at: nowIso }],
+            sent_emails: [...(b.sent_emails ?? []), { label: "Save your spot — deposit to book", sent_at: nowIso }],
           }
         : b
     ));
@@ -301,9 +357,15 @@ export function BookingsTable({
   };
 
   const handleAppointmentConfirmed = (bookingId: string, appointmentDate: string, googleEventId?: string) => {
+    const isReschedule = !!confirmModal?.initialAppointmentDate;
     setBookings(prev => prev.map(b =>
       b.id === bookingId
-        ? { ...b, state: "confirmed", appointment_date: appointmentDate, ...(googleEventId ? { google_event_id: googleEventId } : {}) }
+        ? {
+            ...b,
+            ...(isReschedule ? {} : { state: "booked" as BookingState }),
+            appointment_date: appointmentDate,
+            ...(googleEventId ? { google_event_id: googleEventId } : {}),
+          }
         : b
     ));
     setConfirmModal(null);
@@ -368,6 +430,7 @@ export function BookingsTable({
         defaultTemplateState: blank ? null : (defaultState ?? data.defaultTemplateState),
         paymentLinks: data.paymentLinks ?? [],
         calendarLinks: data.calendarLinks ?? [],
+        schedulingLinks: data.schedulingLinks ?? [],
         previewVars: data.previewVars,
       });
     } finally {
@@ -471,7 +534,7 @@ export function BookingsTable({
           <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-end gap-2">
               {/* Deposit link — shown for accepted/confirmed when Stripe connected */}
-              {hasStripe && (booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
+              {hasStripe && (booking.state === "sent_deposit" || booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
                 booking.stripe_payment_link_url ? (
                   <button
                     type="button"
@@ -556,7 +619,7 @@ export function BookingsTable({
                     <p className="text-xs text-on-surface-variant mt-0.5">Submitted {fmtDate(booking.created_at)} ({timeAgo(booking.created_at)})</p>
                   </div>
                   {/* Inline appointment edit */}
-                  {(booking.state === "confirmed" || booking.state === "accepted") && (
+                  {(booking.state === "booked" || booking.state === "confirmed") && (
                     <button
                       type="button"
                       onClick={e => { e.stopPropagation(); setConfirmModal({ bookingId: booking.id, initialAppointmentDate: booking.appointment_date ?? undefined }); }}
@@ -671,19 +734,50 @@ export function BookingsTable({
                   {/* Email history */}
                   {(booking.sent_emails ?? []).length > 0 ? (
                     <div className="border-t border-outline-variant/10 pt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-2">Emails sent</p>
-                      <div className="space-y-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Emails sent</p>
+                        <button
+                          type="button"
+                          onClick={() => openEmailCompose(booking.id, undefined, true)}
+                          disabled={emailLoadingId === booking.id}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
+                        >
+                          <Send className="w-3 h-3" />
+                          {emailLoadingId === booking.id ? "Loading…" : "Send another"}
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
                         {(booking.sent_emails ?? []).map((email, i) => (
-                          <div key={i} className="flex items-baseline justify-between gap-4">
-                            <span className="text-sm text-on-surface">{resolveEmailLabel(email.label, booking, artistName)}</span>
-                            <span className="text-xs text-on-surface-variant shrink-0">{fmtDate(email.sent_at)}</span>
+                          <div key={i} className="flex items-center justify-between gap-3 group">
+                            <span className="text-sm text-on-surface truncate">{resolveEmailLabel(email.label, booking, artistName)}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs text-on-surface-variant">{fmtDate(email.sent_at)}</span>
+                              <button
+                                type="button"
+                                title="Resend"
+                                onClick={() => openEmailCompose(booking.id, undefined, true)}
+                                disabled={emailLoadingId === booking.id}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-primary disabled:opacity-30"
+                              >
+                                <Send className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : booking.last_email_sent_at ? (
-                    <div className="border-t border-outline-variant/10 pt-4 flex items-center gap-3 text-xs text-on-surface-variant">
+                    <div className="border-t border-outline-variant/10 pt-4 flex items-center justify-between gap-3 text-xs text-on-surface-variant">
                       <span>Last emailed {fmtDate(booking.last_email_sent_at)}</span>
+                      <button
+                        type="button"
+                        onClick={() => openEmailCompose(booking.id, undefined, true)}
+                        disabled={emailLoadingId === booking.id}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
+                      >
+                        <Send className="w-3 h-3" />
+                        Resend
+                      </button>
                     </div>
                   ) : null}
 
@@ -898,6 +992,11 @@ export function BookingsTable({
       {acceptModal && (
         <AcceptModal
           bookingId={acceptModal.bookingId}
+          clientName={bookings.find(b => b.id === acceptModal.bookingId)?.client_name}
+          hasStripe={hasStripe}
+          schedulingLinks={schedulingLinks}
+          artistId={artistId}
+          isCalendarConnected={calendarSyncEnabled}
           onSent={() => handleAcceptSent(acceptModal.bookingId)}
           onClose={() => setAcceptModal(null)}
         />
@@ -928,6 +1027,7 @@ export function BookingsTable({
           defaultTemplateState={emailCompose.defaultTemplateState}
           paymentLinks={emailCompose.paymentLinks}
           calendarLinks={emailCompose.calendarLinks}
+          schedulingLinks={emailCompose.schedulingLinks}
           previewVars={emailCompose.previewVars}
           onSend={sendEmail}
           onSkip={emailCompose.afterSendState ? async () => {

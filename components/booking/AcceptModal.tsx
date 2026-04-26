@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { CalendarDays, DollarSign, Plus, ArrowRight, Check, Layers } from "lucide-react";
+import type { SchedulingLink } from "@/lib/pipeline-settings";
 import { EmailComposeModal, type InsertLink, type ResolvedTemplate } from "./EmailComposeModal";
+import { SchedulingLinkForm, useCalendarOptions, newLinkDraft, generateId, DURATIONS, type LinkDraft } from "@/components/shared/SchedulingLinkForm";
 
 interface Props {
   bookingId: string;
+  clientName?: string;
+  hasStripe?: boolean;
+  schedulingLinks?: SchedulingLink[];
+  artistId?: string;
+  isCalendarConnected?: boolean;
   onSent: (threadId?: string) => void;
   onClose: () => void;
 }
@@ -19,9 +27,43 @@ interface EmailData {
   previewVars?: Record<string, string>;
 }
 
-export function AcceptModal({ bookingId, onSent, onClose }: Props) {
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function AcceptModal({
+  bookingId,
+  clientName = "this client",
+  hasStripe = false,
+  schedulingLinks: initialLinks = [],
+  artistId = "",
+  isCalendarConnected = false,
+  onSent,
+  onClose,
+}: Props) {
+  const [stage, setStage] = useState<"setup" | "email">("setup");
   const [data, setData] = useState<EmailData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Scheduling link state
+  const [schedulingLinks, setSchedulingLinks] = useState<SchedulingLink[]>(initialLinks);
+  const [selectedLinkId, setSelectedLinkId] = useState<string>(initialLinks[0]?.id ?? "");
+  const [creatingLink, setCreatingLink] = useState(initialLinks.length === 0);
+  const [newLink, setNewLink] = useState<LinkDraft>(newLinkDraft());
+  const { calendarOptions, calendarsLoading } = useCalendarOptions(isCalendarConnected);
+
+  // Deposit state
+  const [depositMode, setDepositMode] = useState<"stripe" | "existing" | "none">(hasStripe ? "stripe" : "existing");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositUrl, setDepositUrl] = useState("");
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [depositError, setDepositError] = useState("");
+  const [selectedExistingPaymentUrl, setSelectedExistingPaymentUrl] = useState<string>("");
+
+  // Multi-session state
+  const [sessionCount, setSessionCount] = useState(1);
+  const [followUpDurations, setFollowUpDurations] = useState<number[]>([]);
+
+  const [setupError, setSetupError] = useState("");
+  const [savingScheduling, setSavingScheduling] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -29,12 +71,7 @@ export function AcceptModal({ bookingId, onSent, onClose }: Props) {
         const res = await fetch(`/api/bookings/${bookingId}/send-email`);
         if (!res.ok) return;
         const d: EmailData = await res.json();
-        const acceptedTmpl = d.templates.find(t => t.state === "accepted");
-        setData({
-          ...d,
-          subject: acceptedTmpl?.subject ?? d.subject,
-          body: acceptedTmpl?.body ?? d.body,
-        });
+        setData(d);
       } finally {
         setLoading(false);
       }
@@ -42,29 +79,132 @@ export function AcceptModal({ bookingId, onSent, onClose }: Props) {
     load();
   }, [bookingId]);
 
+  // When switching to existing-link deposit mode, default to first available
+  useEffect(() => {
+    if (depositMode === "existing" && data && !selectedExistingPaymentUrl) {
+      const first = data.paymentLinks[0];
+      if (first) setSelectedExistingPaymentUrl(first.url);
+    }
+  }, [depositMode, data, selectedExistingPaymentUrl]);
+
+  const generateStripeDepositLink = async () => {
+    const cents = Math.round(parseFloat(depositAmount) * 100);
+    if (!cents || cents < 100) { setDepositError("Enter a valid amount (min $1)"); return; }
+    setGeneratingLink(true); setDepositError("");
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/stripe-payment-link`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_cents: cents }),
+      });
+      const dataResp = await res.json();
+      if (!res.ok) { setDepositError(dataResp.error ?? "Failed to generate link"); return; }
+      setDepositUrl(dataResp.url);
+    } catch { setDepositError("Network error"); }
+    finally { setGeneratingLink(false); }
+  };
+
+  const saveNewSchedulingLink = async (): Promise<SchedulingLink | null> => {
+    if (!newLink.label.trim() || newLink.days.length === 0 || newLink.start_hour >= newLink.end_hour) return null;
+    const link: SchedulingLink = { ...newLink, id: generateId(), label: newLink.label.trim() };
+    const updated = [...schedulingLinks, link];
+    const res = await fetch("/api/artist/scheduling-links", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ links: updated }),
+    });
+    if (!res.ok) return null;
+    setSchedulingLinks(updated);
+    setSelectedLinkId(link.id);
+    setCreatingLink(false);
+    return link;
+  };
+
+  // Resolve which deposit URL to inject into the email body
+  const effectiveDepositUrl = useMemo(() => {
+    if (depositMode === "stripe") return depositUrl;
+    if (depositMode === "existing") return selectedExistingPaymentUrl;
+    return "";
+  }, [depositMode, depositUrl, selectedExistingPaymentUrl]);
+
+  const proceedToEmail = async () => {
+    setSetupError("");
+
+    // Validate scheduling link
+    let linkId = selectedLinkId;
+    if (creatingLink) {
+      setSavingScheduling(true);
+      const saved = await saveNewSchedulingLink();
+      setSavingScheduling(false);
+      if (!saved) { setSetupError("Add a label for the new scheduling link first."); return; }
+      linkId = saved.id;
+    }
+    if (!linkId) { setSetupError("Pick or create a scheduling link."); return; }
+
+    // Validate deposit
+    if (depositMode === "stripe" && !depositUrl) {
+      setSetupError("Generate the Stripe deposit link first, or switch to a saved payment link.");
+      return;
+    }
+    if (depositMode === "existing" && !selectedExistingPaymentUrl) {
+      setSetupError("Pick a saved payment link, or switch to Stripe.");
+      return;
+    }
+
+    // Persist scheduling_link_id and session info now so the Stripe webhook can use it later
+    await fetch(`/api/bookings/${bookingId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "edit_details",
+        scheduling_link_id: linkId,
+        session_count: sessionCount,
+        ...(followUpDurations.length > 0 ? { session_durations: followUpDurations } : {}),
+      }),
+    }).catch(() => { /* fall through; PATCH on send will retry */ });
+
+    // Switch to email compose. Inject the chosen deposit URL into the accepted template body.
+    if (data) {
+      const acceptedTpl = data.templates.find(t => t.state === "accepted");
+      const baseBody = acceptedTpl?.body ?? data.body;
+      const baseSubject = acceptedTpl?.subject ?? data.subject;
+      const bodyWithDeposit = effectiveDepositUrl
+        ? baseBody.replace(/\{paymentLink(?::[^}]+)?\}/g, effectiveDepositUrl)
+        : baseBody;
+      setData({ ...data, subject: baseSubject, body: bodyWithDeposit });
+    }
+    setStage("email");
+  };
+
   const handleSend = async (subject: string, body: string) => {
+    const linkId = selectedLinkId;
     const res = await fetch(`/api/bookings/${bookingId}/send-email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject, body }),
     });
     if (!res.ok) throw new Error("Failed to send email");
     const result = await res.json();
 
+    // Move directly to sent_deposit (skip the intermediate "accepted" stage) since the
+    // artist set everything up upfront; deposit_paid will move to sent_calendar via webhook.
     await fetch(`/api/bookings/${bookingId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "move", target_state: "accepted" }),
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "move",
+        target_state: "sent_deposit",
+        ...(linkId ? { scheduling_link_id: linkId } : {}),
+      }),
     });
 
     onSent(result.threadId);
   };
 
   const handleSkip = async () => {
+    const linkId = selectedLinkId;
     await fetch(`/api/bookings/${bookingId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "move", target_state: "accepted" }),
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "move",
+        target_state: "sent_deposit",
+        ...(linkId ? { scheduling_link_id: linkId } : {}),
+      }),
     });
     onSent();
   };
@@ -73,23 +213,249 @@ export function AcceptModal({ bookingId, onSent, onClose }: Props) {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-surface rounded-2xl shadow-xl px-8 py-6 text-sm text-on-surface-variant">Loading…</div>
     </div>,
-    document.body
+    document.body,
   );
 
-  if (!data) return null;
+  if (stage === "email" && data) {
+    return (
+      <EmailComposeModal
+        templates={data.templates}
+        initialSubject={data.subject}
+        initialBody={data.body}
+        defaultTemplateState="accepted"
+        paymentLinks={data.paymentLinks}
+        calendarLinks={data.calendarLinks}
+        previewVars={data.previewVars}
+        onSend={handleSend}
+        onSkip={handleSkip}
+        onClose={onClose}
+      />
+    );
+  }
 
-  return (
-    <EmailComposeModal
-      templates={data.templates}
-      initialSubject={data.subject}
-      initialBody={data.body}
-      defaultTemplateState="accepted"
-      paymentLinks={data.paymentLinks}
-      calendarLinks={data.calendarLinks}
-      previewVars={data.previewVars}
-      onSend={handleSend}
-      onSkip={handleSkip}
-      onClose={onClose}
-    />
+  // Setup stage
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-6 pb-4 border-b border-outline-variant/10 shrink-0">
+          <h2 className="text-base font-semibold text-on-surface">Accept booking</h2>
+          <p className="text-sm text-on-surface-variant mt-0.5">
+            Set up scheduling and deposit for {clientName}. Once done, the rest is automatic.
+          </p>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+          {/* Step 1: Scheduling link */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-on-surface-variant" />
+              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Scheduling link</p>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              The client will get this link after the deposit is paid, so they can book a time.
+            </p>
+
+            {schedulingLinks.length > 0 && !creatingLink && (
+              <div className="space-y-2">
+                {schedulingLinks.map(l => (
+                  <label key={l.id} className="flex items-center gap-2.5 cursor-pointer p-2.5 rounded-lg border border-outline-variant/20 hover:bg-surface-container-low transition-colors"
+                    onClick={() => setSelectedLinkId(l.id)}>
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedLinkId === l.id ? "border-on-surface" : "border-outline-variant/50"}`}>
+                      {selectedLinkId === l.id && <div className="w-2 h-2 rounded-full bg-on-surface" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-on-surface">{l.label}</p>
+                      <p className="text-xs text-on-surface-variant">{l.duration_minutes / 60}h · {l.days.map(d => DAY_LABELS[d]).join(", ")}</p>
+                    </div>
+                  </label>
+                ))}
+                <button type="button" onClick={() => setCreatingLink(true)}
+                  className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> Create new link
+                </button>
+              </div>
+            )}
+
+            {creatingLink && (
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-on-surface-variant">New scheduling link</p>
+                  {schedulingLinks.length > 0 && (
+                    <button type="button" onClick={() => setCreatingLink(false)} className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant underline">
+                      Use existing
+                    </button>
+                  )}
+                </div>
+                <SchedulingLinkForm
+                  draft={newLink}
+                  setDraft={updater => setNewLink(updater)}
+                  isCalendarConnected={isCalendarConnected}
+                  calendarOptions={calendarOptions}
+                  calendarsLoading={calendarsLoading}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* Step 2: Sessions */}
+          <section className="space-y-3 border-t border-outline-variant/10 pt-5">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-on-surface-variant" />
+              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Sessions</p>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              How many appointments does this booking require? One deposit covers all of them.
+            </p>
+            <div className="flex items-center gap-3">
+              <button type="button"
+                onClick={() => {
+                  const next = Math.max(1, sessionCount - 1);
+                  setSessionCount(next);
+                  setFollowUpDurations(prev => prev.slice(0, next - 1));
+                }}
+                disabled={sessionCount <= 1}
+                className="w-8 h-8 rounded-lg border border-outline-variant/30 flex items-center justify-center text-sm font-semibold text-on-surface hover:bg-surface-container-high disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                −
+              </button>
+              <span className="text-sm font-semibold text-on-surface w-4 text-center">{sessionCount}</span>
+              <button type="button"
+                onClick={() => {
+                  const next = Math.min(6, sessionCount + 1);
+                  setSessionCount(next);
+                  setFollowUpDurations(prev => {
+                    const arr = [...prev];
+                    while (arr.length < next - 1) arr.push(120);
+                    return arr;
+                  });
+                }}
+                disabled={sessionCount >= 6}
+                className="w-8 h-8 rounded-lg border border-outline-variant/30 flex items-center justify-center text-sm font-semibold text-on-surface hover:bg-surface-container-high disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                +
+              </button>
+              <span className="text-xs text-on-surface-variant">{sessionCount === 1 ? "Single session" : `${sessionCount} sessions total`}</span>
+            </div>
+
+            {sessionCount > 1 && (
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
+                <p className="text-xs text-on-surface-variant">Duration for follow-up sessions (session 1 uses the scheduling link above):</p>
+                {followUpDurations.map((dur, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs text-on-surface-variant w-16 shrink-0">Session {i + 2}</span>
+                    <select value={dur}
+                      onChange={e => setFollowUpDurations(prev => prev.map((d, idx) => idx === i ? Number(e.target.value) : d))}
+                      className="flex-1 px-2 py-1.5 text-xs text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary">
+                      {DURATIONS.map(d => <option key={d.minutes} value={d.minutes}>{d.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Step 3: Deposit */}
+          <section className="space-y-3 border-t border-outline-variant/10 pt-5">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-on-surface-variant" />
+              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Deposit link</p>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {hasStripe && (
+                <button type="button" onClick={() => setDepositMode("stripe")}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${depositMode === "stripe" ? "bg-on-surface text-surface border-on-surface" : "bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high"}`}>
+                  Generate Stripe link
+                </button>
+              )}
+              <button type="button" onClick={() => setDepositMode("existing")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${depositMode === "existing" ? "bg-on-surface text-surface border-on-surface" : "bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high"}`}>
+                Use saved payment link
+              </button>
+              <button type="button" onClick={() => setDepositMode("none")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${depositMode === "none" ? "bg-on-surface text-surface border-on-surface" : "bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high"}`}>
+                No deposit link
+              </button>
+            </div>
+
+            {depositMode === "stripe" && (
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-1 flex-1 rounded-lg border border-outline-variant/30 bg-surface px-3 py-2 focus-within:border-primary transition-colors">
+                    <span className="text-sm text-on-surface-variant">$</span>
+                    <input type="number" min="1" step="0.01" placeholder="0.00" value={depositAmount}
+                      onChange={e => setDepositAmount(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && generateStripeDepositLink()}
+                      className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
+                  </div>
+                  <button type="button" onClick={generateStripeDepositLink} disabled={generatingLink || !!depositUrl}
+                    className="px-3 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-50 transition-opacity whitespace-nowrap">
+                    {generatingLink ? "Creating…" : depositUrl ? <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Created</span> : "Generate"}
+                  </button>
+                </div>
+                {depositUrl && (
+                  <p className="text-[11px] font-mono text-on-surface-variant/60 truncate">{depositUrl}</p>
+                )}
+                {depositError && <p className="text-xs text-destructive">{depositError}</p>}
+                <p className="text-[11px] text-on-surface-variant/70">
+                  When the client pays, they automatically get the scheduling link above.
+                </p>
+              </div>
+            )}
+
+            {depositMode === "existing" && (
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-2">
+                {data && data.paymentLinks.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {data.paymentLinks.map(link => (
+                      <label key={link.url} className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-surface-container-high transition-colors"
+                        onClick={() => setSelectedExistingPaymentUrl(link.url)}>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedExistingPaymentUrl === link.url ? "border-on-surface" : "border-outline-variant/50"}`}>
+                          {selectedExistingPaymentUrl === link.url && <div className="w-2 h-2 rounded-full bg-on-surface" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
+                          <p className="text-[11px] text-on-surface-variant/70 truncate">{link.url}</p>
+                        </div>
+                      </label>
+                    ))}
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">
+                      {hasStripe
+                        ? "With a saved link, you'll need to mark the deposit paid manually — auto-detection only works with Stripe-generated links."
+                        : <>Stripe isn&apos;t configured, so you&apos;ll confirm deposits manually. Set it up in <a href="/settings?tab=integrations" className="underline">Settings → Integrations</a> to enable auto-detection.</>
+                      }
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-on-surface-variant">
+                    No saved payment links yet. Add some in <a href="/payment-links" className="text-primary underline">Payment links</a>, or use Stripe for auto-detection.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {depositMode === "none" && (
+              <div className="rounded-xl border border-amber-200/60 bg-amber-50/50 p-3">
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  No deposit asked. You&apos;ll need to confirm and follow up with the client manually.
+                </p>
+              </div>
+            )}
+          </section>
+
+          {setupError && <p className="text-xs text-destructive">{setupError}</p>}
+        </div>
+
+        <div className="px-6 pb-6 pt-4 border-t border-outline-variant/10 shrink-0 flex justify-between items-center gap-3">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors">
+            Cancel
+          </button>
+          <button type="button" onClick={proceedToEmail} disabled={savingScheduling}
+            className="px-5 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-40 transition-opacity flex items-center gap-2">
+            {savingScheduling ? "Saving…" : <>Continue to email <ArrowRight className="w-4 h-4" /></>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, Plus } from "lucide-react";
+import { CalendarDays, Plus, Eye, Pencil } from "lucide-react";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
+import { BodyPreview } from "./EmailComposeModal";
+import { EmailVarChips } from "@/components/shared/EmailVarChips";
 
 interface Props {
   bookingId: string;
@@ -44,9 +46,13 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastFocused = useRef<"subject" | "body">("body");
 
   const [origin, setOrigin] = useState("");
   useEffect(() => { setOrigin(window.location.origin); }, []);
@@ -87,6 +93,31 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
     if (!res.ok) return null;
     setLinks(updated);
     return link;
+  };
+
+  const insertAtCursor = (text: string) => {
+    if (mode === "preview") setMode("edit");
+    const isSubject = lastFocused.current === "subject";
+    const el = (isSubject ? subjectRef.current : textareaRef.current) as HTMLInputElement | HTMLTextAreaElement | null;
+    const val = isSubject ? subject : body;
+    if (!el) {
+      if (isSubject) setSubject(v => v + text);
+      else setBody(v => v + (v.endsWith("\n") || v === "" ? "" : "\n") + text);
+      return;
+    }
+    const start = el.selectionStart ?? val.length;
+    const end = el.selectionEnd ?? val.length;
+    const before = val.slice(0, start);
+    const needsNewline = !isSubject && before.length > 0 && !before.endsWith("\n");
+    const insert = (needsNewline ? "\n" : "") + text;
+    const newVal = before + insert + val.slice(end);
+    if (isSubject) setSubject(newVal);
+    else setBody(newVal);
+    requestAnimationFrame(() => {
+      el.selectionStart = start + insert.length;
+      el.selectionEnd = start + insert.length;
+      el.focus();
+    });
   };
 
   const send = async () => {
@@ -224,11 +255,53 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
               <p className="text-xs text-on-surface-variant/60">Loading template…</p>
             ) : (
               <>
-                <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
-                  className="w-full px-3 py-2 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary" />
-                <textarea rows={7} value={body} onChange={e => setBody(e.target.value)} placeholder="Email body — use {schedulingLink} to insert the link automatically"
-                  className="w-full px-3 py-2 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none font-mono" />
-                <p className="text-[11px] text-on-surface-variant/60">Use <code className="bg-surface-container-high px-1 rounded">{"{schedulingLink}"}</code> in the body and it will be replaced with the actual link.</p>
+                {/* Subject */}
+                <div>
+                  <label className="text-xs font-medium text-on-surface-variant tracking-wide mb-1.5 block">Subject</label>
+                  {mode === "edit" ? (
+                    <input ref={subjectRef} type="text" value={subject} onChange={e => setSubject(e.target.value)}
+                      onFocus={() => { lastFocused.current = "subject"; }}
+                      placeholder="Subject"
+                      className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors" />
+                  ) : (
+                    <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text" onClick={() => setMode("edit")}>
+                      <BodyPreview text={subject} compact />
+                    </div>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-on-surface-variant tracking-wide">Message</label>
+                    <div className="flex items-center gap-0.5 bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/20">
+                      <button type="button" onClick={() => setMode("edit")}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "edit" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button type="button" onClick={() => setMode("preview")}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${mode === "preview" ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+                        <Eye className="w-3 h-3" /> Preview
+                      </button>
+                    </div>
+                  </div>
+                  {mode === "edit" ? (
+                    <textarea ref={textareaRef} value={body} onChange={e => setBody(e.target.value)}
+                      onFocus={() => { lastFocused.current = "body"; }}
+                      rows={7} placeholder="Email body"
+                      className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors resize-none" />
+                  ) : (
+                    <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text min-h-[140px]" onClick={() => setMode("edit")}>
+                      <BodyPreview text={body} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Variable chips */}
+                <div className="space-y-1.5">
+                  <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
+                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={[]} calendarLinks={[]} schedulingLinks={links} />
+                </div>
               </>
             )}
           </div>

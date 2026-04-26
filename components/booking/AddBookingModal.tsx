@@ -6,13 +6,14 @@ import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Ban } from "lucide-react";
 
 const BOOKING_STATES = [
-  { value: "inquiry",   label: "Submission" },
-  { value: "follow_up", label: "Follow Ups" },
-  { value: "accepted",  label: "Accepted" },
-  { value: "confirmed", label: "Booked" },
-  { value: "completed", label: "Completed" },
-  { value: "rejected",  label: "Rejected" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "inquiry",       label: "Submission" },
+  { value: "follow_up",     label: "Follow Up" },
+  { value: "sent_deposit",  label: "Sent Deposit" },
+  { value: "sent_calendar", label: "Sent Calendar" },
+  { value: "booked",        label: "Booked" },
+  { value: "completed",     label: "Completed" },
+  { value: "rejected",      label: "Rejected" },
+  { value: "cancelled",     label: "Cancelled" },
 ];
 
 const DURATION_OPTIONS = [

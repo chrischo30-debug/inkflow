@@ -179,11 +179,12 @@ function HorizBar({ data, color, showRevenue = false }: { data: DistItem[]; colo
 // ─── Funnel (pipeline conversion) ────────────────────────────────────────────
 function PipelineFunnel({ stateData, totalBookings }: { stateData: { state: string; label: string; count: number }[]; totalBookings: number }) {
   const stages = [
-    { state: "inquiry",   label: "Submissions" },
-    { state: "follow_up", label: "Follow Up" },
-    { state: "accepted",  label: "Accepted" },
-    { state: "confirmed", label: "Booked" },
-    { state: "completed", label: "Completed" },
+    { state: "inquiry",       label: "Submissions" },
+    { state: "follow_up",     label: "Follow Up" },
+    { state: "sent_deposit",  label: "Sent Deposit" },
+    { state: "sent_calendar", label: "Sent Calendar" },
+    { state: "booked",        label: "Booked" },
+    { state: "completed",     label: "Completed" },
   ];
   const map = Object.fromEntries(stateData.map(s => [s.state, s.count]));
   const max = Math.max(totalBookings, 1);

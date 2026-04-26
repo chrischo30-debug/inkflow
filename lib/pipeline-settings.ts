@@ -46,13 +46,13 @@ export function normalizePaymentLinks(raw: unknown): PaymentLink[] {
 }
 
 export const PIPELINE_COLUMNS: BookingState[] = [
-  "inquiry", "follow_up", "accepted", "sent_deposit", "sent_calendar", "booked", "completed",
+  "inquiry", "follow_up", "sent_deposit", "sent_calendar", "booked", "completed",
 ];
 
 export const COLUMN_LABELS: Record<BookingState, string> = {
   inquiry:       "Submissions",
   follow_up:     "Follow Ups",
-  accepted:      "Accepted",
+  accepted:      "Sent Deposit", // legacy — treated as sent_deposit
   sent_deposit:  "Sent Deposit",
   sent_calendar: "Sent Calendar",
   booked:        "Booked",
@@ -63,5 +63,5 @@ export const COLUMN_LABELS: Record<BookingState, string> = {
 };
 
 export const ALL_BOOKING_STATES: BookingState[] = [
-  "inquiry", "follow_up", "accepted", "sent_deposit", "sent_calendar", "booked", "completed", "rejected", "cancelled",
+  "inquiry", "follow_up", "sent_deposit", "sent_calendar", "booked", "completed", "rejected", "cancelled",
 ];

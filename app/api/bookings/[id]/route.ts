@@ -9,9 +9,9 @@ import {
 } from "@/lib/google-calendar";
 
 const STATE_FLOW: Partial<Record<BookingState, BookingState>> = {
-  inquiry:       "accepted",
-  follow_up:     "accepted",
-  accepted:      "sent_deposit",
+  inquiry:       "sent_deposit",
+  follow_up:     "sent_deposit",
+  accepted:      "sent_deposit", // legacy — treat as sent_deposit
   sent_deposit:  "sent_calendar",
   sent_calendar: "booked",
   booked:        "completed",
@@ -90,6 +90,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (body.tip_amount !== undefined) updates.tip_amount = body.tip_amount != null && body.tip_amount !== "" ? Number(body.tip_amount) : null;
       if (body.completion_notes !== undefined) updates.completion_notes = body.completion_notes || null;
       if (body.appointment_date !== undefined) updates.appointment_date = body.appointment_date || null;
+      if (body.scheduling_link_id !== undefined) updates.scheduling_link_id = body.scheduling_link_id || null;
+      if (body.session_count !== undefined) updates.session_count = Number(body.session_count) || 1;
+      if (body.session_durations !== undefined) updates.session_durations = Array.isArray(body.session_durations) ? body.session_durations : null;
 
       if (Object.keys(updates).length === 0) {
         return NextResponse.json({ error: "No fields to update" }, { status: 400 });
@@ -183,15 +186,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 });
               } else {
                 // No existing event — create one
-                const newEventId = await createGoogleCalendarEvent({
+                const calResult = await createGoogleCalendarEvent({
                   accessToken,
                   summary: `${booking.client_name} appointment`,
                   description: booking.description ?? undefined,
                   startDateTime: newDate,
                   endDateTime: endDate,
                 });
-                if (newEventId) {
-                  await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
+                if (calResult.id) {
+                  await supabase.from("bookings").update({ google_event_id: calResult.id }).eq("id", id).eq("artist_id", user.id);
                 }
               }
             }
@@ -262,6 +265,35 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               .update({ last_email_sent_at: new Date().toISOString() })
               .eq("id", id);
             await appendSentEmail(sentSubject ?? "Appointment rescheduled");
+
+            // Notify the artist too
+            try {
+              const artistEmail = (artist as { email?: string | null }).email;
+              if (artistEmail) {
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || `https://${process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app"}`;
+                const bookingUrl = `${appUrl}/bookings/${id}`;
+                const fmtDt = (iso: string) => {
+                  const d = new Date(iso);
+                  return `${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+                };
+                const { Resend } = await import("resend");
+                const r = new Resend(process.env.RESEND_API_KEY || "re_mock_key");
+                const sendingDomain = process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app";
+                await r.emails.send({
+                  from: `FlashBooker <noreply@${sendingDomain}>`,
+                  to: [artistEmail],
+                  subject: `Appointment rescheduled: ${booking.client_name}`,
+                  html: `<div style="font-family:sans-serif;font-size:14px;color:#111;padding:24px">
+<p style="margin:0 0 16px"><strong>${booking.client_name}</strong>'s appointment has been moved.</p>
+<table style="border-collapse:collapse;margin-bottom:16px">
+<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">New time</td><td>${fmtDt(newDate)}</td></tr>
+${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap;color:#888">Was</td><td style="color:#888">${fmtDt(oldDate)}</td></tr>` : ""}
+</table>
+<a href="${bookingUrl}" style="color:#4f46e5">View booking →</a>
+</div>`,
+                });
+              }
+            } catch (e) { console.error("Reschedule artist notification failed:", e); }
           }
         } catch (e) { console.error("Reschedule email failed:", e); }
       }
@@ -280,6 +312,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       // Google Calendar event creation
       let newEventId: string | null = null;
+      let calHtmlLink: string | null = null;
       try {
         const { data: artist } = await supabase
           .from("artists")
@@ -290,13 +323,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const accessToken = await getGoogleAccessToken(supabase, user.id, artist.google_refresh_token);
           if (accessToken) {
             const endDate = new Date(new Date(appointmentDate).getTime() + durationMinutes * 60 * 1000).toISOString();
-            newEventId = await createGoogleCalendarEvent({
+            const calResult = await createGoogleCalendarEvent({
               accessToken,
               summary: `${booking.client_name} appointment`,
               description: booking.description ?? undefined,
               startDateTime: appointmentDate,
               endDateTime: endDate,
             });
+            newEventId = calResult.id;
+            calHtmlLink = calResult.htmlLink;
             if (newEventId) {
               await supabase.from("bookings").update({ google_event_id: newEventId }).eq("id", id).eq("artist_id", user.id);
             }
@@ -304,7 +339,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       } catch (e) { console.error("Google Calendar sync on confirm failed:", e); }
 
-      return NextResponse.json({ success: true, newState: "booked", google_event_id: newEventId });
+      return NextResponse.json({ success: true, newState: "booked", google_event_id: newEventId, google_event_link: calHtmlLink });
     }
 
     // ── Complete ───────────────────────────────────────────────────────────────
@@ -318,12 +353,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
 
       const [{ data: artist }, { data: templateRow }] = await Promise.all([
-        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled").eq("id", booking.artist_id).single(),
+        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address").eq("id", booking.artist_id).single(),
         supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
       ]);
 
       const masterAutoOn = (artist as { auto_emails_enabled?: boolean | null } | null)?.auto_emails_enabled !== false;
-      if (masterAutoOn && (!templateRow || templateRow.auto_send)) {
+      const { STAGE_AUTOSEND_DEFAULTS: COMPLETE_DEFAULTS } = await import("@/lib/email");
+      const completeStageDefault = COMPLETE_DEFAULTS.completed ?? false;
+      const completeEnabled = templateRow ? (templateRow as { enabled?: boolean | null }).enabled !== false : true;
+      if (masterAutoOn && completeEnabled && (templateRow ? templateRow.auto_send : completeStageDefault)) {
         try {
           const { sendStateTransitionEmail } = await import("@/lib/email");
           const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
@@ -356,7 +394,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const [{ data: artist }, { data: templateRow }] = await Promise.all([
-      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled").eq("id", booking.artist_id).single(),
+      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address").eq("id", booking.artist_id).single(),
       supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
@@ -372,7 +410,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     };
 
     const masterAutoOn = (artist as { auto_emails_enabled?: boolean | null } | null)?.auto_emails_enabled !== false;
-    const shouldAutoEmail = masterAutoOn && (!templateRow || templateRow.auto_send);
+    const { STAGE_AUTOSEND_DEFAULTS } = await import("@/lib/email");
+    const stageDefault = STAGE_AUTOSEND_DEFAULTS[nextState as keyof typeof STAGE_AUTOSEND_DEFAULTS] ?? false;
+    const advanceEnabled = templateRow ? (templateRow as { enabled?: boolean | null }).enabled !== false : true;
+    const shouldAutoEmail = masterAutoOn && advanceEnabled && (templateRow ? templateRow.auto_send : stageDefault);
     if (shouldAutoEmail) {
       try {
         const { sendStateTransitionEmail } = await import("@/lib/email");
@@ -384,6 +425,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           artistName: artist?.name ?? "Your Artist",
           paymentLinksList: normalizePaymentLinks(artist?.payment_links),
           calendarLinksList: [],
+          studioAddress: (artist as { studio_address?: string | null } | null)?.studio_address ?? undefined,
           template: templateRow ?? null,
           artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
           branding: { logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null, logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false, logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark" },
