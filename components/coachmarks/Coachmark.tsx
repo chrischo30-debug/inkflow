@@ -30,9 +30,13 @@ function writeStore(s: Stored) {
 }
 
 export function useCoachmarks() {
-  const [store, setStore] = useState<Stored>(() => readStore());
+  // Initialize with the SSR-safe default; read localStorage post-mount via the
+  // effect below. Reading storage in the useState initializer caused server
+  // (empty default) vs client (real saved state) to diverge → React #418.
+  const [store, setStore] = useState<Stored>({ disabled: false, seen: [] });
   useEffect(() => {
     const refresh = () => setStore(readStore());
+    refresh(); // pull saved state on mount
     window.addEventListener(CHANGE_EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => {
