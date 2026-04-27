@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X, Eye, Pencil, Link2 } from "lucide-react";
 import { EmailVarChips } from "@/components/shared/EmailVarChips";
 import { FormatToolbar } from "@/components/shared/FormatToolbar";
+import { useLocalDraft } from "@/lib/use-local-draft";
 import type { PaymentLink, CalendarLink } from "@/lib/pipeline-settings";
 
 export interface ResolvedTemplate {
@@ -36,6 +37,10 @@ interface Props {
   calendarLinks?: CalendarLink[];
   schedulingLinks?: SchedulingLinkOption[];
   previewVars?: Record<string, string>;
+  // Optional: persist subject/body to localStorage under this key while the
+  // modal is open. Pass `email-draft-${bookingId}` from the caller. Cleared on
+  // Send and Skip, kept on Cancel/Close so the user doesn't lose work.
+  draftKey?: string;
   onSend: (subject: string, body: string) => Promise<void>;
   onSkip?: () => void;
   onClose: () => void;
@@ -180,12 +185,24 @@ export function EmailComposeModal({
   calendarLinks: initialCalendarLinks = [],
   schedulingLinks = [],
   previewVars,
+  draftKey,
   onSend,
   onSkip,
   onClose,
 }: Props) {
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState(initialBody);
+
+  const draft = useLocalDraft({
+    key: draftKey,
+    value: { subject, body },
+    onRestore: saved => {
+      if (saved && typeof saved === "object") {
+        if (typeof saved.subject === "string") setSubject(saved.subject);
+        if (typeof saved.body === "string") setBody(saved.body);
+      }
+    },
+  });
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
@@ -240,10 +257,13 @@ export function EmailComposeModal({
     setSending(true);
     try {
       await onSend(subject, body);
+      draft.clear();
     } finally {
       setSending(false);
     }
   };
+
+  const handleSkip = onSkip ? () => { draft.clear(); onSkip(); } : undefined;
 
   const hasUnreplacedTodo = /REPLACE THIS/.test(body) || /REPLACE THIS/.test(subject);
 
@@ -392,10 +412,10 @@ export function EmailComposeModal({
             {hasUnreplacedTodo && (
               <span className="text-xs text-amber-700 dark:text-amber-400">Fill in the highlighted instructions first</span>
             )}
-            {onSkip && (
+            {handleSkip && (
               <button
                 type="button"
-                onClick={onSkip}
+                onClick={handleSkip}
                 className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2"
               >
                 skip email

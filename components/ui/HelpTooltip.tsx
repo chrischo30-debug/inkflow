@@ -85,7 +85,7 @@ export function HelpTooltip({ title, body, children }: Props) {
         onMouseEnter={show}
         onMouseLeave={scheduleHide}
         onClick={e => { e.preventDefault(); e.stopPropagation(); open ? setOpen(false) : show(); }}
-        className="w-4 h-4 rounded-full border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-outline-variant transition-colors text-[10px] font-semibold flex items-center justify-center leading-none"
+        className="w-5 h-5 rounded-full border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-outline-variant transition-colors text-xs font-semibold flex items-center justify-center leading-none"
         aria-label="Help"
       >
         ?

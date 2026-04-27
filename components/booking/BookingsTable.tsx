@@ -10,6 +10,7 @@ import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays,
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
+import { useLocalDraft } from "@/lib/use-local-draft";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 
 const STATE_TABS: { value: string; label: string }[] = [
@@ -195,6 +196,23 @@ export function BookingsTable({
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", notes: "" });
   const [completionUploading, setCompletionUploading] = useState(false);
+
+  // Draft-persist completion form (text fields only — File queue can't survive
+  // a page refresh anyway). Keyed by booking id while the modal is open.
+  const completionDraftKey = completionModal ? `fb:completion-draft:${completionModal.bookingId}` : null;
+  const completionDraft = useLocalDraft({
+    key: completionDraftKey,
+    value: completionData,
+    onRestore: saved => {
+      if (saved && typeof saved === "object") {
+        setCompletionData({
+          total_amount: typeof saved.total_amount === "string" ? saved.total_amount : "",
+          tip_amount: typeof saved.tip_amount === "string" ? saved.tip_amount : "",
+          notes: typeof saved.notes === "string" ? saved.notes : "",
+        });
+      }
+    },
+  });
   const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
   const [depositModal, setDepositModal] = useState<{ bookingId: string; amount: string } | null>(null);
@@ -409,6 +427,7 @@ export function BookingsTable({
       completion_notes: completionData.notes || undefined,
       completion_image_urls: uploadedUrls.length > 0 ? uploadedUrls : b.completion_image_urls,
     } : b));
+    completionDraft.clear();
     setCompletionModal(null);
   };
 
@@ -966,7 +985,7 @@ export function BookingsTable({
             <div className="flex items-center justify-between">
               <button
                 type="button"
-                onClick={async () => { await moveTo(completionModal.bookingId, "completed"); setCompletionModal(null); }}
+                onClick={async () => { await moveTo(completionModal.bookingId, "completed"); completionDraft.clear(); setCompletionModal(null); }}
                 className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2"
               >
                 skip
@@ -1035,6 +1054,7 @@ export function BookingsTable({
           calendarLinks={emailCompose.calendarLinks}
           schedulingLinks={emailCompose.schedulingLinks}
           previewVars={emailCompose.previewVars}
+          draftKey={`fb:email-draft:${emailCompose.bookingId}:${emailCompose.afterSendState ?? "manual"}`}
           onSend={sendEmail}
           onSkip={emailCompose.afterSendState ? async () => {
             const { bookingId, afterSendState } = emailCompose;

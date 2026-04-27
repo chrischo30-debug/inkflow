@@ -11,6 +11,7 @@ import {
   FormFieldKey,
   CustomFormFieldConfig,
 } from "@/lib/form-fields";
+import { useLocalDraft } from "@/lib/use-local-draft";
 
 const FIELD_LABELS: Record<FormFieldKey, string> = {
   name: "Full Name",
@@ -153,6 +154,20 @@ export function FormBuilderSettings({
     sort_order: 0,
     placeholder: "",
     options: [],
+  });
+
+  // Persist the in-progress custom field while the composer is open. Survives
+  // a tab refresh; cleared explicitly when the field is added or discarded.
+  const draftFieldStorageKey = showAddComposer ? "fb:custom-field-draft" : null;
+  const draftFieldStore = useLocalDraft({
+    key: draftFieldStorageKey,
+    storage: "session",
+    value: draftField,
+    onRestore: saved => {
+      if (saved && typeof saved === "object" && "type" in saved) {
+        setDraftField(prev => ({ ...prev, ...saved }));
+      }
+    },
   });
 
   const [fieldOrder, setFieldOrder] = useState<ItemRef[]>(() => {
@@ -371,6 +386,7 @@ export function FormBuilderSettings({
 
   const resetDraftField = () => {
     setDraftField({ field_key: "", label: "", type: "text", enabled: true, required: false, sort_order: 0, placeholder: "", options: [] });
+    draftFieldStore.clear();
   };
 
   const save = async () => {

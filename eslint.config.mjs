@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not real source — duplicate / archived copies that lint shouldn't scan.
+    ".claude/**",
+    ".archived/**",
+    ".agents/**",
+    "deploy/**",
   ]),
 ]);
 

@@ -59,8 +59,8 @@ function CopyButton({ value }: { value: string }) {
   };
   return (
     <button type="button" onClick={copy} title="Copy"
-      className="shrink-0 p-1 rounded text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-high transition-colors">
-      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+      className="shrink-0 p-2 rounded-lg text-on-surface-variant/40 hover:text-on-surface-variant hover:bg-surface-container-high transition-colors">
+      {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -126,8 +126,8 @@ function CardOverflowMenu({
   return (
     <>
       <button type="button" onClick={handleOpen} title="More actions"
-        className="p-1.5 rounded-lg flex items-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
-        <MoreHorizontal className="w-3.5 h-3.5" />
+        className="p-2.5 rounded-lg flex items-center text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
+        <MoreHorizontal className="w-4 h-4" />
       </button>
       {open && createPortal(
         <div ref={menuRef} style={menuStyle} className="z-[9999] w-52 bg-surface-container-lowest border border-primary/20 rounded-xl shadow-lg py-1 overflow-hidden">

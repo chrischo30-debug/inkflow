@@ -32,21 +32,39 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const safePaths = [
+    // Auth pages
     '/login',
     '/signup',
     '/onboarding',
     '/forgot-password',
+    '/reset-password',
     '/auth/callback',
     '/admin/access-relay',
-    '/api/bookings',
+    // Public marketing / legal
+    '/terms',
+    '/privacy',
+    // Public APIs (callable by external services or unauthenticated clients)
+    '/api/bookings',                  // public form submission
+    '/api/check-slug',                // signup slug availability
+    '/api/contact',                   // public contact form
+    '/api/newsletter',                // public newsletter signup
+    '/api/schedule',                  // public scheduling picker (slots + request)
+    '/api/webhooks',                  // Stripe / Square / Typeform / form ingress
+    '/api/reminders',                 // Vercel cron (auth via CRON_SECRET header)
     '/api/auth/google/callback',
     '/api/uploads/reference-images',
+    '/api/payments/events',           // SSE for live payment status on public pages
   ]
+
+  // Public artist client pages: `/<slug>/book`, `/<slug>/contact`, `/<slug>/newsletter`.
+  // Use a precise regex — `pathname.includes('/book')` matched random API paths
+  // like `/api/artist/booking-page` and `/api/artist/books-status`.
+  const publicArtistRoute = /^\/[^/]+\/(book|contact|newsletter)(\/.*)?$/.test(request.nextUrl.pathname)
 
   if (
     !user &&
     !safePaths.some((path) => request.nextUrl.pathname.startsWith(path)) &&
-    !request.nextUrl.pathname.includes('/book') // Public Artist Intake Forms
+    !publicArtistRoute
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'

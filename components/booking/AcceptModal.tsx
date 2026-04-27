@@ -233,6 +233,7 @@ export function AcceptModal({
         paymentLinks={data.paymentLinks}
         calendarLinks={data.calendarLinks}
         previewVars={data.previewVars}
+        draftKey={`fb:email-draft:${bookingId}:accept`}
         onSend={handleSend}
         onSkip={handleSkip}
         onClose={onClose}

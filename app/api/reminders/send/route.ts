@@ -12,7 +12,11 @@ const DEFAULT_REMINDER_TEMPLATE = {
 // Vercel Cron sends Authorization: Bearer $CRON_SECRET
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true; // dev: no secret configured, allow all
+  if (!secret) {
+    // Missing CRON_SECRET in production = anyone can trigger a full reminder
+    // cycle (mass email). Fail closed. Dev/preview only: allow.
+    return process.env.NODE_ENV !== "production";
+  }
   const auth = req.headers.get("authorization") ?? "";
   return auth === `Bearer ${secret}`;
 }

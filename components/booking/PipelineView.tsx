@@ -12,6 +12,7 @@ import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
 import { SendDepositModal } from "./SendDepositModal";
 import { CoachmarkSequence, useCoachmarks } from "@/components/coachmarks/Coachmark";
 import { SendCalendarModal } from "./SendCalendarModal";
+import { useLocalDraft } from "@/lib/use-local-draft";
 
 interface PipelineViewProps {
   initialBookings: Booking[];
@@ -96,6 +97,24 @@ export function PipelineView({
   const [bookModal, setBookModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
   const [completionModal, setCompletionModal] = useState<CompletionModal | null>(null);
   const [completionData, setCompletionData] = useState({ total_amount: "", tip_amount: "", payment_source: "", notes: "" });
+
+  // Persist completion form to localStorage so a refresh / iPad switch doesn't
+  // wipe the artist's typing.
+  const completionDraftKey = completionModal ? `fb:completion-draft:${completionModal.bookingId}` : null;
+  const completionDraft = useLocalDraft({
+    key: completionDraftKey,
+    value: completionData,
+    onRestore: saved => {
+      if (saved && typeof saved === "object") {
+        setCompletionData({
+          total_amount: typeof saved.total_amount === "string" ? saved.total_amount : "",
+          tip_amount: typeof saved.tip_amount === "string" ? saved.tip_amount : "",
+          payment_source: typeof saved.payment_source === "string" ? saved.payment_source : "",
+          notes: typeof saved.notes === "string" ? saved.notes : "",
+        });
+      }
+    },
+  });
   const [emailCompose, setEmailCompose] = useState<EmailCompose | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
   const [sendDepositModal, setSendDepositModal] = useState<{ bookingId: string } | null>(null);
@@ -193,6 +212,7 @@ export function PipelineView({
         payment_source: completionData.payment_source || undefined,
         completion_notes: completionData.notes || undefined,
       } : b));
+      completionDraft.clear();
       setCompletionModal(null);
     } catch { alert("Failed to complete booking"); }
   };
@@ -571,7 +591,7 @@ export function PipelineView({
             </div>
             <div className="flex items-center justify-between">
               <button type="button"
-                onClick={async () => { await moveTo(completionModal.bookingId, "completed"); setCompletionModal(null); }}
+                onClick={async () => { await moveTo(completionModal.bookingId, "completed"); completionDraft.clear(); setCompletionModal(null); }}
                 className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2">
                 skip
               </button>
@@ -601,6 +621,7 @@ export function PipelineView({
           calendarLinks={emailCompose.calendarLinks}
           schedulingLinks={emailCompose.schedulingLinks}
           previewVars={emailCompose.previewVars}
+          draftKey={`fb:email-draft:${emailCompose.bookingId}:${emailCompose.afterSendState ?? "manual"}`}
           onSend={sendComposedEmail}
           onSkip={emailCompose.afterSendState ? async () => {
             const { bookingId, afterSendState } = emailCompose;

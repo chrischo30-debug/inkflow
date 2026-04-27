@@ -232,3 +232,12 @@ Dark mode option in dashboard settings.
 - Deposit automation (auto-mark paid via Stripe webhook) ✓ — done in Phase 13
 - Custom domain for booking form
 - Instagram DM integration
+
+---
+
+## Operations debt (revisit when user count grows)
+- **Split dev and prod Supabase projects.** Phase 1 ships with a single Supabase project serving both — fine for very few users, but dev work and prod data share a DB. Trigger to split: real artists have real bookings worth protecting from dev mistakes (≈10+ active artists, or any client paying real money for deposits). Steps when ready: create a new Supabase project, run all migrations against it, point Vercel Production env at the new project, keep dev on the old one.
+- **Server-side draft persistence** ([deploy/DATA_PERSISTENCE.md](deploy/DATA_PERSISTENCE.md)) — email compose / completion / form-field drafts are currently localStorage-only (single-device). Upgrade to a `booking_email_drafts` table when artists work from multiple devices.
+- **Rate limit `/api/bookings` POST** ([deploy/OPTIMIZATIONS.md](deploy/OPTIMIZATIONS.md) P0-5) — deferred for Phase 1 (low-user, no abuse signal). Add `@upstash/ratelimit` when usage grows or abuse appears.
+- **Sentry / observability SDK** ([deploy/MONITORING.md](deploy/MONITORING.md)) — biggest single observability win, ~1 hour to wire `@sentry/nextjs`. Highest-priority post-deploy hardening item.
+- **Lint cleanup** — 46 pre-existing lint errors from Next 16's stricter `react-hooks/*` rules. Mostly false positives but worth a focused pass once deploy is stable.

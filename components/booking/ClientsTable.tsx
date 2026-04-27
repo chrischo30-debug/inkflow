@@ -774,6 +774,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
           paymentLinks={emailCompose.paymentLinks}
           calendarLinks={emailCompose.calendarLinks}
           previewVars={emailCompose.previewVars}
+          draftKey={`fb:email-draft:${emailCompose.bookingId}:clients`}
           onSend={sendEmail}
           onClose={() => setEmailCompose(null)}
         />

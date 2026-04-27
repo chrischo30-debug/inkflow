@@ -117,7 +117,7 @@ export default async function DashboardPage() {
                 <p className="text-sm text-on-surface-variant mt-1">No action items right now.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                 <ActionCard
                   label="New inquiries"
                   count={newInquiries.length}

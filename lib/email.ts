@@ -352,7 +352,13 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
     headers['References'] = threadMessageId;
   }
 
-  if (process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY) {
+  if (!process.env.RESEND_API_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      // Fail loud in production: the placeholder key would 401 at Resend and
+      // get silently swallowed by the try/catch below, leaving callers thinking
+      // the email went out.
+      throw new Error('RESEND_API_KEY is not set — refusing to send email in production');
+    }
     console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo: artistReplyTo, messageId, threadMessageId, text });
     return { subject, messageId };
   }

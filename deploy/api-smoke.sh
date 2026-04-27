@@ -38,8 +38,11 @@ skip()  { c_ylw "  SKIP"; printf " — %s\n" "$1"; SKIP=$((SKIP+1)); }
 # req METHOD PATH [DATA] [EXTRA_CURL_FLAGS...]
 # Returns: status_code\nbody  (newline-separated)
 req() {
-  local method="$1" path="$2" data="${3:-}"; shift 3 || true
-  local out status
+  local method="$1" path="$2" data="${3:-}"
+  # Shift exactly the args we know about so $@ contains only extra curl flags
+  shift 2
+  [[ $# -gt 0 ]] && shift  # consume optional data arg if present
+  local out
   if [[ -n "$data" ]]; then
     out=$(curl -sS -o /tmp/.fb_body -w "%{http_code}" \
       -X "$method" -H "Content-Type: application/json" \
@@ -48,8 +51,7 @@ req() {
     out=$(curl -sS -o /tmp/.fb_body -w "%{http_code}" \
       -X "$method" "$@" "$BASE_URL$path")
   fi
-  status="$out"
-  printf "%s\n" "$status"
+  printf "%s\n" "$out"
   cat /tmp/.fb_body 2>/dev/null
 }
 
