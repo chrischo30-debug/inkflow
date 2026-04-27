@@ -138,7 +138,8 @@ export function BookingsTable({
   initialState,
   initialExpandId = null,
   calendarSyncEnabled = false,
-  hasStripe = false,
+  paymentsConnected = false,
+  paymentProvider = null,
   artistName = "",
   artistId = "",
   schedulingLinks = [],
@@ -148,11 +149,13 @@ export function BookingsTable({
   initialState: string;
   initialExpandId?: string | null;
   calendarSyncEnabled?: boolean;
-  hasStripe?: boolean;
+  paymentsConnected?: boolean;
+  paymentProvider?: "stripe" | "square" | null;
   artistName?: string;
   artistId?: string;
   schedulingLinks?: SchedulingLink[];
 }) {
+  const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
   const [bookings, setBookings] = useState(initialBookings);
   const [activeTab, setActiveTab] = useState(initialState);
   const [search, setSearch] = useState("");
@@ -206,14 +209,14 @@ export function BookingsTable({
     setDepositLoading(true);
     setDepositError("");
     try {
-      const res = await fetch(`/api/bookings/${depositModal.bookingId}/stripe-payment-link`, {
+      const res = await fetch(`/api/bookings/${depositModal.bookingId}/deposit-link`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount_cents: cents }),
       });
       const data = await res.json();
       if (!res.ok) { setDepositError(data.error ?? "Failed to generate link"); setDepositLoading(false); return; }
-      setBookings(prev => prev.map(b => b.id === depositModal.bookingId ? { ...b, stripe_payment_link_url: data.url } : b));
+      setBookings(prev => prev.map(b => b.id === depositModal.bookingId ? { ...b, deposit_link_url: data.url, stripe_payment_link_url: data.url } : b));
       setDepositModal(null);
       navigator.clipboard.writeText(data.url).then(() => {
         setCopiedLink(depositModal.bookingId);
@@ -534,14 +537,15 @@ export function BookingsTable({
           </td>
           <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-end gap-2">
-              {/* Deposit link — shown for accepted/confirmed when Stripe connected */}
-              {hasStripe && (booking.state === "sent_deposit" || booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
-                booking.stripe_payment_link_url ? (
+              {/* Deposit link — shown for accepted/confirmed when a payment provider is connected */}
+              {paymentsConnected && (booking.state === "sent_deposit" || booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
+                (booking.deposit_link_url || booking.stripe_payment_link_url) ? (
                   <button
                     type="button"
                     title="Copy deposit link"
                     onClick={() => {
-                      navigator.clipboard.writeText(booking.stripe_payment_link_url!).then(() => {
+                      const url = booking.deposit_link_url ?? booking.stripe_payment_link_url ?? "";
+                      navigator.clipboard.writeText(url).then(() => {
                         setCopiedLink(booking.id);
                         setTimeout(() => setCopiedLink(null), 2000);
                       });
@@ -994,7 +998,8 @@ export function BookingsTable({
         <AcceptModal
           bookingId={acceptModal.bookingId}
           clientName={bookings.find(b => b.id === acceptModal.bookingId)?.client_name}
-          hasStripe={hasStripe}
+          paymentsConnected={paymentsConnected}
+          paymentProvider={paymentProvider}
           schedulingLinks={schedulingLinks}
           artistId={artistId}
           isCalendarConnected={calendarSyncEnabled}
@@ -1047,7 +1052,7 @@ export function BookingsTable({
             <div>
               <p className="text-sm font-semibold text-on-surface">Generate deposit link</p>
               <p className="text-xs text-on-surface-variant mt-0.5">
-                Creates a Stripe payment link for {bookings.find(b => b.id === depositModal.bookingId)?.client_name}.
+                Creates a {providerLabel} payment link for {bookings.find(b => b.id === depositModal.bookingId)?.client_name}.
               </p>
             </div>
             <div className="space-y-1.5">

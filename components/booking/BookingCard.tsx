@@ -42,7 +42,8 @@ interface BookingCardProps {
   dropIndicator?: 'above' | 'below' | null;
   onDragOverCard?: (id: string, position: 'above' | 'below') => void;
   onDropOnCard?: (targetId: string, position: 'above' | 'below') => void;
-  hasStripe?: boolean;
+  paymentsConnected?: boolean;
+  paymentProvider?: "stripe" | "square" | null;
   artistId?: string;
   schedulingLinks?: SchedulingLink[];
 }
@@ -187,8 +188,9 @@ export function BookingCard({
   onAdvanceState, onAcceptInquiry, onRejectInquiry, onFollowUpInquiry,
   onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid,
   dragging, onDragStart, onDragEnd, dropIndicator, onDragOverCard, onDropOnCard,
-  hasStripe = false, artistId, schedulingLinks = [],
+  paymentsConnected = false, paymentProvider = null, artistId, schedulingLinks = [],
 }: BookingCardProps) {
+  const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
   const [showDetails, setShowDetails] = useState(false);
   const [depositPaid, setDepositPaid] = useState(booking.deposit_paid ?? false);
   const [markingPaid, setMarkingPaid] = useState(false);
@@ -378,9 +380,9 @@ export function BookingCard({
 
       {/* Footer */}
       <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-between gap-1.5">
-        {/* Left: manual "mark paid" for no-Stripe sent_deposit */}
+        {/* Left: manual "mark paid" when no payment provider, otherwise auto-advance hint */}
         <div className="flex items-center gap-1">
-          {booking.state === "sent_deposit" && !hasStripe && (
+          {booking.state === "sent_deposit" && !paymentsConnected && (
             depositPaid || booking.deposit_paid ? (
               <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
                 <Check className="w-3 h-3" /> Deposit paid
@@ -402,7 +404,7 @@ export function BookingCard({
               </button>
             )
           )}
-          {booking.state === "sent_deposit" && hasStripe && (
+          {booking.state === "sent_deposit" && paymentsConnected && (
             depositPaid || booking.deposit_paid ? (
               <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
                 <Check className="w-3 h-3" /> Deposit paid
@@ -410,7 +412,7 @@ export function BookingCard({
             ) : (
               <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1">
                 <Send className="w-3 h-3 shrink-0" />
-                Stripe will auto-advance when paid
+                {providerLabel} will auto-advance when paid
               </span>
             )
           )}

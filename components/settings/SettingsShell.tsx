@@ -37,8 +37,13 @@ export interface SettingsShellProps {
   isCalendarConnected: boolean;
   paymentLinks: PaymentLink[];
   calendarLinks: CalendarLink[];
+  paymentProvider: "stripe" | "square" | null;
   stripeApiKey: string;
   stripeWebhookSecret: string;
+  squareAccessToken: string;
+  squareLocationId: string;
+  squareWebhookSignatureKey: string;
+  squareEnvironment: "production" | "sandbox";
   schedulingLinks: SchedulingLink[];
   reminderEnabled: boolean;
   reminderHoursBefore: number;
@@ -118,8 +123,13 @@ export function SettingsShell(props: SettingsShellProps) {
                 isCalendarConnected={props.isCalendarConnected}
               />
               <ExternalApiSettings
+                initialProvider={props.paymentProvider}
                 initialStripeKey={props.stripeApiKey}
                 initialStripeWebhookSecret={props.stripeWebhookSecret}
+                initialSquareAccessToken={props.squareAccessToken}
+                initialSquareLocationId={props.squareLocationId}
+                initialSquareWebhookSignatureKey={props.squareWebhookSignatureKey}
+                initialSquareEnvironment={props.squareEnvironment}
                 artistId={props.artistId}
               />
 

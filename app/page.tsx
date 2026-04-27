@@ -19,13 +19,13 @@ export default async function DashboardPage() {
 
   const { data: artistData } = await supabase
     .from("artists")
-    .select("name, slug, calendar_sync_enabled, books_open, books_open_at, books_close_at, stripe_api_key, scheduling_links")
+    .select("name, slug, calendar_sync_enabled, books_open, books_open_at, books_close_at, payment_provider, stripe_api_key, square_access_token, square_location_id, scheduling_links")
     .eq("id", user.id)
     .single();
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, stripe_payment_link_url, sort_order, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, sort_order, created_at, updated_at")
     .eq("artist_id", user.id)
     .neq("state", "cancelled")
     .order("sort_order", { ascending: true, nullsFirst: false })
@@ -59,7 +59,15 @@ export default async function DashboardPage() {
   });
 
   const firstName = artistData?.name?.split(" ")[0] ?? "there";
-  const hasStripe = Boolean((artistData as Record<string, unknown>)?.stripe_api_key);
+  const artistRow = artistData as Record<string, unknown> | null;
+  const paymentProvider = ((artistRow?.payment_provider as "stripe" | "square" | null | undefined) ?? null);
+  const paymentsConnected =
+    paymentProvider === "square"
+      ? Boolean(artistRow?.square_access_token && artistRow?.square_location_id)
+      : Boolean(artistRow?.stripe_api_key);
+  const effectiveProvider = paymentsConnected
+    ? (paymentProvider ?? (artistRow?.stripe_api_key ? "stripe" : null))
+    : null;
 
   const booksStatus = {
     books_open: artistData?.books_open ?? true,
@@ -150,7 +158,7 @@ export default async function DashboardPage() {
                   {[
                     { stage: "Submission", desc: "New inquiry just came in. Review and choose Accept, Reject, or Follow Up." },
                     { stage: "Follow Up", desc: "You sent a question to the client. Waiting on their reply before deciding." },
-                    { stage: "Sent Deposit", desc: "Deposit email is out. With Stripe, moves to Sent Calendar automatically when they pay." },
+                    { stage: "Sent Deposit", desc: "Deposit email is out. When Stripe or Square is connected, moves to Sent Calendar automatically once they pay." },
                     { stage: "Sent Calendar", desc: "Deposit received. Client gets a link to pick their appointment time." },
                     { stage: "Booked", desc: "Appointment is locked in automatically when the client picks a time slot." },
                     { stage: "Completed", desc: "Session done. Record final payment and notes." },
@@ -168,7 +176,8 @@ export default async function DashboardPage() {
                 initialBookings={bookings}
                 fieldLabelMap={fieldLabelMap}
                 calendarSyncEnabled={Boolean(artistData?.calendar_sync_enabled)}
-                hasStripe={hasStripe}
+                paymentsConnected={paymentsConnected}
+                paymentProvider={effectiveProvider}
                 artistId={user.id}
                 schedulingLinks={Array.isArray((artistData as Record<string,unknown>)?.scheduling_links) ? (artistData as Record<string,unknown>).scheduling_links as import("@/lib/pipeline-settings").SchedulingLink[] : []}
               />

@@ -5,8 +5,8 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import type { AnalyticsData, DistItem, MonthlyPoint, RecentPayment } from "@/app/analytics/page";
-import { TrendingUp, Users, DollarSign, Award, Repeat2, CreditCard, Sparkles, AlertCircle } from "lucide-react";
+import type { AnalyticsData, DistItem, MonthlyPoint } from "@/app/analytics/page";
+import { TrendingUp, Users, DollarSign, Award, Repeat2, Sparkles } from "lucide-react";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const PALETTE = ["#6366f1", "#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#06b6d4", "#f97316", "#84cc16", "#14b8a6", "#a855f7"];
@@ -252,73 +252,18 @@ function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: 
   );
 }
 
-// ─── Recent payments table ────────────────────────────────────────────────────
-function RecentPaymentsTable({ payments }: { payments: RecentPayment[] }) {
-  if (payments.length === 0) {
-    return <p className="text-sm text-on-surface-variant/60">No recent payments.</p>;
-  }
-  const showNet = payments.some(p => p.net !== null);
-  return (
-    <div className="overflow-x-auto -mx-1">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-on-surface-variant/60 uppercase tracking-wide text-[10px]">
-            <th className="text-left pb-2 pr-3 font-semibold">Client</th>
-            <th className="text-left pb-2 pr-3 font-semibold">Session</th>
-            <th className="text-right pb-2 pr-3 font-semibold">Gross</th>
-            {showNet && <th className="text-right pb-2 pr-3 font-semibold">After fees</th>}
-            <th className="text-left pb-2 pr-3 font-semibold">Status</th>
-            <th className="text-left pb-2 font-semibold">Date</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-outline-variant/10">
-          {payments.map(p => (
-            <tr key={p.id}>
-              <td className="py-2 pr-3 font-medium text-on-surface truncate max-w-[100px]">{p.clientName}</td>
-              <td className="py-2 pr-3 text-on-surface-variant truncate max-w-[120px]">{p.sessionType}</td>
-              <td className="py-2 pr-3 text-right font-semibold text-on-surface tabular-nums">{fmt$(p.amount)}</td>
-              {showNet && (
-                <td className="py-2 pr-3 text-right font-semibold text-emerald-600 tabular-nums">
-                  {p.net != null ? fmt$(p.net) : "—"}
-                </td>
-              )}
-              <td className="py-2 pr-3">
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold uppercase tracking-wide">
-                  {p.status}
-                </span>
-              </td>
-              <td className="py-2 text-on-surface-variant tabular-nums">
-                {new Date(p.date).toLocaleDateString("en", { month: "short", day: "numeric" })}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
   const {
     totalRevenue, totalTips, totalBookings, totalClients,
     completedCount, conversionRate, avgPrice, avgBudget,
     returningClients, monthlyData, stateData, placements, sizes, requestTypes,
-    stripeRevenue, stripeCount, stripeMonthly,
-    stripeThisMonth, stripeLastMonth, stripeOutstanding, stripeConversionRate,
-    stripeRecentPayments,
     revenueThisMonth, revenueThisYear, clientsThisMonth, clientsThisYear,
     sessionsThisMonth, sessionsThisYear,
   } = data;
 
   const hasRevenue = totalRevenue > 0;
-  const hasStripe = stripeRevenue !== null;
-
-  // Merge stripe monthly into chart data if available
-  const chartData: (MonthlyPoint & { stripe?: number })[] = monthlyData.map(m => {
-    const sm = stripeMonthly?.find(s => s.month === m.key);
-    return { ...m, ...(sm ? { stripe: sm.amount } : {}) };
-  });
+  const chartData: MonthlyPoint[] = monthlyData;
 
   return (
     <div className="p-6 space-y-5 max-w-[1400px]">
@@ -329,12 +274,10 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           label="Revenue"
           monthly={fmt$(revenueThisMonth)}
           year={fmt$(revenueThisYear)}
-          total={fmt$(totalRevenue + totalTips + (stripeRevenue ?? 0))}
+          total={fmt$(totalRevenue + totalTips)}
           monthSub="this calendar month"
           yearSub={`${new Date().getFullYear()} calendar year`}
-          totalSub={hasStripe
-            ? `incl. ${fmt$(stripeRevenue ?? 0)} in Stripe deposits`
-            : totalTips > 0 ? `incl. ${fmt$(totalTips)} in tips` : `${completedCount} completed sessions`}
+          totalSub={totalTips > 0 ? `incl. ${fmt$(totalTips)} in tips` : `${completedCount} completed sessions`}
           icon={DollarSign}
           accent
         />
@@ -369,7 +312,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       {/* ── Revenue + state donut ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <Section title="Revenue Over Time" className="xl:col-span-2">
-          {hasRevenue || hasStripe ? (
+          {hasRevenue ? (
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
                 <defs>
@@ -377,21 +320,12 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
                     <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
-                  {hasStripe && (
-                    <linearGradient id="stripeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  )}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={v => fmt$(v)} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<RevenueTooltip />} />
                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#6366f1" strokeWidth={2} fill="url(#revGrad)" dot={false} />
-                {hasStripe && (
-                  <Area type="monotone" dataKey="stripe" name="Stripe" stroke="#10b981" strokeWidth={2} fill="url(#stripeGrad)" dot={false} />
-                )}
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -564,86 +498,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           </div>
         </Section>
 
-        {/* Stripe card — always shown, different content based on connection */}
-        <Section title="Stripe Payments">
-          {hasStripe ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-surface-container-low flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-on-surface-variant" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-on-surface">{fmt$(stripeRevenue!)}</p>
-                  <p className="text-xs text-on-surface-variant">gross via Stripe</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <p className="text-xs text-on-surface-variant mb-1">Payments</p>
-                  <p className="text-xl font-bold text-on-surface">{stripeCount}</p>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-3">
-                  <p className="text-xs text-on-surface-variant mb-1">Avg payment</p>
-                  <p className="text-xl font-bold text-on-surface">
-                    {stripeCount! > 0 ? fmt$(stripeRevenue! / stripeCount!) : "—"}
-                  </p>
-                </div>
-              </div>
-              {stripeRevenue! > 0 && totalRevenue > 0 && (
-                <p className="text-xs text-on-surface-variant/70">
-                  Stripe shows {pct((stripeRevenue! / totalRevenue) * 100)} of recorded revenue
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-32 gap-2 text-center">
-              <CreditCard className="w-8 h-8 text-on-surface-variant/30" />
-              <p className="text-sm text-on-surface-variant/60">Connect your Stripe API key in Settings to see payment analytics.</p>
-            </div>
-          )}
-        </Section>
       </div>
-
-      {/* ── Payment link metrics (only shown when Stripe is connected) ──── */}
-      {hasStripe && (
-        <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">This Month</p>
-              <p className="text-2xl font-bold font-heading text-on-surface">
-                {stripeThisMonth !== null ? fmt$(stripeThisMonth) : "—"}
-              </p>
-              <p className="text-xs text-on-surface-variant/60">Stripe revenue</p>
-            </div>
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Last Month</p>
-              <p className="text-2xl font-bold font-heading text-on-surface">
-                {stripeLastMonth !== null ? fmt$(stripeLastMonth) : "—"}
-              </p>
-              <p className="text-xs text-on-surface-variant/60">Stripe revenue</p>
-            </div>
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
-              <div className="flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Outstanding</p>
-              </div>
-              <p className="text-2xl font-bold font-heading text-amber-600">{stripeOutstanding}</p>
-              <p className="text-xs text-on-surface-variant/60">links sent, awaiting payment</p>
-            </div>
-            <div className="rounded-2xl border border-outline-variant/15 bg-surface p-5 flex flex-col gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Link Conversion</p>
-              <p className="text-2xl font-bold font-heading text-on-surface">
-                {stripeConversionRate !== null ? pct(stripeConversionRate) : "—"}
-              </p>
-              <p className="text-xs text-on-surface-variant/60">paid / links sent</p>
-            </div>
-          </div>
-
-          <Section title="Recent Payments">
-            <RecentPaymentsTable payments={stripeRecentPayments} />
-          </Section>
-        </>
-      )}
 
     </div>
   );

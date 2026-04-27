@@ -46,7 +46,7 @@ export default function PrivacyPage() {
         <li><strong>Business content</strong>: form templates, email templates, payment link
           configurations, calendar availability, and similar settings you create.</li>
         <li><strong>Integration credentials and data</strong>: API keys and OAuth tokens you
-          connect (e.g., Stripe, Google Calendar, Cal.com, Kit), and the data returned by
+          connect (e.g., Stripe, Square, Google Calendar, Cal.com, Kit), and the data returned by
           those integrations that we need to provide the Service (for example, email threads,
           calendar events, payment records).</li>
         <li><strong>Communications with us</strong>: messages you send to support and related
@@ -102,6 +102,7 @@ export default function PrivacyPage() {
       <ul>
         <li><strong>Supabase</strong> — database hosting and authentication.</li>
         <li><strong>Stripe</strong> — payment processing (only when an Artist connects Stripe).</li>
+        <li><strong>Square</strong> — payment processing (only when an Artist connects Square).</li>
         <li><strong>Resend</strong> — transactional and booking email delivery. All outgoing mail
           is sent through Resend from a FlashBooker-controlled address with the Artist&apos;s
           personal email set as the Reply-To header.</li>

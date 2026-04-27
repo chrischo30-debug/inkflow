@@ -47,6 +47,13 @@ export interface Booking {
   sent_emails?: SentEmailEntry[];
   has_unread_reply?: boolean;
   deposit_paid?: boolean;
+  /** Provider-agnostic deposit link URL. Falls back to legacy stripe_payment_link_url. */
+  deposit_link_url?: string;
+  /** External order/payment id used by the provider for webhook reconciliation. */
+  deposit_external_id?: string;
+  /** Which provider issued the deposit link for this booking ('stripe' | 'square'). */
+  payment_provider?: "stripe" | "square" | null;
+  /** @deprecated Use deposit_link_url. Kept on the type so legacy reads still type-check. */
   stripe_payment_link_url?: string;
   scheduling_link_id?: string;
   total_amount?: number;

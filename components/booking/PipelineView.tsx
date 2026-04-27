@@ -17,7 +17,8 @@ interface PipelineViewProps {
   initialBookings: Booking[];
   fieldLabelMap?: Record<string, string>;
   calendarSyncEnabled?: boolean;
-  hasStripe?: boolean;
+  paymentsConnected?: boolean;
+  paymentProvider?: "stripe" | "square" | null;
   artistId?: string;
   schedulingLinks?: SchedulingLink[];
 }
@@ -37,11 +38,11 @@ type EmailCompose = {
 
 type CompletionModal = { bookingId: string };
 
-const PAYMENT_SOURCES = ["Cash", "Venmo", "PayPal", "Zelle", "Stripe", "Other"];
+const PAYMENT_SOURCES = ["Cash", "Venmo", "PayPal", "Zelle", "Stripe", "Square", "Other"];
 
 export function PipelineView({
   initialBookings, fieldLabelMap = {}, calendarSyncEnabled = false,
-  hasStripe = false, artistId, schedulingLinks = [],
+  paymentsConnected = false, paymentProvider = null, artistId, schedulingLinks = [],
 }: PipelineViewProps) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -114,7 +115,8 @@ export function PipelineView({
 
   const handleAcceptSent = (bookingId: string) => {
     // AcceptModal now collects scheduling link + deposit upfront and moves directly
-    // to sent_deposit; the rest is automatic via Stripe webhook + scheduling page.
+    // to sent_deposit; the rest is automatic via the active payment provider's
+    // webhook + the scheduling page.
     setBookings(prev => prev.map(b =>
       b.id === bookingId ? { ...b, state: "sent_deposit", last_email_sent_at: new Date().toISOString() } : b
     ));
@@ -384,7 +386,7 @@ export function PipelineView({
           title: "This is your pipeline",
           body: <>
             <p><strong>Submission →</strong> client filled out your form. Review it and accept or reject.</p>
-            <p><strong>Sent Deposit →</strong> you&apos;ve requested a deposit. If Stripe is connected, it auto-advances once they pay.</p>
+            <p><strong>Sent Deposit →</strong> you&apos;ve requested a deposit. If a payment provider is connected, it auto-advances once they pay.</p>
             <p><strong>Sent Calendar →</strong> deposit is in. Client gets a scheduling link to pick their time.</p>
             <p><strong>Booked →</strong> appointment is locked. This happens automatically as soon as the client picks a time slot.</p>
             <p><strong>Completed →</strong> session is done. Log the final amount and any notes.</p>
@@ -407,7 +409,7 @@ export function PipelineView({
           body: <>
             <p>The button on the bottom right advances the booking to the next stage without dragging.</p>
             <p>Click the <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">⋯</code> menu for more: send an email, cancel, or jump straight to any stage.</p>
-            <p>If you took a deposit outside Stripe, mark it paid from that menu too.</p>
+            <p>If you took a deposit outside your payment provider, mark it paid from that menu too.</p>
           </>,
         },
       ]} />
@@ -451,7 +453,8 @@ export function PipelineView({
                     dropIndicator={dragOverCardId === booking.id ? dragPosition : null}
                     onDragOverCard={handleDragOverCard}
                     onDropOnCard={handleDropOnCard}
-                    hasStripe={hasStripe}
+                    paymentsConnected={paymentsConnected}
+                    paymentProvider={paymentProvider}
                     artistId={artistId}
                     schedulingLinks={schedulingLinks}
                   />
@@ -472,7 +475,8 @@ export function PipelineView({
         <AcceptModal
           bookingId={acceptModal.bookingId}
           clientName={bookings.find(b => b.id === acceptModal.bookingId)?.client_name}
-          hasStripe={hasStripe}
+          paymentsConnected={paymentsConnected}
+          paymentProvider={paymentProvider}
           schedulingLinks={schedulingLinks}
           artistId={artistId ?? ""}
           isCalendarConnected={calendarSyncEnabled}
@@ -482,18 +486,23 @@ export function PipelineView({
       )}
 
       {/* Send Deposit modal */}
-      {sendDepositModal && (
-        <SendDepositModal
-          bookingId={sendDepositModal.bookingId}
-          clientName={bookings.find(b => b.id === sendDepositModal.bookingId)?.client_name ?? ""}
-          existingDepositUrl={bookings.find(b => b.id === sendDepositModal.bookingId)?.stripe_payment_link_url ?? undefined}
-          hasStripe={hasStripe}
-          schedulingLinks={schedulingLinks}
-          artistId={artistId ?? ""}
-          onSent={linkId => handleDepositSent(sendDepositModal.bookingId, linkId)}
-          onClose={() => setSendDepositModal(null)}
-        />
-      )}
+      {sendDepositModal && (() => {
+        const b = bookings.find(b => b.id === sendDepositModal.bookingId);
+        const existingUrl = b?.deposit_link_url ?? b?.stripe_payment_link_url ?? undefined;
+        return (
+          <SendDepositModal
+            bookingId={sendDepositModal.bookingId}
+            clientName={b?.client_name ?? ""}
+            existingDepositUrl={existingUrl}
+            paymentsConnected={paymentsConnected}
+            paymentProvider={paymentProvider}
+            schedulingLinks={schedulingLinks}
+            artistId={artistId ?? ""}
+            onSent={linkId => handleDepositSent(sendDepositModal.bookingId, linkId)}
+            onClose={() => setSendDepositModal(null)}
+          />
+        );
+      })()}
 
       {/* Send Calendar modal */}
       {sendCalendarModal && (

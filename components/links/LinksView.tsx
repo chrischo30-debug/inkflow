@@ -109,7 +109,7 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
 
       {adding ? (
         <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-2">
-          <input type="text" placeholder='Label — e.g. "Stripe deposit"' value={newLabel} onChange={e => setNewLabel(e.target.value)}
+          <input type="text" placeholder='Label — e.g. "Stripe deposit" or "Square deposit"' value={newLabel} onChange={e => setNewLabel(e.target.value)}
             className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888]" />
           <div>
             <input type="url" placeholder="buy.stripe.com/…" value={newUrl} onChange={e => setNewUrl(e.target.value)}
@@ -134,11 +134,12 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
   );
 }
 
-// ── Stripe Generator ──────────────────────────────────────────────────────────
+// ── Payment-link generator (Stripe or Square via the connected provider) ────
 
 type GenerateStatus = "idle" | "generating" | "done" | "error";
 
-function StripeGeneratorSection({ onLinkGenerated }: { onLinkGenerated: (link: PaymentLink) => void }) {
+function PaymentLinkGeneratorSection({ provider, onLinkGenerated }: { provider: "stripe" | "square"; onLinkGenerated: (link: PaymentLink) => void }) {
+  const providerLabel = provider === "square" ? "Square" : "Stripe";
   const [label, setLabel] = useState("");
   const [amountStr, setAmountStr] = useState("");
   const [genStatus, setGenStatus] = useState<GenerateStatus>("idle");
@@ -152,7 +153,7 @@ function StripeGeneratorSection({ onLinkGenerated }: { onLinkGenerated: (link: P
 
   const generate = async () => {
     setGenStatus("generating"); setGeneratedUrl(null); setErrorMsg(null); setSaved(false);
-    const res = await fetch("/api/stripe/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), amount_cents: Math.round(amount * 100) }) });
+    const res = await fetch("/api/payments/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), amount_cents: Math.round(amount * 100) }) });
     const data = await res.json();
     if (res.ok && data.url) { setGeneratedUrl(data.url); setGenStatus("done"); }
     else { setErrorMsg(data.error ?? "Failed to generate link"); setGenStatus("error"); }
@@ -170,7 +171,7 @@ function StripeGeneratorSection({ onLinkGenerated }: { onLinkGenerated: (link: P
     <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Zap className="w-3.5 h-3.5 text-on-surface-variant shrink-0" />
-        <p className="text-sm font-semibold text-on-surface">Generate Stripe link</p>
+        <p className="text-sm font-semibold text-on-surface">Generate {providerLabel} link</p>
       </div>
       {!generatedUrl ? (
         <div className="space-y-2">
@@ -558,7 +559,8 @@ export function LinksView({
   initialCalendarLinks,
   initialSchedulingLinks,
   initialBlockedDates = [],
-  hasStripe = false,
+  paymentsConnected = false,
+  paymentProvider = null,
   isCalendarConnected = false,
   artistId,
 }: {
@@ -566,7 +568,8 @@ export function LinksView({
   initialCalendarLinks: CalendarLink[];
   initialSchedulingLinks: SchedulingLink[];
   initialBlockedDates?: string[];
-  hasStripe?: boolean;
+  paymentsConnected?: boolean;
+  paymentProvider?: "stripe" | "square" | null;
   isCalendarConnected?: boolean;
   artistId: string;
 }) {
@@ -604,7 +607,12 @@ export function LinksView({
               <h2 className="text-base font-semibold text-on-surface">Payment</h2>
             </div>
             <div className="flex flex-col gap-6">
-              {hasStripe && <StripeGeneratorSection onLinkGenerated={link => setPendingAdd(link)} />}
+              {paymentsConnected && paymentProvider && (
+                <PaymentLinkGeneratorSection
+                  provider={paymentProvider}
+                  onLinkGenerated={link => setPendingAdd(link)}
+                />
+              )}
               <PaymentLinksSection initialLinks={initialPaymentLinks} externalAdd={pendingAdd} />
             </div>
           </div>

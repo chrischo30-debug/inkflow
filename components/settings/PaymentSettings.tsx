@@ -83,7 +83,7 @@ export function PaymentSettings({ initialLinks }: { initialLinks: PaymentLink[] 
         <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 space-y-2">
           <input
             type="text"
-            placeholder='Label — e.g. "Stripe 1hr" or "Venmo deposit"'
+            placeholder='Label — e.g. "Stripe 1hr", "Square deposit", or "Venmo deposit"'
             value={newLabel}
             onChange={e => setNewLabel(e.target.value)}
             className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"

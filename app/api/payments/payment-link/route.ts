@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { getAdapter, readArtistPaymentConfig } from "@/lib/payments";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -17,33 +18,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "amount_cents must be at least 100" }, { status: 400 });
   }
 
-  const { data: artist } = await supabase
+  const { data: artistRow } = await supabase
     .from("artists")
-    .select("stripe_api_key")
+    .select("*")
     .eq("id", user.id)
     .single();
 
-  if (!artist?.stripe_api_key) {
-    return NextResponse.json({ error: "Stripe not connected" }, { status: 400 });
+  if (!artistRow) return NextResponse.json({ error: "Artist not found" }, { status: 404 });
+
+  const config = readArtistPaymentConfig(artistRow as Record<string, unknown>);
+  const adapter = getAdapter(config);
+  if (!adapter) {
+    return NextResponse.json({ error: "No payment provider connected" }, { status: 400 });
   }
 
   try {
-    const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(artist.stripe_api_key);
-
-    const product = await stripe.products.create({ name: label.trim() });
-    const price = await stripe.prices.create({
-      product: product.id,
-      currency: "usd",
-      unit_amount: amount_cents,
+    const created = await adapter.createGenericLink({
+      label: label.trim(),
+      amountCents: amount_cents,
     });
-    const paymentLink = await stripe.paymentLinks.create({
-      line_items: [{ price: price.id, quantity: 1 }],
-    });
-
-    return NextResponse.json({ url: paymentLink.url });
+    return NextResponse.json({ url: created.url, provider: adapter.provider });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Stripe error";
+    const message = err instanceof Error ? err.message : "Payment provider error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

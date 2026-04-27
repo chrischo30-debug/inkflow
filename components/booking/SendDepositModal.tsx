@@ -12,7 +12,8 @@ interface Props {
   bookingId: string;
   clientName: string;
   existingDepositUrl?: string;
-  hasStripe: boolean;
+  paymentsConnected: boolean;
+  paymentProvider: "stripe" | "square" | null;
   schedulingLinks: SchedulingLink[];
   artistId: string;
   onSent: (schedulingLinkId?: string) => void;
@@ -21,7 +22,8 @@ interface Props {
 
 interface Template { state: string | null; subject: string; body: string; }
 
-export function SendDepositModal({ bookingId, clientName, existingDepositUrl, hasStripe, schedulingLinks, artistId, onSent, onClose }: Props) {
+export function SendDepositModal({ bookingId, clientName, existingDepositUrl, paymentsConnected, paymentProvider, schedulingLinks, artistId, onSent, onClose }: Props) {
+  const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -34,14 +36,14 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, ha
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastFocused = useRef<"subject" | "body">("body");
 
-  // Stripe deposit link generation
+  // Provider-generated deposit link (Stripe or Square, whichever is connected)
   const [depositAmount, setDepositAmount] = useState("");
   const [depositUrl, setDepositUrl] = useState(existingDepositUrl ?? "");
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkError, setLinkError] = useState("");
 
-  // Automation scheduling link (only shown if Stripe configured)
+  // Automation scheduling link (only shown when a payment provider is connected)
   const [automationLinkId, setAutomationLinkId] = useState<string>("");
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, ha
     if (!cents || cents < 100) { setLinkError("Enter a valid amount (min $1)"); return; }
     setGeneratingLink(true); setLinkError("");
     try {
-      const res = await fetch(`/api/bookings/${bookingId}/stripe-payment-link`, {
+      const res = await fetch(`/api/bookings/${bookingId}/deposit-link`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount_cents: cents }),
       });
@@ -147,10 +149,10 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, ha
         </div>
 
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
-          {/* Stripe deposit link */}
-          {hasStripe && (
+          {/* Provider-generated deposit link */}
+          {paymentsConnected && (
             <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3">
-              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Stripe deposit link</p>
+              <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">{providerLabel} deposit link</p>
 
               {/* Existing link */}
               {existingDepositUrl && (
@@ -189,8 +191,8 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, ha
             </div>
           )}
 
-          {/* Automation: scheduling link picker (Stripe only) */}
-          {hasStripe && schedulingLinks.length > 0 && (
+          {/* Automation: scheduling link picker (only when a payment provider is connected) */}
+          {paymentsConnected && schedulingLinks.length > 0 && (
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
               <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Automation <span className="text-on-surface-variant font-normal normal-case">(optional)</span></p>
               <p className="text-xs text-on-surface-variant">

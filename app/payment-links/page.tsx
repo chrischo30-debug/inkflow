@@ -22,10 +22,22 @@ export default async function LinksPage() {
     calendar_links?: CalendarLink[];
     scheduling_links?: unknown;
     blocked_dates?: string[];
+    payment_provider?: "stripe" | "square" | null;
     stripe_api_key?: string;
+    square_access_token?: string;
+    square_location_id?: string;
     calendar_sync_enabled?: boolean;
     google_refresh_token?: string;
   } | null;
+
+  const provider = row?.payment_provider ?? null;
+  const paymentsConnected =
+    provider === "square"
+      ? Boolean(row?.square_access_token && row?.square_location_id)
+      : Boolean(row?.stripe_api_key);
+  const effectiveProvider = paymentsConnected
+    ? (provider ?? (row?.stripe_api_key ? "stripe" : null))
+    : null;
 
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
@@ -50,7 +62,8 @@ export default async function LinksPage() {
             initialCalendarLinks={row?.calendar_links ?? []}
             initialSchedulingLinks={normalizeSchedulingLinks(row?.scheduling_links)}
             initialBlockedDates={Array.isArray(row?.blocked_dates) ? row.blocked_dates : []}
-            hasStripe={Boolean(row?.stripe_api_key)}
+            paymentsConnected={paymentsConnected}
+            paymentProvider={effectiveProvider}
             isCalendarConnected={Boolean(row?.calendar_sync_enabled && row?.google_refresh_token)}
             artistId={user.id}
           />

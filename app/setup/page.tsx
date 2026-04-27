@@ -106,7 +106,10 @@ export default async function SetupPage({
     calendar_sync_enabled?: boolean | null;
     gmail_address?: string | null;
     calendar_links?: CalendarLink[];
+    payment_provider?: "stripe" | "square" | null;
     stripe_api_key?: string | null;
+    square_access_token?: string | null;
+    square_location_id?: string | null;
   };
   const artist: Extended = (extData as Extended) ?? {};
 
@@ -117,14 +120,19 @@ export default async function SetupPage({
   const hasLogo = Boolean(artist.logo_url);
   const hasSlug = Boolean(artist.slug);
   const hasStripe = Boolean(artist.stripe_api_key);
+  const hasSquare = Boolean(artist.square_access_token && artist.square_location_id);
+  const paymentProvider = artist.payment_provider
+    ?? (hasStripe ? "stripe" : hasSquare ? "square" : null);
+  const paymentsConnected =
+    paymentProvider === "square" ? hasSquare : paymentProvider === "stripe" ? hasStripe : false;
   const hasReplyTo = Boolean(artist.gmail_address ?? user.email);
-  // Stripe satisfies the "have a way to take deposits" intent of this step too,
-  // so an artist who only connected Stripe doesn't see a stuck checkbox.
-  const hasPaymentMethod = paymentLinks.length > 0 || hasStripe;
+  // A connected provider also satisfies the "have a way to take deposits" step,
+  // so an artist who only connected one doesn't see a stuck checkbox.
+  const hasPaymentMethod = paymentLinks.length > 0 || paymentsConnected;
 
   const requiredSteps = [hasSlug, hasReplyTo];
   const recommendedSteps = [hasPaymentMethod, calendarLinks.length > 0, hasLogo];
-  const integrationSteps = [calendarConnected, hasStripe];
+  const integrationSteps = [calendarConnected, paymentsConnected];
 
   const requiredComplete = requiredSteps.filter(Boolean).length;
   const recommendedComplete = recommendedSteps.filter(Boolean).length;
@@ -267,12 +275,12 @@ export default async function SetupPage({
               <StepCard
                 done={hasPaymentMethod}
                 title="Add a way to take deposits"
-                description="Stripe, Venmo, Cash App, or any link clients can pay with. Sent automatically when you request a deposit."
+                description="Stripe, Square, Venmo, Cash App, or any link clients can pay with. Sent automatically when you request a deposit."
                 note={
                   paymentLinks.length > 0
                     ? `${paymentLinks.length} link${paymentLinks.length !== 1 ? "s" : ""} saved`
-                    : hasStripe
-                      ? "Stripe connected — deposits will use Stripe links"
+                    : paymentsConnected
+                      ? `${paymentProvider === "square" ? "Square" : "Stripe"} connected — deposits will use ${paymentProvider === "square" ? "Square" : "Stripe"} links`
                       : undefined
                 }
                 action="Add links"
@@ -307,11 +315,13 @@ export default async function SetupPage({
               <p className="text-xs text-on-surface-variant -mt-1 mb-2">Connect API keys to automate the boring parts — no more copy-pasting deposit amounts or creating calendar events.</p>
 
               <StepCard
-                done={hasStripe}
-                title="Connect Stripe for automated deposits"
-                description="Generate per-booking payment links without leaving the dashboard. Requires a fully activated Stripe account with a bank account connected so payouts actually reach you."
-                note={hasStripe ? "Stripe API key saved" : undefined}
-                action="Add Stripe key"
+                done={paymentsConnected}
+                title="Connect Stripe or Square for automated deposits"
+                description="Pick one. Generates per-booking payment links without leaving the dashboard, and auto-marks deposits paid when the client checks out. Requires a fully activated account with a bank account connected so payouts actually reach you."
+                note={paymentsConnected
+                  ? `${paymentProvider === "square" ? "Square" : "Stripe"} connected`
+                  : "Already use one? Connect it. Don't have either? Stripe is the easier setup for most artists."}
+                action={paymentsConnected ? "Manage" : "Pick a provider"}
                 actionHref="/settings?tab=integrations"
               />
 
@@ -332,6 +342,11 @@ export default async function SetupPage({
                   name="Stripe"
                   description="Accept credit card payments online. Generate a payment link for each deposit request."
                   url="https://stripe.com"
+                />
+                <ToolCard
+                  name="Square"
+                  description="Same idea as Stripe. Generate Square Checkout links for deposits, with auto-marking when paid."
+                  url="https://squareup.com"
                 />
               </div>
             </section>

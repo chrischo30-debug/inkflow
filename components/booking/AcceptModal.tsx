@@ -10,7 +10,8 @@ import { SchedulingLinkForm, useCalendarOptions, newLinkDraft, generateId, DURAT
 interface Props {
   bookingId: string;
   clientName?: string;
-  hasStripe?: boolean;
+  paymentsConnected?: boolean;
+  paymentProvider?: "stripe" | "square" | null;
   schedulingLinks?: SchedulingLink[];
   artistId?: string;
   isCalendarConnected?: boolean;
@@ -32,13 +33,15 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function AcceptModal({
   bookingId,
   clientName = "this client",
-  hasStripe = false,
+  paymentsConnected = false,
+  paymentProvider = null,
   schedulingLinks: initialLinks = [],
   artistId = "",
   isCalendarConnected = false,
   onSent,
   onClose,
 }: Props) {
+  const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
   const [stage, setStage] = useState<"setup" | "email">("setup");
   const [data, setData] = useState<EmailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,8 +53,8 @@ export function AcceptModal({
   const [newLink, setNewLink] = useState<LinkDraft>(newLinkDraft());
   const { calendarOptions, calendarsLoading } = useCalendarOptions(isCalendarConnected);
 
-  // Deposit state
-  const [depositMode, setDepositMode] = useState<"stripe" | "existing" | "none">(hasStripe ? "stripe" : "existing");
+  // Deposit state. "provider" mode = generate via the active payment provider (Stripe or Square).
+  const [depositMode, setDepositMode] = useState<"provider" | "existing" | "none">(paymentsConnected ? "provider" : "existing");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositUrl, setDepositUrl] = useState("");
   const [generatingLink, setGeneratingLink] = useState(false);
@@ -87,12 +90,12 @@ export function AcceptModal({
     }
   }, [depositMode, data, selectedExistingPaymentUrl]);
 
-  const generateStripeDepositLink = async () => {
+  const generateDepositLink = async () => {
     const cents = Math.round(parseFloat(depositAmount) * 100);
     if (!cents || cents < 100) { setDepositError("Enter a valid amount (min $1)"); return; }
     setGeneratingLink(true); setDepositError("");
     try {
-      const res = await fetch(`/api/bookings/${bookingId}/stripe-payment-link`, {
+      const res = await fetch(`/api/bookings/${bookingId}/deposit-link`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount_cents: cents }),
       });
@@ -120,7 +123,7 @@ export function AcceptModal({
 
   // Resolve which deposit URL to inject into the email body
   const effectiveDepositUrl = useMemo(() => {
-    if (depositMode === "stripe") return depositUrl;
+    if (depositMode === "provider") return depositUrl;
     if (depositMode === "existing") return selectedExistingPaymentUrl;
     return "";
   }, [depositMode, depositUrl, selectedExistingPaymentUrl]);
@@ -140,16 +143,18 @@ export function AcceptModal({
     if (!linkId) { setSetupError("Pick or create a scheduling link."); return; }
 
     // Validate deposit
-    if (depositMode === "stripe" && !depositUrl) {
-      setSetupError("Generate the Stripe deposit link first, or switch to a saved payment link.");
+    if (depositMode === "provider" && !depositUrl) {
+      setSetupError(`Generate the ${providerLabel} deposit link first, or switch to a saved payment link.`);
       return;
     }
     if (depositMode === "existing" && !selectedExistingPaymentUrl) {
-      setSetupError("Pick a saved payment link, or switch to Stripe.");
+      setSetupError(paymentsConnected
+        ? `Pick a saved payment link, or switch to ${providerLabel}.`
+        : "Pick a saved payment link.");
       return;
     }
 
-    // Persist scheduling_link_id and session info now so the Stripe webhook can use it later
+    // Persist scheduling_link_id and session info now so the payment webhook can use it later
     await fetch(`/api/bookings/${bookingId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -362,10 +367,10 @@ export function AcceptModal({
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {hasStripe && (
-                <button type="button" onClick={() => setDepositMode("stripe")}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${depositMode === "stripe" ? "bg-on-surface text-surface border-on-surface" : "bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high"}`}>
-                  Generate Stripe link
+              {paymentsConnected && (
+                <button type="button" onClick={() => setDepositMode("provider")}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${depositMode === "provider" ? "bg-on-surface text-surface border-on-surface" : "bg-surface border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high"}`}>
+                  Generate {providerLabel} link
                 </button>
               )}
               <button type="button" onClick={() => setDepositMode("existing")}
@@ -378,17 +383,17 @@ export function AcceptModal({
               </button>
             </div>
 
-            {depositMode === "stripe" && (
+            {depositMode === "provider" && (
               <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-3">
                 <div className="flex gap-2">
                   <div className="flex items-center gap-1 flex-1 rounded-lg border border-outline-variant/30 bg-surface px-3 py-2 focus-within:border-primary transition-colors">
                     <span className="text-sm text-on-surface-variant">$</span>
                     <input type="number" min="1" step="0.01" placeholder="0.00" value={depositAmount}
                       onChange={e => setDepositAmount(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && generateStripeDepositLink()}
+                      onKeyDown={e => e.key === "Enter" && generateDepositLink()}
                       className="flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
                   </div>
-                  <button type="button" onClick={generateStripeDepositLink} disabled={generatingLink || !!depositUrl}
+                  <button type="button" onClick={generateDepositLink} disabled={generatingLink || !!depositUrl}
                     className="px-3 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 disabled:opacity-50 transition-opacity whitespace-nowrap">
                     {generatingLink ? "Creating…" : depositUrl ? <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Created</span> : "Generate"}
                   </button>
@@ -420,15 +425,15 @@ export function AcceptModal({
                       </label>
                     ))}
                     <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">
-                      {hasStripe
-                        ? "With a saved link, you'll need to mark the deposit paid manually — auto-detection only works with Stripe-generated links."
-                        : <>Stripe isn&apos;t configured, so you&apos;ll confirm deposits manually. Set it up in <a href="/settings?tab=integrations" className="underline">Settings → Integrations</a> to enable auto-detection.</>
+                      {paymentsConnected
+                        ? `With a saved link, you'll need to mark the deposit paid manually — auto-detection only works with ${providerLabel}-generated links.`
+                        : <>No payment provider is configured, so you&apos;ll confirm deposits manually. Set one up in <a href="/settings?tab=integrations" className="underline">Settings → Integrations</a> to enable auto-detection.</>
                       }
                     </p>
                   </div>
                 ) : (
                   <p className="text-xs text-on-surface-variant">
-                    No saved payment links yet. Add some in <a href="/payment-links" className="text-primary underline">Payment links</a>, or use Stripe for auto-detection.
+                    No saved payment links yet. Add some in <a href="/payment-links" className="text-primary underline">Payment links</a>{paymentsConnected ? `, or use ${providerLabel} for auto-detection.` : "."}
                   </p>
                 )}
               </div>
