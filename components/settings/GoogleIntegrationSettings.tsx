@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 interface Props {
   googleConfigured: boolean;
   hasRefreshToken: boolean;
@@ -42,12 +40,16 @@ export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, i
 
       <div className="flex items-center gap-3 flex-wrap">
         {googleConfigured ? (
-          <Link
+          // Plain <a> (not next/link) — OAuth needs a real top-level browser
+          // navigation so the server's 302 to accounts.google.com is followed.
+          // next/link intercepts as RSC fetch and CORS-fails on the cross-origin
+          // redirect.
+          <a
             href="/api/auth/google/connect"
             className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
           >
             {hasRefreshToken ? "Reconnect Calendar" : "Connect Calendar"}
-          </Link>
+          </a>
         ) : (
           <span className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg bg-surface-container-high text-on-surface-variant cursor-not-allowed">
             Connect Calendar
