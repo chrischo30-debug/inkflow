@@ -3,14 +3,14 @@ import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
 const settingsSchema = z.object({
-  kit_api_key: z.string().optional(),
-  kit_form_id: z.string().optional(),
-  newsletter_form_enabled: z.boolean().optional(),
-  newsletter_form_header: z.string().max(200).optional(),
-  newsletter_form_subtext: z.string().max(500).optional(),
-  newsletter_form_button_text: z.string().max(100).optional(),
-  newsletter_form_confirmation_message: z.string().max(500).optional(),
-  show_newsletter_on_closed: z.boolean().optional(),
+  kit_api_key: z.string().nullish(),
+  kit_form_id: z.string().nullish(),
+  newsletter_form_enabled: z.boolean().nullish(),
+  newsletter_form_header: z.string().max(200).nullish(),
+  newsletter_form_subtext: z.string().max(500).nullish(),
+  newsletter_form_button_text: z.string().max(100).nullish(),
+  newsletter_form_confirmation_message: z.string().max(500).nullish(),
+  show_newsletter_on_closed: z.boolean().nullish(),
 });
 
 export async function GET() {

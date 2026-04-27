@@ -10,9 +10,9 @@ const linkSchema = z.object({
   start_hour: z.number().int().min(0).max(23),
   end_hour: z.number().int().min(1).max(23),
   timezone: z.string().min(1),
-  calendar_ids: z.array(z.string()).optional(),
-  block_full_day: z.boolean().optional(),
-  confirmation_message: z.string().optional(),
+  calendar_ids: z.array(z.string()).nullish(),
+  block_full_day: z.boolean().nullish(),
+  confirmation_message: z.string().nullish(),
 });
 
 const bodySchema = z.object({

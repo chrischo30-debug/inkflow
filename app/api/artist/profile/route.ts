@@ -3,16 +3,18 @@ import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceClient } from "@/utils/supabase/service";
 
+// Required fields keep .min() validation. All optional fields use .nullish()
+// so a cleared input (sent as null) is accepted along with undefined.
 const profileSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  studio_name: z.string().optional(),
-  studio_address: z.string().optional(),
-  style_tags: z.string().optional(),
-  gmail_address: z.string().email().optional(),
-  email_logo_enabled: z.boolean().optional(),
-  email_logo_bg: z.enum(["light", "dark"]).optional(),
-  logo_url: z.string().nullable().optional(),
+  studio_name: z.string().nullish(),
+  studio_address: z.string().nullish(),
+  style_tags: z.string().nullish(),
+  gmail_address: z.union([z.string().email(), z.literal(""), z.null()]).optional(),
+  email_logo_enabled: z.boolean().nullish(),
+  email_logo_bg: z.enum(["light", "dark"]).nullish(),
+  logo_url: z.string().nullish(),
 });
 
 export async function PUT(req: Request) {

@@ -3,14 +3,14 @@ import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
 const settingsSchema = z.object({
-  contact_form_enabled: z.boolean().optional(),
-  contact_form_header: z.string().max(200).optional(),
-  contact_form_subtext: z.string().max(500).optional(),
-  contact_form_button_text: z.string().max(100).optional(),
-  contact_form_confirmation_message: z.string().max(500).optional(),
-  show_contact_on_closed: z.boolean().optional(),
-  contact_phone_enabled: z.boolean().optional(),
-  contact_phone_required: z.boolean().optional(),
+  contact_form_enabled: z.boolean().nullish(),
+  contact_form_header: z.string().max(200).nullish(),
+  contact_form_subtext: z.string().max(500).nullish(),
+  contact_form_button_text: z.string().max(100).nullish(),
+  contact_form_confirmation_message: z.string().max(500).nullish(),
+  show_contact_on_closed: z.boolean().nullish(),
+  contact_phone_enabled: z.boolean().nullish(),
+  contact_phone_required: z.boolean().nullish(),
 });
 
 export async function GET() {

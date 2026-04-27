@@ -8,21 +8,23 @@ const socialLinkSchema = z.object({
   label: z.string().optional(),
 });
 
+// All optional string fields use .nullish() to accept null|undefined — the
+// form components send null for cleared values.
 const schema = z.object({
-  booking_bg_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  booking_bg_image_url: z.string().url().nullable().optional(),
-  booking_layout: z.enum(["centered", "banner", "minimal"]).optional(),
-  booking_font: z.string().max(100).optional(),
-  booking_text_color: z.string().optional(),
-  booking_button_color: z.string().optional(),
-  booking_label_color: z.string().optional(),
-  booking_font_scale: z.string().max(20).optional(),
-  booking_header_size: z.string().max(20).optional(),
-  booking_header_align: z.enum(["left", "center"]).optional(),
-  logo_url: z.string().url().nullable().optional(),
-  website_url: z.string().url().or(z.literal("")).optional(),
-  social_links: z.array(socialLinkSchema).optional(),
-  show_social_on_booking: z.boolean().optional(),
+  booking_bg_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullish(),
+  booking_bg_image_url: z.string().url().nullish(),
+  booking_layout: z.enum(["centered", "banner", "minimal"]).nullish(),
+  booking_font: z.string().max(100).nullish(),
+  booking_text_color: z.string().nullish(),
+  booking_button_color: z.string().nullish(),
+  booking_label_color: z.string().nullish(),
+  booking_font_scale: z.string().max(20).nullish(),
+  booking_header_size: z.string().max(20).nullish(),
+  booking_header_align: z.enum(["left", "center"]).nullish(),
+  logo_url: z.string().url().nullish(),
+  website_url: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
+  social_links: z.array(socialLinkSchema).nullish(),
+  show_social_on_booking: z.boolean().nullish(),
 });
 
 export async function PUT(req: Request) {

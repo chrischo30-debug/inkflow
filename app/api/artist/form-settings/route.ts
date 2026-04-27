@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
+// All fields accept null (UI sends null for cleared inputs) or undefined
+// (omitted from payload). Handler coalesces with `?? null` before write.
 const schema = z.object({
-  form_header: z.string().max(200).optional(),
-  form_subtext: z.string().max(500).optional(),
-  form_button_text: z.string().max(100).optional(),
-  form_confirmation_message: z.string().max(500).optional(),
-  form_success_redirect_url: z.string().url().or(z.literal("")).optional(),
+  form_header: z.string().max(200).nullish(),
+  form_subtext: z.string().max(500).nullish(),
+  form_button_text: z.string().max(100).nullish(),
+  form_confirmation_message: z.string().max(500).nullish(),
+  form_success_redirect_url: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
 });
 
 export async function PUT(req: Request) {
