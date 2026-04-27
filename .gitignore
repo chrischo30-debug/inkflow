@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local dev / agent state — not source
+.archived/
+.claude/
+.agents/
+backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
