@@ -496,7 +496,6 @@ export function PipelineView({
                       onEditAppointment={bid => setBookModal({ bookingId: bid, initialAppointmentDate: bookings.find(b => b.id === bid)?.appointment_date })}
                       onDepositPaid={bid => setBookings(prev => prev.map(b => b.id === bid ? { ...b, deposit_paid: true } : b))}
                       paymentsConnected={paymentsConnected}
-                      paymentProvider={paymentProvider}
                       artistId={artistId}
                       schedulingLinks={schedulingLinks}
                     />
