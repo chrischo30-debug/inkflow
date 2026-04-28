@@ -187,7 +187,19 @@ export async function GET(
     }
     const dayStart = toUTCDate(date, link.start_hour, 0, link.timezone);
     const dayEnd = toUTCDate(date, link.end_hour, 0, link.timezone);
-    const calendarIds: string[] | undefined = link.calendar_ids?.length ? link.calendar_ids : undefined;
+    // Per-link override wins. Otherwise fall back to the artist's saved selection.
+    let calendarIds: string[] | undefined = link.calendar_ids?.length ? link.calendar_ids : undefined;
+    if (!calendarIds) {
+      try {
+        const { data: sc } = await admin
+          .from("artists")
+          .select("synced_calendar_ids")
+          .eq("id", artistId)
+          .single();
+        const raw = (sc as { synced_calendar_ids?: unknown })?.synced_calendar_ids;
+        if (Array.isArray(raw) && raw.length > 0) calendarIds = raw as string[];
+      } catch { /* column not yet migrated — fall back to primary in lib */ }
+    }
     busyPeriods = await getGoogleFreeBusy({
       accessToken,
       timeMin: dayStart.toISOString(),

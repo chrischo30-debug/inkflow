@@ -72,6 +72,43 @@ interface GoogleTokenResponse {
   token_type: string;
 }
 
+export interface GoogleCalendarListItem {
+  id: string;
+  summary: string;
+  primary: boolean;
+  accessRole: string;
+  backgroundColor?: string;
+}
+
+export async function listGoogleCalendarList(accessToken: string): Promise<GoogleCalendarListItem[]> {
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100",
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google calendarList fetch failed: ${text}`);
+  }
+  const data = (await res.json()) as {
+    items?: Array<{
+      id?: string;
+      summary?: string;
+      primary?: boolean;
+      accessRole?: string;
+      backgroundColor?: string;
+    }>;
+  };
+  return (data.items ?? [])
+    .filter(c => Boolean(c.id))
+    .map(c => ({
+      id: c.id!,
+      summary: c.summary ?? c.id!,
+      primary: Boolean(c.primary),
+      accessRole: c.accessRole ?? "reader",
+      backgroundColor: c.backgroundColor,
+    }));
+}
+
 interface GoogleCalendarListEvent {
   id: string;
   summary?: string;
@@ -221,23 +258,11 @@ export async function getGoogleFreeBusy({
   timeMax: string;
   calendarIds?: string[];
 }): Promise<Array<{ start: string; end: string }>> {
-  let calendarIds: string[];
-
-  if (explicitIds && explicitIds.length > 0) {
-    calendarIds = explicitIds;
-  } else {
-    // Fetch all calendars so events on secondary/subscribed calendars are included
-    calendarIds = ["primary"];
-    const calRes = await fetch(
-      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50",
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (calRes.ok) {
-      const calData = (await calRes.json()) as { items?: { id: string }[] };
-      const ids = (calData.items ?? []).map(c => c.id).filter(Boolean);
-      if (ids.length > 0) calendarIds = ids;
-    }
-  }
+  // Caller is expected to pass the artist's explicitly-selected calendar IDs.
+  // If none are passed, we fall back to "primary" only — never auto-expand to
+  // every calendar in the user's calendarList, since that would read data the
+  // user didn't opt in to.
+  const calendarIds = explicitIds && explicitIds.length > 0 ? explicitIds : ["primary"];
 
   const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
@@ -346,23 +371,16 @@ export async function listAllGoogleCalendarEvents({
   accessToken,
   timeMin,
   timeMax,
+  calendarIds: explicitIds,
 }: {
   accessToken: string;
   timeMin: string;
   timeMax: string;
+  calendarIds?: string[];
 }): Promise<GoogleCalendarListEvent[]> {
-  // Fetch all calendars the user has access to
-  const calRes = await fetch(
-    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=50",
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-
-  let calendarIds: string[] = ["primary"];
-  if (calRes.ok) {
-    const calData = (await calRes.json()) as { items?: { id: string }[] };
-    const ids = (calData.items ?? []).map(c => c.id).filter(Boolean);
-    if (ids.length > 0) calendarIds = ids;
-  }
+  // Same opt-in rule as getGoogleFreeBusy: only read calendars the artist
+  // has explicitly selected, falling back to "primary" if none are passed.
+  const calendarIds = explicitIds && explicitIds.length > 0 ? explicitIds : ["primary"];
 
   // Fetch events from all calendars in parallel, deduplicate by event id
   const results = await Promise.allSettled(

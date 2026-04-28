@@ -32,6 +32,17 @@ export async function GET(request: Request) {
       .eq("id", user.id)
       .single();
 
+    let syncedCalendarIds: string[] | undefined;
+    try {
+      const { data: sc } = await supabase
+        .from("artists")
+        .select("synced_calendar_ids")
+        .eq("id", user.id)
+        .single();
+      const raw = (sc as { synced_calendar_ids?: unknown })?.synced_calendar_ids;
+      if (Array.isArray(raw) && raw.length > 0) syncedCalendarIds = raw as string[];
+    } catch { /* column not yet migrated — fall back to primary in lib */ }
+
     const { data: bookingRows } = await supabase
       .from("bookings")
       .select("id, client_name, description, appointment_date, state, google_event_id")
@@ -72,6 +83,7 @@ export async function GET(request: Request) {
           accessToken,
           timeMin: start,
           timeMax: end,
+          calendarIds: syncedCalendarIds,
         }) : [];
         googleEvents = rows
           .filter((event) => Boolean(event.id && (event.start?.dateTime || event.start?.date)))

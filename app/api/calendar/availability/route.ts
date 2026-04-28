@@ -35,6 +35,17 @@ export async function GET(request: Request) {
       blockedDates = Array.isArray(raw) ? (raw as string[]) : [];
     } catch { /* column not yet migrated — skip */ }
 
+    let syncedCalendarIds: string[] | undefined;
+    try {
+      const { data: sc } = await supabase
+        .from("artists")
+        .select("synced_calendar_ids")
+        .eq("id", user.id)
+        .single();
+      const raw = (sc as { synced_calendar_ids?: unknown })?.synced_calendar_ids;
+      if (Array.isArray(raw) && raw.length > 0) syncedCalendarIds = raw as string[];
+    } catch { /* column not yet migrated — fall back to primary in lib */ }
+
     type Busy = { start: string; end: string; source: "google" | "flashbook" };
     const busy: Busy[] = [];
 
@@ -62,7 +73,7 @@ export async function GET(request: Request) {
         if (!accessToken) {
           googleSyncError = "Google Calendar disconnected. Please reconnect.";
         } else {
-          const periods = await getGoogleFreeBusy({ accessToken, timeMin: start, timeMax: end });
+          const periods = await getGoogleFreeBusy({ accessToken, timeMin: start, timeMax: end, calendarIds: syncedCalendarIds });
           for (const p of periods) busy.push({ start: p.start, end: p.end, source: "google" });
         }
       } catch (err) {
