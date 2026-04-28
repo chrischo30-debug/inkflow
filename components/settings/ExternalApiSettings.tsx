@@ -449,7 +449,7 @@ function StripePanel({
         {stripeStatus === "error" && (
           <p className="text-xs text-destructive">{stripeError ? `Save failed: ${stripeError}` : "Failed to save."}</p>
         )}
-        {!savedStripeKey && <HowToGuide steps={STRIPE_STEPS} defaultOpen />}
+        <HowToGuide steps={STRIPE_STEPS} defaultOpen={!savedStripeKey} />
       </div>
 
       <div className="border-t border-outline-variant/15" />
@@ -614,7 +614,7 @@ function SquarePanel({
         {squareStatus === "error" && (
           <p className="text-xs text-destructive">{squareError ? `Save failed: ${squareError}` : "Failed to save."}</p>
         )}
-        {!squareConnected && <HowToGuide steps={SQUARE_STEPS} defaultOpen />}
+        <HowToGuide steps={SQUARE_STEPS} defaultOpen={!squareConnected} />
       </div>
 
       <div className="border-t border-outline-variant/15" />
