@@ -37,11 +37,6 @@ interface BookingCardProps {
   onEditAppointment?: (bookingId: string) => void;
   onDepositPaid?: (bookingId: string) => void;
   dragging?: boolean;
-  onDragStart?: (bookingId: string) => void;
-  onDragEnd?: () => void;
-  dropIndicator?: 'above' | 'below' | null;
-  onDragOverCard?: (id: string, position: 'above' | 'below') => void;
-  onDropOnCard?: (targetId: string, position: 'above' | 'below') => void;
   paymentsConnected?: boolean;
   paymentProvider?: "stripe" | "square" | null;
   artistId?: string;
@@ -187,7 +182,7 @@ export function BookingCard({
   booking, fieldLabelMap = {}, nextActionLabel,
   onAdvanceState, onAcceptInquiry, onRejectInquiry, onFollowUpInquiry,
   onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid,
-  dragging, onDragStart, onDragEnd, dropIndicator, onDragOverCard, onDropOnCard,
+  dragging,
   paymentsConnected = false, paymentProvider = null, artistId, schedulingLinks = [],
 }: BookingCardProps) {
   const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
@@ -205,27 +200,9 @@ export function BookingCard({
   const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) && (isBooked || booking.state === "completed");
 
   return (
-    <div className="relative">
-      {dropIndicator === 'above' && <div className="absolute -top-1.5 left-0 right-0 h-0.5 bg-primary rounded-full pointer-events-none z-10" />}
-      {dropIndicator === 'below' && <div className="absolute -bottom-1.5 left-0 right-0 h-0.5 bg-primary rounded-full pointer-events-none z-10" />}
     <div
-      draggable={!!onDragStart}
-      onDragStart={e => { onDragStart?.(booking.id); e.dataTransfer.effectAllowed = "move"; }}
-      onDragEnd={() => onDragEnd?.()}
-      onDragOver={e => {
-        e.preventDefault();
-        if (!onDragOverCard) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        onDragOverCard(booking.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'below');
-      }}
-      onDrop={e => {
-        e.stopPropagation();
-        if (!onDropOnCard) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        onDropOnCard(booking.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'below');
-      }}
       data-coachmark="booking-card"
-      className={`bg-surface-container-lowest border border-outline-variant/20 rounded-xl overflow-hidden group hover:shadow-sm hover:border-outline-variant/40 transition-all duration-200 ${onDragStart ? "cursor-grab active:cursor-grabbing" : ""} ${dragging ? "opacity-40 scale-[0.98]" : ""}`}
+      className={`bg-surface-container-lowest border border-outline-variant/20 rounded-xl overflow-hidden group hover:shadow-sm hover:border-outline-variant/40 transition-all duration-200 cursor-grab active:cursor-grabbing ${dragging ? "opacity-40 scale-[0.98]" : ""}`}
     >
       <div className="p-4 flex flex-col gap-2.5">
         {/* Header */}
@@ -471,7 +448,6 @@ export function BookingCard({
           />
         </div>
       </div>
-    </div>
     </div>
   );
 }
