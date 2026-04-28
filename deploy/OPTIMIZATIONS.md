@@ -92,10 +92,8 @@ sendInquiryAutoEmail({...}).catch(err => console.error("...", err));
 ```
 Booking saved, client gets confirmation page, but email never sent. Save a `failed_send_count` on the booking row, or add a "send failed" warning to the dashboard so the artist follows up manually.
 
-### P1-7. `recharts` shipped to all users
-[components/analytics/AnalyticsDashboard.tsx:1-7](../components/analytics/AnalyticsDashboard.tsx#L1-L7) imports `AreaChart, BarChart, PieChart, Pie` from `recharts` (~50KB gzipped) at the top of a `"use client"` file. Even users who never visit `/analytics` ship this if any shared layout imports the file.
-
-**Fix:** dynamic import: `const AnalyticsDashboard = dynamic(() => import('@/components/analytics/AnalyticsDashboard'), { ssr: false });` from the page only.
+### P1-7. ~~`recharts` shipped to all users~~ — verified not an issue
+Initial concern was that any shared layout importing AnalyticsDashboard would ship recharts everywhere. **Verified false** by inspecting the Next.js build output: recharts lives in its own ~400KB chunk that is referenced ONLY by `analytics/page_client-reference-manifest.js`. Next 16's Turbopack code-splits it correctly. No fix needed.
 
 ---
 

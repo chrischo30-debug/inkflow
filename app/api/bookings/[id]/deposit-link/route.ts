@@ -19,7 +19,7 @@ export async function POST(
   }
 
   const [{ data: artistRow }, { data: booking }] = await Promise.all([
-    supabase.from("artists").select("*").eq("id", user.id).single(),
+    supabase.from("artists").select("payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment").eq("id", user.id).single(),
     supabase
       .from("bookings")
       .select("id, client_name, artist_id")

@@ -44,7 +44,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: booking, error: fetchErr } = await supabase
       .from("bookings")
-      .select("state, client_email, client_name, artist_id, appointment_date, description, thread_message_id")
+      .select("state, client_email, client_name, artist_id, appointment_date, description, thread_message_id, google_event_id, gmail_thread_id, sent_emails")
       .eq("id", id)
       .eq("artist_id", user.id)
       .single();
@@ -53,22 +53,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    const threadMessageId = (booking as { thread_message_id?: string | null }).thread_message_id ?? undefined;
-
-    // Fetch optional columns that may not exist in older DB instances
-    const getExtraBookingFields = async () => {
-      const { data } = await supabase
-        .from("bookings")
-        .select("google_event_id, gmail_thread_id, sent_emails")
-        .eq("id", id)
-        .single();
-      const row = data as { google_event_id?: string; gmail_thread_id?: string; sent_emails?: {label:string;sent_at:string}[] } | null;
-      return {
-        googleEventId: row?.google_event_id ?? null,
-        gmailThreadId: row?.gmail_thread_id ?? null,
-        sentEmails: (row?.sent_emails ?? []) as {label:string;sent_at:string}[],
-      };
+    const bookingExt = booking as {
+      thread_message_id?: string | null;
+      google_event_id?: string | null;
+      gmail_thread_id?: string | null;
+      sent_emails?: { label: string; sent_at: string }[];
     };
+    const threadMessageId = bookingExt.thread_message_id ?? undefined;
+
+    // Read the already-fetched row instead of re-querying — was running 3×
+    // per PATCH (P1-1).
+    const getExtraBookingFields = async () => ({
+      googleEventId: bookingExt.google_event_id ?? null,
+      gmailThreadId: bookingExt.gmail_thread_id ?? null,
+      sentEmails: (bookingExt.sent_emails ?? []) as { label: string; sent_at: string }[],
+    });
 
     // Store thread_message_id on the booking if this is the first threaded email we've sent
     const storeThreadRoot = async (messageId: string | undefined) => {

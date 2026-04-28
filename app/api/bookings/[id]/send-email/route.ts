@@ -18,12 +18,12 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const [{ data: artistRaw }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('*')
+      .select('name, studio_name, payment_links, gmail_address, email, calendar_links, scheduling_links, logo_url, email_logo_enabled, email_logo_bg, studio_address')
       .eq('id', userId)
       .single(),
     supabase
       .from('email_templates')
-      .select('*')
+      .select('id, name, state, subject, body, auto_send, enabled')
       .eq('artist_id', userId),
   ]);
 
