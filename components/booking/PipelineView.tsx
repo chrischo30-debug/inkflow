@@ -13,6 +13,24 @@ import { SendDepositModal } from "./SendDepositModal";
 import { CoachmarkSequence, useCoachmarks } from "@/components/coachmarks/Coachmark";
 import { SendCalendarModal } from "./SendCalendarModal";
 import { useLocalDraft } from "@/lib/use-local-draft";
+import {
+  DndContext,
+  type DragEndEvent,
+  type DragOverEvent,
+  MouseSensor,
+  TouchSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  closestCorners,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface PipelineViewProps {
   initialBookings: Booking[];
@@ -46,10 +64,11 @@ export function PipelineView({
   paymentsConnected = false, paymentProvider = null, artistId, schedulingLinks = [],
 }: PipelineViewProps) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<BookingState | null>(null);
-  const [dragOverCardId, setDragOverCardId] = useState<string | null>(null);
-  const [dragPosition, setDragPosition] = useState<'above' | 'below'>('below');
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  );
   const [columnOrder, setColumnOrder] = useState<Record<string, string[]>>(() => {
     const result: Record<string, string[]> = {};
     PIPELINE_COLUMNS.forEach(col => {
@@ -272,52 +291,10 @@ export function PipelineView({
     catch { alert("Failed to update booking status"); }
   };
 
-  const handleDragOverCard = (targetId: string, position: 'above' | 'below') => {
-    setDragOverCardId(targetId);
-    setDragPosition(position);
-  };
+  const handleColumnDrop = async (bookingId: string, targetState: BookingState) => {
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking || normalizeCol(booking.state) === targetState) return;
 
-  const handleDropOnCard = (targetId: string, position: 'above' | 'below') => {
-    setDragOverCardId(null);
-    if (!draggingId || draggingId === targetId) { setDraggingId(null); return; }
-    const draggedBooking = bookings.find(b => b.id === draggingId);
-    const targetBooking = bookings.find(b => b.id === targetId);
-    if (!draggedBooking || !targetBooking) { setDraggingId(null); return; }
-    const draggedCol = normalizeCol(draggedBooking.state);
-    const targetCol = normalizeCol(targetBooking.state);
-    if (draggedCol !== targetCol) {
-      handleDrop(targetCol);
-      return;
-    }
-    // Build the full ordered list for this column synchronously so we can save it.
-    const colBookingIds = (draggedCol === "booked"
-      ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
-      : bookings.filter(b => b.state === draggedCol)
-    ).map(b => b.id);
-    const prev = columnOrder[draggedCol] ?? [];
-    const base = [...prev.filter(id => colBookingIds.includes(id)), ...colBookingIds.filter(id => !prev.includes(id))];
-    const from = base.indexOf(draggingId!);
-    if (from !== -1) base.splice(from, 1);
-    const to = base.indexOf(targetId);
-    base.splice(to === -1 ? base.length : position === 'above' ? to : to + 1, 0, draggingId!);
-    setColumnOrder(prev => ({ ...prev, [draggedCol]: base }));
-    setDraggingId(null);
-    fetch('/api/bookings/reorder', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderedIds: base }),
-    }).catch(() => {});
-  };
-
-  const handleDrop = async (targetState: BookingState) => {
-    setDropTargetId(null);
-    setDragOverCardId(null);
-    if (!draggingId) return;
-    const booking = bookings.find(b => b.id === draggingId);
-    if (!booking || booking.state === targetState) { setDraggingId(null); return; }
-    const bookingId = draggingId;
-    setDraggingId(null);
-
-    // Fire the first-drag explainer the first time someone moves a card.
     if (!hasSeen("pipeline.first-drag")) {
       setFirstDropColumn(targetState);
     }
@@ -343,6 +320,51 @@ export function PipelineView({
       setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, state: booking.state } : b));
       alert("Failed to move booking");
     }
+  };
+
+  // Resolve a dnd-kit droppable id (either a card id or "col:<state>") to a column.
+  const columnFromDroppableId = (id: string): BookingState | null => {
+    if (id.startsWith("col:")) return id.slice(4) as BookingState;
+    const b = bookings.find(b => b.id === id);
+    return b ? normalizeCol(b.state) : null;
+  };
+
+  const handleDndOver = (e: DragOverEvent) => {
+    const overId = e.over ? String(e.over.id) : null;
+    setDropTargetId(overId ? columnFromDroppableId(overId) : null);
+  };
+
+  const handleDndEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    setDropTargetId(null);
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const activeBooking = bookings.find(b => b.id === activeId);
+    if (!activeBooking) return;
+
+    const sourceCol = normalizeCol(activeBooking.state);
+    const targetCol = columnFromDroppableId(overId);
+    if (!targetCol) return;
+
+    if (sourceCol !== targetCol) {
+      handleColumnDrop(activeId, targetCol);
+      return;
+    }
+
+    // Same-column reorder. Ignore drops on the column body itself.
+    if (overId.startsWith("col:") || activeId === overId) return;
+    const colIds = columnOrder[sourceCol] ?? [];
+    const fromIdx = colIds.indexOf(activeId);
+    const toIdx = colIds.indexOf(overId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const next = arrayMove(colIds, fromIdx, toIdx);
+    setColumnOrder(prev => ({ ...prev, [sourceCol]: next }));
+    fetch('/api/bookings/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds: next }),
+    }).catch(() => {});
   };
 
   const sendComposedEmail = async (subject: string, body: string) => {
@@ -433,62 +455,63 @@ export function PipelineView({
           </>,
         },
       ]} />
-      <div className="flex h-full w-full overflow-x-auto gap-3 pb-4 snap-x">
-        {PIPELINE_COLUMNS.map((id, colIdx) => {
-          const title = COLUMN_LABELS[id];
-          const colBookings = columnBookings(id);
-          const isDropTarget = dropTargetId === id;
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragOver={handleDndOver}
+        onDragEnd={handleDndEnd}
+        onDragCancel={() => setDropTargetId(null)}
+      >
+        <div className="flex h-full w-full overflow-x-auto gap-3 pb-4 snap-x">
+          {PIPELINE_COLUMNS.map((id, colIdx) => {
+            const title = COLUMN_LABELS[id];
+            const colBookings = columnBookings(id);
+            const isDropTarget = dropTargetId === id;
+            const ids = colBookings.map(b => b.id);
 
-          return (
-            <div key={id}
-              {...(colIdx === 0 ? { "data-coachmark": "pipeline-first-column" } : {})}
-              {...(firstDropColumn === id ? { "data-coachmark-drop": "true" } : {})}
-              onDragOver={e => { e.preventDefault(); setDropTargetId(id); }}
-              onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetId(null); }}
-              onDrop={() => handleDrop(id)}
-              className={`min-w-[260px] w-[260px] md:min-w-[280px] md:w-[280px] xl:min-w-[300px] xl:w-[300px] max-w-[300px] shrink-0 snap-start flex flex-col h-full rounded-xl pb-4 transition-colors ${isDropTarget ? "bg-primary/5 ring-2 ring-primary/30" : "bg-surface-container-low/50"}`}>
-              <div className={`flex items-center justify-between px-3 py-3 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
-                <h3 className="font-heading font-semibold text-base text-foreground">{title}</h3>
-                <span className="text-sm bg-surface-container-high text-on-surface-variant px-2.5 py-0.5 rounded-full font-mono">{colBookings.length}</span>
-              </div>
-              <div className="flex flex-col gap-3 px-2 overflow-y-auto">
-                {colBookings.map(booking => (
-                  <BookingCard
-                    key={booking.id}
-                    booking={booking}
-                    fieldLabelMap={fieldLabelMap}
-                    nextActionLabel={nextActionLabel(booking.state)}
-                    onAdvanceState={handleAdvanceState}
-                    onAcceptInquiry={handleAcceptInquiry}
-                    onRejectInquiry={handleRejectInquiry}
-                    onFollowUpInquiry={handleFollowUpInquiry}
-                    onOpenEmail={emailLoading ? undefined : openEmailCompose}
-                    onCancel={handleCancel}
-                    onMoveState={handleMoveState}
-                    onEditAppointment={bid => setBookModal({ bookingId: bid, initialAppointmentDate: bookings.find(b => b.id === bid)?.appointment_date })}
-                    onDepositPaid={id => setBookings(prev => prev.map(b => b.id === id ? { ...b, deposit_paid: true } : b))}
-                    dragging={draggingId === booking.id}
-                    onDragStart={setDraggingId}
-                    onDragEnd={() => { setDraggingId(null); setDragOverCardId(null); }}
-                    dropIndicator={dragOverCardId === booking.id ? dragPosition : null}
-                    onDragOverCard={handleDragOverCard}
-                    onDropOnCard={handleDropOnCard}
-                    paymentsConnected={paymentsConnected}
-                    paymentProvider={paymentProvider}
-                    artistId={artistId}
-                    schedulingLinks={schedulingLinks}
-                  />
-                ))}
+            return (
+              <PipelineColumn
+                key={id}
+                colId={id}
+                title={title}
+                count={colBookings.length}
+                isDropTarget={isDropTarget}
+                isFirstColumn={colIdx === 0}
+                isFirstDrop={firstDropColumn === id}
+              >
+                <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                  {colBookings.map(booking => (
+                    <SortableBookingCard
+                      key={booking.id}
+                      booking={booking}
+                      fieldLabelMap={fieldLabelMap}
+                      nextActionLabel={nextActionLabel(booking.state)}
+                      onAdvanceState={handleAdvanceState}
+                      onAcceptInquiry={handleAcceptInquiry}
+                      onRejectInquiry={handleRejectInquiry}
+                      onFollowUpInquiry={handleFollowUpInquiry}
+                      onOpenEmail={emailLoading ? undefined : openEmailCompose}
+                      onCancel={handleCancel}
+                      onMoveState={handleMoveState}
+                      onEditAppointment={bid => setBookModal({ bookingId: bid, initialAppointmentDate: bookings.find(b => b.id === bid)?.appointment_date })}
+                      onDepositPaid={bid => setBookings(prev => prev.map(b => b.id === bid ? { ...b, deposit_paid: true } : b))}
+                      paymentsConnected={paymentsConnected}
+                      paymentProvider={paymentProvider}
+                      artistId={artistId}
+                      schedulingLinks={schedulingLinks}
+                    />
+                  ))}
+                </SortableContext>
                 {colBookings.length === 0 && (
                   <div className={`text-center p-4 border border-dashed rounded-xl text-xs text-on-surface-variant/60 mt-2 transition-colors ${isDropTarget ? "border-primary/40 text-primary/60" : "border-outline-variant/40"}`}>
                     {isDropTarget ? "Drop here" : "No bookings"}
                   </div>
                 )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              </PipelineColumn>
+            );
+          })}
+        </div>
+      </DndContext>
 
       {/* Accept modal */}
       {acceptModal && (
@@ -632,5 +655,54 @@ export function PipelineView({
         />
       )}
     </>
+  );
+}
+
+function PipelineColumn({
+  colId, title, count, isDropTarget, isFirstColumn, isFirstDrop, children,
+}: {
+  colId: BookingState;
+  title: string;
+  count: number;
+  isDropTarget: boolean;
+  isFirstColumn: boolean;
+  isFirstDrop: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({ id: `col:${colId}` });
+  return (
+    <div
+      {...(isFirstColumn ? { "data-coachmark": "pipeline-first-column" } : {})}
+      {...(isFirstDrop ? { "data-coachmark-drop": "true" } : {})}
+      className={`min-w-[260px] w-[260px] md:min-w-[280px] md:w-[280px] xl:min-w-[300px] xl:w-[300px] max-w-[300px] shrink-0 snap-start flex flex-col h-full rounded-xl pb-4 transition-colors ${isDropTarget ? "bg-primary/5 ring-2 ring-primary/30" : "bg-surface-container-low/50"}`}
+    >
+      <div className={`flex items-center justify-between px-3 py-3 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
+        <h3 className="font-heading font-semibold text-base text-foreground">{title}</h3>
+        <span className="text-sm bg-surface-container-high text-on-surface-variant px-2.5 py-0.5 rounded-full font-mono">{count}</span>
+      </div>
+      <div ref={setNodeRef} className="flex flex-col gap-3 px-2 overflow-y-auto flex-1">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+type SortableBookingCardProps = Omit<
+  React.ComponentProps<typeof BookingCard>,
+  "dragging" | "onDragStart" | "onDragEnd" | "dropIndicator" | "onDragOverCard" | "onDropOnCard"
+>;
+
+function SortableBookingCard(props: SortableBookingCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.booking.id,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <BookingCard {...props} dragging={isDragging} />
+    </div>
   );
 }
