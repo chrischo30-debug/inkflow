@@ -79,12 +79,13 @@ const STRIPE_STEPS = [
 ];
 
 const SQUARE_STEPS = [
-  "Go to squareup.com and create an account (or log in).",
-  "Go to your Square Developer Dashboard at developer.squareup.com.",
-  "Create a new application (give it any name — clients won't see this).",
-  "In the Production tab, copy the Access Token and paste it above.",
-  "Below the access token, find your Location ID (Locations section). Copy and paste that too.",
-  "Save. To finish setup, complete the Webhook section so paid deposits move bookings forward automatically.",
+  "Sign in to the Square Developer Console at developer.squareup.com/apps using your existing Square account (same email and password as squareup.com — no separate signup needed).",
+  "Click + Add application and give it any name (e.g., \"Booking Deposits\"). Clients won't see this. If a \"What will you build first?\" wizard appears, check Accept payments, click Next, then Skip through the remaining steps.",
+  "At the top of your application page, switch the environment toggle to Production.",
+  "In the left sidebar, click Credentials. Under \"Production Access token,\" click Copy, then paste the token above.",
+  "In the left sidebar, click Locations. Copy the Location ID for your business (a string like L1A2B3C4D5E6F) and paste it above.",
+  "Click Save.",
+  "Finish setup: Complete the Webhook section below so paid deposits automatically move bookings forward.",
 ];
 
 interface Props {
@@ -643,22 +644,25 @@ function SquarePanel({
         </p>
         <ol className="space-y-2.5 pl-0 list-none">
           <NumberedStep n={1}>
-            Go to{" "}
+            In the{" "}
             <a href="https://developer.squareup.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
-              Square Developer → your application → Webhooks
-            </a>.
+              Square Developer Console
+            </a>, open your application and make sure the environment toggle at the top is set to <span className="font-medium text-on-surface">Production</span>.
           </NumberedStep>
           <NumberedStep n={2}>
-            Click <span className="font-medium text-on-surface">Add Subscription</span>. Set the Notification URL to:
+            In the left sidebar, under <span className="font-medium text-on-surface">Webhooks</span>, click <span className="font-medium text-on-surface">Subscriptions</span>, then click <span className="font-medium text-on-surface">Add subscription</span>.
+          </NumberedStep>
+          <NumberedStep n={3}>
+            Enter any name (e.g., &quot;FlashBooker Deposits&quot;) and set the <span className="font-medium text-on-surface">Notification URL</span> to:
           </NumberedStep>
         </ol>
         <UrlBox url={squareWebhookUrl} copied={squareWebhookCopied} onCopy={copyUrl} />
-        <ol className="space-y-2.5 pl-0 list-none" start={3}>
-          <NumberedStep n={3}>
-            Subscribe to events <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">payment.created</code> and <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">payment.updated</code>.
-          </NumberedStep>
+        <ol className="space-y-2.5 pl-0 list-none" start={4}>
           <NumberedStep n={4}>
-            Save, open the subscription, and copy the <span className="font-medium text-on-surface">Signature Key</span>. Paste it below.
+            Choose the latest API version, then check the events <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">payment.created</code> and <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">payment.updated</code>. Click <span className="font-medium text-on-surface">Save</span>.
+          </NumberedStep>
+          <NumberedStep n={5}>
+            Open the subscription and copy the <span className="font-medium text-on-surface">Signature Key</span>. Paste it below.
           </NumberedStep>
         </ol>
 
