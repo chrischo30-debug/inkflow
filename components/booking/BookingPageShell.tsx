@@ -284,7 +284,7 @@ export function BookingPageShell({
 
   if (layout === "banner") {
     return (
-      <main style={{ minHeight: "100vh", color: fgColor, ...pageStyle }} className="px-6 py-14 overflow-x-hidden">
+      <main style={{ minHeight: "100vh", color: fgColor, touchAction: "pan-y", ...pageStyle }} className="px-6 py-14 overflow-x-hidden">
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href={googleFontsUrl} />
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row md:items-start gap-12 md:gap-16">
@@ -308,7 +308,7 @@ export function BookingPageShell({
   if (layout === "minimal") {
     const centered = headerAlign === "center";
     return (
-      <main style={{ minHeight: "100vh", color: fgColor, ...pageStyle }} className="px-6 py-14 overflow-x-hidden">
+      <main style={{ minHeight: "100vh", color: fgColor, touchAction: "pan-y", ...pageStyle }} className="px-6 py-14 overflow-x-hidden">
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href={googleFontsUrl} />
         <div className="max-w-3xl mx-auto">
@@ -333,7 +333,7 @@ export function BookingPageShell({
   if (layout === "full") {
     // Full: wide (max-w-4xl), always centered header, no card, generous vertical space
     return (
-      <main style={{ minHeight: "100vh", color: fgColor, ...pageStyle }} className="px-6 py-20 overflow-x-hidden">
+      <main style={{ minHeight: "100vh", color: fgColor, touchAction: "pan-y", ...pageStyle }} className="px-6 py-20 overflow-x-hidden">
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href={googleFontsUrl} />
         <div className="max-w-4xl mx-auto">
@@ -360,7 +360,7 @@ export function BookingPageShell({
 
   // Default: centered
   return (
-    <main style={{ minHeight: "100vh", ...pageStyle }} className="py-16 px-4 md:px-8 overflow-x-hidden">
+    <main style={{ minHeight: "100vh", touchAction: "pan-y", ...pageStyle }} className="py-16 px-4 md:px-8 overflow-x-hidden">
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={googleFontsUrl} />
       <div className="max-w-2xl mx-auto">
