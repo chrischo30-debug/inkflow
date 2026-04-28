@@ -36,7 +36,6 @@ export default async function SettingsPage({
     square_access_token?: string;
     square_location_id?: string;
     square_webhook_signature_key?: string;
-    square_environment?: "production" | "sandbox";
     reminder_enabled?: boolean;
     reminder_hours_before?: number;
     studio_address?: string;
@@ -87,7 +86,6 @@ export default async function SettingsPage({
         squareAccessToken={extended.square_access_token ?? ""}
         squareLocationId={extended.square_location_id ?? ""}
         squareWebhookSignatureKey={extended.square_webhook_signature_key ?? ""}
-        squareEnvironment={extended.square_environment ?? "production"}
         schedulingLinks={normalizeSchedulingLinks((extData as Record<string, unknown>)?.scheduling_links)}
         reminderEnabled={extended.reminder_enabled ?? false}
         reminderHoursBefore={extended.reminder_hours_before ?? 24}

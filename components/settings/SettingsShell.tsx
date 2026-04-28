@@ -44,7 +44,6 @@ export interface SettingsShellProps {
   squareAccessToken: string;
   squareLocationId: string;
   squareWebhookSignatureKey: string;
-  squareEnvironment: "production" | "sandbox";
   schedulingLinks: SchedulingLink[];
   reminderEnabled: boolean;
   reminderHoursBefore: number;
@@ -131,7 +130,6 @@ export function SettingsShell(props: SettingsShellProps) {
                 initialSquareAccessToken={props.squareAccessToken}
                 initialSquareLocationId={props.squareLocationId}
                 initialSquareWebhookSignatureKey={props.squareWebhookSignatureKey}
-                initialSquareEnvironment={props.squareEnvironment}
                 artistId={props.artistId}
               />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Check, Eye, EyeOff, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 type SaveStatus = "idle" | "saving" | "success" | "error";
 type ProviderTab = "stripe" | "square";
 
-function HowToGuide({ steps, defaultOpen = false }: { steps: string[]; defaultOpen?: boolean }) {
+function HowToGuide({ steps, defaultOpen = false }: { steps: ReactNode[]; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
@@ -78,8 +78,8 @@ const STRIPE_STEPS = [
   "Paste it in the field above and click Save.",
 ];
 
-const SQUARE_STEPS = [
-  "Sign in to the Square Developer Console at developer.squareup.com/apps using your existing Square account (same email and password as squareup.com — no separate signup needed).",
+const SQUARE_STEPS: ReactNode[] = [
+  <>Sign in to the <a href="https://developer.squareup.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Square Developer Console</a> using your existing Square account (same email and password as squareup.com — no separate signup needed).</>,
   "Click + Add application and give it any name (e.g., \"Booking Deposits\"). Clients won't see this. If a \"What will you build first?\" wizard appears, check Accept payments, click Next, then Skip through the remaining steps.",
   "At the top of your application page, switch the environment toggle to Production.",
   "In the left sidebar, click Credentials. Under \"Production Access token,\" click Copy, then paste the token above.",
@@ -95,7 +95,6 @@ interface Props {
   initialSquareAccessToken: string;
   initialSquareLocationId: string;
   initialSquareWebhookSignatureKey: string;
-  initialSquareEnvironment: "production" | "sandbox";
   artistId: string;
 }
 
@@ -107,7 +106,6 @@ export function ExternalApiSettings(props: Props) {
     initialSquareAccessToken,
     initialSquareLocationId,
     initialSquareWebhookSignatureKey,
-    initialSquareEnvironment,
     artistId,
   } = props;
 
@@ -130,8 +128,6 @@ export function ExternalApiSettings(props: Props) {
   const [savedSquareToken, setSavedSquareToken] = useState(initialSquareAccessToken);
   const [squareLocation, setSquareLocation] = useState(initialSquareLocationId);
   const [savedSquareLocation, setSavedSquareLocation] = useState(initialSquareLocationId);
-  const [squareEnv, setSquareEnv] = useState<"production" | "sandbox">(initialSquareEnvironment);
-  const [savedSquareEnv, setSavedSquareEnv] = useState<"production" | "sandbox">(initialSquareEnvironment);
   const [squareStatus, setSquareStatus] = useState<SaveStatus>("idle");
   const [squareError, setSquareError] = useState<string | null>(null);
   const [squareWebhookKey, setSquareWebhookKey] = useState(initialSquareWebhookSignatureKey);
@@ -239,7 +235,6 @@ export function ExternalApiSettings(props: Props) {
       {
         square_access_token: squareToken,
         square_location_id: squareLocation,
-        square_environment: squareEnv,
         ...(activeProvider !== "square" ? { payment_provider: "square" } : {}),
       },
       setSquareStatus,
@@ -247,7 +242,6 @@ export function ExternalApiSettings(props: Props) {
       () => {
         setSavedSquareToken(squareToken);
         setSavedSquareLocation(squareLocation);
-        setSavedSquareEnv(squareEnv);
         setActiveProvider("square");
       },
     );
@@ -266,8 +260,7 @@ export function ExternalApiSettings(props: Props) {
   const squareCredsSavedHere =
     Boolean(savedSquareToken) &&
     squareToken === savedSquareToken &&
-    squareLocation === savedSquareLocation &&
-    squareEnv === savedSquareEnv;
+    squareLocation === savedSquareLocation;
 
   return (
     <div className="space-y-6">
@@ -330,8 +323,6 @@ export function ExternalApiSettings(props: Props) {
             setSquareToken={setSquareToken}
             squareLocation={squareLocation}
             setSquareLocation={setSquareLocation}
-            squareEnv={squareEnv}
-            setSquareEnv={setSquareEnv}
             squareCredsSavedHere={squareCredsSavedHere}
             saveSquareCreds={saveSquareCreds}
             squareStatus={squareStatus}
@@ -524,7 +515,6 @@ function StripePanel({
 // ─── Square panel ───────────────────────────────────────────────────────────
 function SquarePanel({
   squareToken, setSquareToken, squareLocation, setSquareLocation,
-  squareEnv, setSquareEnv,
   squareCredsSavedHere, saveSquareCreds, squareStatus, squareError, squareConnected,
   squareWebhookKey, setSquareWebhookKey, savedSquareWebhookKey,
   saveSquareWebhook, squareWebhookStatus, squareWebhookError,
@@ -533,7 +523,6 @@ function SquarePanel({
 }: {
   squareToken: string; setSquareToken: (v: string) => void;
   squareLocation: string; setSquareLocation: (v: string) => void;
-  squareEnv: "production" | "sandbox"; setSquareEnv: (v: "production" | "sandbox") => void;
   squareCredsSavedHere: boolean; saveSquareCreds: () => void;
   squareStatus: SaveStatus; squareError: string | null; squareConnected: boolean;
   squareWebhookKey: string; setSquareWebhookKey: (v: string) => void; savedSquareWebhookKey: string;
@@ -579,26 +568,6 @@ function SquarePanel({
             placeholder="L1A2B3C4D5"
             className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 text-sm focus-visible:ring-0 focus-visible:border-primary shadow-none"
           />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-medium text-on-surface-variant">Environment</label>
-          <div className="flex items-center gap-1 bg-surface-container-low rounded-lg p-0.5 border border-outline-variant/20">
-            {(["production", "sandbox"] as const).map((env) => (
-              <button
-                key={env}
-                type="button"
-                onClick={() => setSquareEnv(env)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  squareEnv === env
-                    ? "bg-surface text-on-surface shadow-sm"
-                    : "text-on-surface-variant hover:text-on-surface"
-                }`}
-              >
-                {env}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex justify-end">
