@@ -38,7 +38,6 @@ interface BookingCardProps {
   onDepositPaid?: (bookingId: string) => void;
   dragging?: boolean;
   paymentsConnected?: boolean;
-  paymentProvider?: "stripe" | "square" | null;
   artistId?: string;
   schedulingLinks?: SchedulingLink[];
 }
@@ -183,9 +182,8 @@ export function BookingCard({
   onAdvanceState, onAcceptInquiry, onRejectInquiry, onFollowUpInquiry,
   onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid,
   dragging,
-  paymentsConnected = false, paymentProvider = null, artistId, schedulingLinks = [],
+  paymentsConnected = false, artistId, schedulingLinks = [],
 }: BookingCardProps) {
-  const providerLabel = paymentProvider === "square" ? "Square" : "Stripe";
   const [showDetails, setShowDetails] = useState(false);
   const [depositPaid, setDepositPaid] = useState(booking.deposit_paid ?? false);
   const [markingPaid, setMarkingPaid] = useState(false);
@@ -366,47 +364,9 @@ export function BookingCard({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest flex items-center justify-between gap-1.5">
-        {/* Left: manual "mark paid" when no payment provider, otherwise auto-advance hint */}
-        <div className="flex items-center gap-1">
-          {booking.state === "sent_deposit" && !paymentsConnected && (
-            depositPaid || booking.deposit_paid ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
-                <Check className="w-3 h-3" /> Deposit paid
-              </span>
-            ) : (
-              <button type="button" disabled={markingPaid}
-                onClick={async () => {
-                  setMarkingPaid(true);
-                  await fetch(`/api/bookings/${booking.id}`, {
-                    method: "PATCH", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "mark_deposit_paid" }),
-                  });
-                  setDepositPaid(true);
-                  setMarkingPaid(false);
-                  onDepositPaid?.(booking.id);
-                }}
-                className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
-                <Check className="w-3 h-3" /> {markingPaid ? "Saving…" : "Mark paid"}
-              </button>
-            )
-          )}
-          {booking.state === "sent_deposit" && paymentsConnected && (
-            depositPaid || booking.deposit_paid ? (
-              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
-                <Check className="w-3 h-3" /> Deposit paid
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1">
-                <Send className="w-3 h-3 shrink-0" />
-                {providerLabel} will auto-advance when paid
-              </span>
-            )
-          )}
-        </div>
-
-        {/* Right: primary action + overflow */}
-        <div className="flex items-center gap-1.5">
+      <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest">
+        {/* Top row: primary action + overflow */}
+        <div className="flex items-center justify-end gap-1.5">
           {isInquiry ? (
             <>
               {onRejectInquiry && (
@@ -447,6 +407,45 @@ export function BookingCard({
             schedulingLinks={schedulingLinks}
           />
         </div>
+
+        {/* Bottom row: deposit status / auto-advance hint (sent_deposit only) */}
+        {booking.state === "sent_deposit" && (
+          <div className="mt-2 flex items-center">
+            {!paymentsConnected ? (
+              depositPaid || booking.deposit_paid ? (
+                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
+                  <Check className="w-3 h-3" /> Deposit paid
+                </span>
+              ) : (
+                <button type="button" disabled={markingPaid}
+                  onClick={async () => {
+                    setMarkingPaid(true);
+                    await fetch(`/api/bookings/${booking.id}`, {
+                      method: "PATCH", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "mark_deposit_paid" }),
+                    });
+                    setDepositPaid(true);
+                    setMarkingPaid(false);
+                    onDepositPaid?.(booking.id);
+                  }}
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                  <Check className="w-3 h-3" /> {markingPaid ? "Saving…" : "Mark paid"}
+                </button>
+              )
+            ) : (
+              depositPaid || booking.deposit_paid ? (
+                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
+                  <Check className="w-3 h-3" /> Deposit paid
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1">
+                  <Send className="w-3 h-3 shrink-0" />
+                  Stripe/Square auto-advances when paid
+                </span>
+              )
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
