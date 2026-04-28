@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getAdapter, readArtistPaymentConfig } from "@/lib/payments";
+import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -37,6 +38,15 @@ export async function POST(req: Request) {
       label: label.trim(),
       amountCents: amount_cents,
     });
+
+    const existing = normalizePaymentLinks(
+      (artistRow as Record<string, unknown>).payment_links,
+    );
+    if (!existing.some(l => l.url === created.url)) {
+      const updated = [...existing, { label: label.trim(), url: created.url }];
+      await supabase.from("artists").update({ payment_links: updated }).eq("id", user.id);
+    }
+
     return NextResponse.json({ url: created.url, provider: adapter.provider });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Payment provider error";
