@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getAdapter, readArtistPaymentConfig } from "@/lib/payments";
+import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 
 export async function POST(
   req: Request,
@@ -19,7 +20,7 @@ export async function POST(
   }
 
   const [{ data: artistRow }, { data: booking }] = await Promise.all([
-    supabase.from("artists").select("payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment").eq("id", user.id).single(),
+    supabase.from("artists").select("payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment, payment_links").eq("id", user.id).single(),
     supabase
       .from("bookings")
       .select("id, client_name, artist_id")
@@ -58,6 +59,15 @@ export async function POST(
     }
 
     await supabase.from("bookings").update(updates).eq("id", bookingId);
+
+    const existing = normalizePaymentLinks(
+      (artistRow as Record<string, unknown>).payment_links,
+    );
+    if (!existing.some(l => l.url === created.url)) {
+      const depositLabel = `Deposit — ${booking.client_name ?? "Client"}`;
+      const updatedLinks = [...existing, { label: depositLabel, url: created.url }];
+      await supabase.from("artists").update({ payment_links: updatedLinks }).eq("id", user.id);
+    }
 
     return NextResponse.json({ url: created.url, provider: adapter.provider });
   } catch (err) {

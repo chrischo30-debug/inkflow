@@ -57,10 +57,8 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
 
   useEffect(() => {
     if (!externalAdd) return;
-    const updated = [...links, externalAdd];
-    setLinks(updated);
-    save(updated);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Server-side auto-save already wrote this entry — just reflect it locally.
+    setLinks(prev => prev.some(l => l.url === externalAdd.url) ? prev : [...prev, externalAdd]);
   }, [externalAdd]);
 
   const save = async (updated: PaymentLink[]) => {
@@ -155,8 +153,14 @@ function PaymentLinkGeneratorSection({ provider, onLinkGenerated }: { provider: 
     setGenStatus("generating"); setGeneratedUrl(null); setErrorMsg(null); setSaved(false);
     const res = await fetch("/api/payments/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), amount_cents: Math.round(amount * 100) }) });
     const data = await res.json();
-    if (res.ok && data.url) { setGeneratedUrl(data.url); setGenStatus("done"); }
-    else { setErrorMsg(data.error ?? "Failed to generate link"); setGenStatus("error"); }
+    if (res.ok && data.url) {
+      setGeneratedUrl(data.url);
+      setGenStatus("done");
+      onLinkGenerated({ label: label.trim(), url: data.url });
+      setSaved(true);
+    } else {
+      setErrorMsg(data.error ?? "Failed to generate link"); setGenStatus("error");
+    }
   };
 
   const copy = async () => {
@@ -202,10 +206,11 @@ function PaymentLinkGeneratorSection({ provider, onLinkGenerated }: { provider: 
           </div>
           <div className="flex items-center justify-between gap-2">
             <button type="button" onClick={reset} className="text-sm text-on-surface-variant hover:text-on-surface transition-colors">Generate another</button>
-            <button type="button" onClick={() => { if (generatedUrl) { onLinkGenerated({ label: label.trim(), url: generatedUrl }); setSaved(true); } }} disabled={saved}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${saved ? "border-emerald-300/60 text-emerald-700 bg-emerald-50/40" : "border-outline-variant/40 text-on-surface hover:bg-surface-container-high"}`}>
-              {saved ? <><Check className="w-3.5 h-3.5" /> Saved</> : "Save to payment links"}
-            </button>
+            {saved && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-emerald-300/60 text-emerald-700 bg-emerald-50/40">
+                <Check className="w-3.5 h-3.5" /> Saved to payment links
+              </span>
+            )}
           </div>
         </div>
       )}
