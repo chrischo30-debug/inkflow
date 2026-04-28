@@ -66,6 +66,7 @@ export function SchedulingPicker({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [slots, setSlots] = useState<Array<{ start: string; end: string }>>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [calendarError, setCalendarError] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ start: string; end: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -95,12 +96,21 @@ export function SchedulingPicker({
   const fetchSlots = async (dateStr: string) => {
     setLoadingSlots(true);
     setSlots([]);
+    setCalendarError(false);
     try {
       const res = await fetch(`/api/schedule/${artistId}/${linkId}/slots?date=${dateStr}`);
       if (res.ok) {
-        const data = await res.json() as { slots: Array<{ start: string; end: string }> };
+        const data = await res.json() as {
+          slots: Array<{ start: string; end: string }>;
+          calendar_error?: boolean;
+        };
         setSlots(data.slots ?? []);
+        setCalendarError(Boolean(data.calendar_error));
+      } else {
+        setCalendarError(true);
       }
+    } catch {
+      setCalendarError(true);
     } finally {
       setLoadingSlots(false);
     }
@@ -263,6 +273,12 @@ export function SchedulingPicker({
                     {loadingSlots ? (
                       <div className="flex-1 flex items-center justify-center">
                         <p className="text-sm text-gray-400">Loading times…</p>
+                      </div>
+                    ) : calendarError ? (
+                      <div className="flex-1 flex items-center justify-center text-center px-2">
+                        <p className="text-sm text-gray-500">
+                          We couldn&apos;t load {artistName}&apos;s availability right now. Please try again in a moment, or reach out to {artistName} directly.
+                        </p>
                       </div>
                     ) : slots.length === 0 ? (
                       <div className="flex-1 flex items-center justify-center text-center">
