@@ -17,10 +17,11 @@ export function CopyFormLinkButton({ slug }: { slug: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg border border-outline-variant/60 text-on-surface-variant hover:text-on-surface hover:border-on-surface/30 hover:bg-surface-container-high transition-colors"
+      title="Copy form link"
+      className="inline-flex items-center gap-2 px-2.5 sm:px-3.5 py-2 text-sm font-medium rounded-lg border border-outline-variant/60 text-on-surface-variant hover:text-on-surface hover:border-on-surface/30 hover:bg-surface-container-high transition-colors"
     >
       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-      {copied ? "Copied!" : "Copy form link"}
+      <span className="hidden sm:inline">{copied ? "Copied!" : "Copy form link"}</span>
     </button>
   );
 }

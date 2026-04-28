@@ -6,7 +6,7 @@ import type { Booking, BookingState } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { Search } from "lucide-react";
 import { StateBadge } from "./StateBadge";
-import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays, Send } from "lucide-react";
+import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays, Send, X, MessageSquare } from "lucide-react";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
@@ -517,11 +517,11 @@ export function BookingsTable({
           className={`border-b border-outline-variant/10 hover:bg-surface-container-low/40 transition-colors cursor-pointer ${expanded ? "bg-surface-container-low/60" : ""}`}
           onClick={() => setExpandedId(expanded ? null : booking.id)}
         >
-          <td className="px-6 py-4">
+          <td className="pl-3 pr-1 sm:px-6 py-4">
             <ChevronRight className={`w-4 h-4 text-on-surface-variant transition-transform ${expanded ? "rotate-90" : ""}`} />
           </td>
-          <td className="px-4 py-4">
-            <div className="flex items-center gap-2">
+          <td className="px-2 sm:px-4 py-4 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium text-on-surface">{booking.client_name}</p>
               {booking.deposit_paid && (
                 <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md shrink-0">Deposit paid</span>
@@ -551,12 +551,12 @@ export function BookingsTable({
               </p>
             )}
           </td>
-          <td className="px-4 py-4">
+          <td className="px-2 sm:px-4 py-4">
             <StateBadge state={booking.state} />
           </td>
-          <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-end gap-2">
-              {/* Deposit link — shown for accepted/confirmed when a payment provider is connected */}
+          <td className="px-2 sm:px-6 py-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+              {/* Deposit link — shown for accepted/confirmed when a payment provider is connected. Hidden on mobile; reachable from the expanded row. */}
               {paymentsConnected && (booking.state === "sent_deposit" || booking.state === "accepted" || booking.state === "confirmed") && !booking.deposit_paid && (
                 (booking.deposit_link_url || booking.stripe_payment_link_url) ? (
                   <button
@@ -569,7 +569,7 @@ export function BookingsTable({
                         setTimeout(() => setCopiedLink(null), 2000);
                       });
                     }}
-                    className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                    className="hidden sm:flex p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
                   >
                     {copiedLink === booking.id ? <Check className="w-4 h-4 text-emerald-500" /> : <DollarSign className="w-4 h-4" />}
                   </button>
@@ -578,7 +578,7 @@ export function BookingsTable({
                     type="button"
                     title="Generate deposit link"
                     onClick={() => setDepositModal({ bookingId: booking.id, amount: booking.budget ? String(booking.budget) : "" })}
-                    className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+                    className="hidden sm:flex p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
                   >
                     <DollarSign className="w-4 h-4" />
                   </button>
@@ -586,13 +586,22 @@ export function BookingsTable({
               )}
               {isInquiry ? (
                 <>
-                  <button type="button" onClick={() => openRejectCompose(booking.id)} className="text-sm font-medium px-3 py-2 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">Reject</button>
-                  <button type="button" onClick={() => openFollowUpCompose(booking.id)} className="text-sm font-medium px-3 py-2 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap">Follow Up</button>
-                  <button type="button" onClick={() => setAcceptModal({ bookingId: booking.id })} className="text-sm font-medium px-3 py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">Accept</button>
+                  <button type="button" title="Reject" onClick={() => openRejectCompose(booking.id)} className="text-sm font-medium p-2 sm:px-3 sm:py-2 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors whitespace-nowrap">
+                    <X className="w-4 h-4 sm:hidden" />
+                    <span className="hidden sm:inline">Reject</span>
+                  </button>
+                  <button type="button" title="Follow up" onClick={() => openFollowUpCompose(booking.id)} className="text-sm font-medium p-2 sm:px-3 sm:py-2 rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high transition-colors whitespace-nowrap">
+                    <MessageSquare className="w-4 h-4 sm:hidden" />
+                    <span className="hidden sm:inline">Follow Up</span>
+                  </button>
+                  <button type="button" title="Accept" onClick={() => setAcceptModal({ bookingId: booking.id })} className="text-sm font-medium p-2 sm:px-3 sm:py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">
+                    <Check className="w-4 h-4 sm:hidden" />
+                    <span className="hidden sm:inline">Accept</span>
+                  </button>
                 </>
               ) : (
                 nextAction && (
-                  <button type="button" onClick={() => advance(booking.id, booking.state)} className="text-sm font-medium px-3 py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">
+                  <button type="button" onClick={() => advance(booking.id, booking.state)} className="text-sm font-medium px-2.5 sm:px-3 py-2 rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap">
                     {nextAction.label}
                   </button>
                 )
@@ -621,7 +630,7 @@ export function BookingsTable({
         </tr>
         {expanded && (
           <tr key={`${booking.id}-detail`} className="border-b border-outline-variant/15 bg-surface-container-low/30">
-            <td colSpan={6} className="px-6 pb-5 pt-3">
+            <td colSpan={6} className="px-3 sm:px-6 pb-5 pt-3">
               <div className="border border-outline-variant/25 rounded-xl bg-surface shadow-sm overflow-hidden text-sm">
 
                 {/* Contact header */}
@@ -817,7 +826,7 @@ export function BookingsTable({
   return (
     <div className="flex flex-col h-full">
       {/* State filter tabs */}
-      <div className="flex items-center gap-1.5 px-6 pt-4 pb-0 border-b border-outline-variant/10 overflow-x-auto shrink-0">
+      <div className="flex items-center gap-1.5 px-3 sm:px-6 pt-4 pb-0 border-b border-outline-variant/10 overflow-x-auto shrink-0">
         {STATE_TABS.map(tab => (
           <button
             key={tab.value}
@@ -842,7 +851,7 @@ export function BookingsTable({
       </div>
 
       {/* Search bar */}
-      <div className="px-6 py-3 border-b border-outline-variant/10 shrink-0">
+      <div className="px-3 sm:px-6 py-3 border-b border-outline-variant/10 shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/50 pointer-events-none" />
           <input
@@ -866,19 +875,19 @@ export function BookingsTable({
           <table className="w-full">
             <thead>
               <tr className="border-b border-outline-variant/10 bg-surface-container-low/50">
-                <th className="text-left px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
-                <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
+                <th className="text-left pl-3 pr-1 sm:px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
+                <th className="text-left px-2 sm:px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden md:table-cell">Description</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden lg:table-cell">Appointment</th>
-                <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant">Status</th>
-                <th className="text-right px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
+                <th className="text-left px-2 sm:px-4 py-4 text-sm font-medium text-on-surface-variant">Status</th>
+                <th className="text-right px-2 sm:px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
               </tr>
             </thead>
             <tbody>
               {confirmedGroups.map(group => (
                 <Fragment key={group.dateLabel}>
                   <tr className="bg-surface-container-low/60 border-b border-outline-variant/10">
-                    <td colSpan={6} className="px-6 py-2">
+                    <td colSpan={6} className="px-3 sm:px-6 py-2">
                       <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">{group.dateLabel}</span>
                     </td>
                   </tr>
@@ -891,12 +900,12 @@ export function BookingsTable({
           <table className="w-full">
             <thead>
               <tr className="border-b border-outline-variant/10 bg-surface-container-low/50">
-                <th className="text-left px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
-                <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
+                <th className="text-left pl-3 pr-1 sm:px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
+                <th className="text-left px-2 sm:px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden md:table-cell">Description</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden lg:table-cell">Date</th>
-                <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant">Status</th>
-                <th className="text-right px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
+                <th className="text-left px-2 sm:px-4 py-4 text-sm font-medium text-on-surface-variant">Status</th>
+                <th className="text-right px-2 sm:px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
               </tr>
             </thead>
             <tbody>{visible.map(renderRow)}</tbody>
