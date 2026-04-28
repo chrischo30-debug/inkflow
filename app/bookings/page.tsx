@@ -24,7 +24,7 @@ export default async function BookingsPage({
   const [{ data: bookingsData }, { data: baseFields }, { data: customFields }, { data: artistData }] = await Promise.all([
     supabase
       .from("bookings")
-      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, total_amount, tip_amount, completion_notes, completion_image_urls, sort_order, created_at, updated_at")
+      .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, inquiry_email_failed, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, total_amount, tip_amount, completion_notes, completion_image_urls, sort_order, created_at, updated_at")
       .eq("artist_id", user.id)
       .order("sort_order", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false }),

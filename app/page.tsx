@@ -25,7 +25,7 @@ export default async function DashboardPage() {
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, sort_order, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, inquiry_email_failed, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, sort_order, created_at, updated_at")
     .eq("artist_id", user.id)
     .neq("state", "cancelled")
     .order("sort_order", { ascending: true, nullsFirst: false })

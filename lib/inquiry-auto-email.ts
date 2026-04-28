@@ -7,14 +7,26 @@ const resend = new Resend(process.env.RESEND_API_KEY || "re_mock_key");
 const SENDING_DOMAIN = process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || `https://${SENDING_DOMAIN}`;
 
+export interface InquiryAutoEmailResult {
+  // True if every email that *should* have fired actually went. False if any
+  // attempt threw — the caller should mark the booking so the artist sees a
+  // "email didn't send" badge.
+  ok: boolean;
+  // Short failure description (first error message, truncated). Stored on
+  // the booking row for debugging; safe to surface in the dashboard if you
+  // ever want to.
+  error?: string;
+}
+
 export async function sendInquiryAutoEmail(opts: {
   admin: SupabaseClient;
   artistId: string;
   bookingId: string;
   clientName: string;
   clientEmail: string;
-}) {
+}): Promise<InquiryAutoEmailResult> {
   const { admin, artistId, bookingId, clientName, clientEmail } = opts;
+  const errors: string[] = [];
 
   const [{ data: artist }, { data: templateRow }] = await Promise.all([
     admin.from("artists")
@@ -50,34 +62,52 @@ export async function sendInquiryAutoEmail(opts: {
 </div>`,
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       console.error("Artist new-submission notification failed:", e);
+      errors.push(`artist notification: ${msg}`);
     }
   }
 
   // Client auto-email — respect per-stage kill switches
-  if (!clientEmail || clientEmail.includes("no-email-provided")) return;
+  if (!clientEmail || clientEmail.includes("no-email-provided")) {
+    return { ok: errors.length === 0, error: errors[0] };
+  }
 
   const masterAutoOn = (artist as { auto_emails_enabled?: boolean | null } | null)?.auto_emails_enabled !== false;
   const stageAutoOn = templateRow ? templateRow.auto_send : true;
   const stageEnabled = templateRow ? (templateRow as { enabled?: boolean | null }).enabled !== false : true;
-  if (!masterAutoOn || !stageEnabled || !stageAutoOn) return;
+  if (!masterAutoOn || !stageEnabled || !stageAutoOn) {
+    // Intentionally skipped (artist disabled it) — not a failure.
+    return { ok: errors.length === 0, error: errors[0] };
+  }
 
-  const { subject: sentSubject, messageId: threadMessageId } = await sendStateTransitionEmail({
-    toEmail: clientEmail,
-    clientName,
-    artistName: artist?.name ?? "Your Artist",
-    newState: "inquiry",
-    paymentLinksList: normalizePaymentLinks(artist?.payment_links),
-    calendarLinksList: [],
-    studioAddress: (artist as { studio_address?: string | null } | null)?.studio_address ?? undefined,
-    template: templateRow ?? null,
-    artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
-    branding: {
-      logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null,
-      logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false,
-      logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark",
-    },
-  });
+  let sentSubject: string | undefined;
+  let threadMessageId: string | undefined;
+  try {
+    const result = await sendStateTransitionEmail({
+      toEmail: clientEmail,
+      clientName,
+      artistName: artist?.name ?? "Your Artist",
+      newState: "inquiry",
+      paymentLinksList: normalizePaymentLinks(artist?.payment_links),
+      calendarLinksList: [],
+      studioAddress: (artist as { studio_address?: string | null } | null)?.studio_address ?? undefined,
+      template: templateRow ?? null,
+      artistReplyTo: artist?.gmail_address ?? artist?.email ?? null,
+      branding: {
+        logoUrl: (artist as { logo_url?: string | null } | null)?.logo_url ?? null,
+        logoEnabled: (artist as { email_logo_enabled?: boolean | null } | null)?.email_logo_enabled !== false,
+        logoBg: ((artist as { email_logo_bg?: "light" | "dark" | null } | null)?.email_logo_bg ?? "light") as "light" | "dark",
+      },
+    });
+    sentSubject = result.subject;
+    threadMessageId = result.messageId;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("Client inquiry auto-email failed:", e);
+    errors.push(`client confirmation: ${msg}`);
+    return { ok: errors.length === 0, error: errors[0] };
+  }
 
   const nowIso = new Date().toISOString();
   const { data: existingRow } = await admin
@@ -93,4 +123,6 @@ export async function sendInquiryAutoEmail(opts: {
       ...(threadMessageId ? { thread_message_id: threadMessageId } : {}),
     })
     .eq("id", bookingId);
+
+  return { ok: errors.length === 0, error: errors[0] };
 }

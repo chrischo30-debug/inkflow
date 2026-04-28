@@ -289,6 +289,16 @@ export function BookingCard({
           </span>
         )}
 
+        {/* Auto-confirm email failed on submission — artist may need to follow up manually */}
+        {booking.state === "inquiry" && booking.inquiry_email_failed && (
+          <span
+            title="The automatic confirmation email to the client (or your new-submission notification) didn't go through. Reach out manually to confirm the inquiry was received."
+            className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200/60 rounded-full px-2 py-0.5 self-start"
+          >
+            ⚠ Email didn't send
+          </span>
+        )}
+
         <button type="button"
           className="text-xs font-medium text-on-surface-variant/60 hover:text-on-surface-variant underline self-start transition-colors"
           onClick={() => setShowDetails(v => !v)}>

@@ -174,13 +174,37 @@ export async function POST(req: Request) {
       throw error;
     }
 
+    // Fire-and-forget so the client doesn't wait on email delivery, but record
+    // the outcome on the booking row so the artist sees a failure badge if
+    // either send (artist notification or client confirmation) failed.
     sendInquiryAutoEmail({
       admin,
       artistId: parsed.artist_id,
       bookingId: data.id,
       clientName: safeName,
       clientEmail: safeEmail,
-    }).catch(err => console.error("Inquiry auto-email failed:", err));
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          await admin.from("bookings")
+            .update({
+              inquiry_email_failed: true,
+              inquiry_email_error: (res.error ?? "unknown error").slice(0, 500),
+            })
+            .eq("id", data.id);
+        }
+      })
+      .catch(async (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Inquiry auto-email failed (uncaught):", err);
+        await admin.from("bookings")
+          .update({
+            inquiry_email_failed: true,
+            inquiry_email_error: msg.slice(0, 500),
+          })
+          .eq("id", data.id)
+          .then(() => {}, () => {});
+      });
 
     return NextResponse.json({ success: true, bookingId: data.id }, { status: 201 });
   } catch (error: unknown) {

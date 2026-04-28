@@ -46,6 +46,10 @@ export interface Booking {
   gmail_thread_id?: string;
   sent_emails?: SentEmailEntry[];
   has_unread_reply?: boolean;
+  /** True if the public-form auto-confirm or artist notification email failed. */
+  inquiry_email_failed?: boolean;
+  /** Short failure description, set when inquiry_email_failed=true. */
+  inquiry_email_error?: string;
   deposit_paid?: boolean;
   /** Provider-agnostic deposit link URL. Falls back to legacy stripe_payment_link_url. */
   deposit_link_url?: string;
