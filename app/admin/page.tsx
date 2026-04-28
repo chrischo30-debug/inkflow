@@ -76,7 +76,7 @@ export default async function AdminPage() {
           </span>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-5xl mx-auto">
             <table className="w-full text-sm">
               <thead>

@@ -29,18 +29,18 @@ export function BookingPageSettingsLayout({ slug, initial }: { slug: string; ini
         </div>
         <div className="flex items-center gap-2">
           {previewFn && (
-            <button onClick={previewFn} className={btnOutline}>
+            <button onClick={previewFn} className={btnOutline} title="Preview">
               <Eye className="w-4 h-4" />
-              Preview
+              <span className="hidden sm:inline">Preview</span>
             </button>
           )}
-          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled}>
+          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled} title="View live form">
             <ExternalLink className="w-4 h-4" />
-            View Live Form
+            <span className="hidden sm:inline">View Live Form</span>
           </a>
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <BookingPageSettings initial={initial} onPreviewReady={(fn) => setPreviewFn(() => fn)} />
       </div>
     </main>

@@ -56,7 +56,7 @@ export default async function NewsletterFormPage() {
             </a>
           )}
         </header>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-xl space-y-2">
             <div className="mb-6">
               <h2 className="text-base font-semibold text-on-surface">Newsletter signup</h2>

@@ -44,19 +44,21 @@ export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields
         }]} />
         <div className="flex items-center gap-2">
           {previewFn && (
-            <button onClick={previewFn} className={btnOutline}>
+            <button onClick={previewFn} className={btnOutline} title="Preview">
               <Eye className="w-4 h-4" />
-              Preview
+              <span className="hidden sm:inline">Preview</span>
             </button>
           )}
-          <CopyLinkButton path={`/${slug}/book`} />
-          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled}>
+          <div className="hidden sm:block">
+            <CopyLinkButton path={`/${slug}/book`} />
+          </div>
+          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled} title="Open live form">
             <ExternalLink className="w-4 h-4" />
-            Open
+            <span className="hidden sm:inline">Open</span>
           </a>
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto p-8 space-y-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
         <section>
           <FormBuilderSettings
             initialFields={initialFields}

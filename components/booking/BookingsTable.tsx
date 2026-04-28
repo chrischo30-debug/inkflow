@@ -856,7 +856,7 @@ export function BookingsTable({
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-auto">
         {visible.length === 0 ? (
           <div className="flex items-center justify-center h-48">
             <p className="text-sm text-on-surface-variant">{q ? "No results found." : "No bookings in this state."}</p>

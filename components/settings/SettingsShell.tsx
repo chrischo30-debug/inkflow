@@ -61,15 +61,15 @@ export function SettingsShell(props: SettingsShellProps) {
         <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Settings</h1>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar nav */}
-        <nav className="w-52 shrink-0 border-r border-outline-variant/10 py-6 px-3 flex flex-col gap-1.5">
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        {/* Tab nav — horizontal on mobile, vertical sidebar on desktop */}
+        <nav className="md:w-52 shrink-0 md:border-r border-b md:border-b-0 border-outline-variant/10 py-2 md:py-6 px-2 md:px-3 flex flex-row md:flex-col gap-1 md:gap-1.5 overflow-x-auto md:overflow-visible">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`flex items-center gap-3 w-full px-3 py-3 rounded-lg text-sm font-medium transition-colors text-left ${
+              className={`flex items-center gap-2 md:gap-3 shrink-0 px-3 py-2 md:py-3 rounded-lg text-sm font-medium transition-colors md:w-full md:text-left ${
                 tab === id
                   ? "bg-primary/10 text-primary"
                   : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
@@ -82,7 +82,7 @@ export function SettingsShell(props: SettingsShellProps) {
         </nav>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto px-8 py-8">
+        <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
           {tab === "profile" && (
             <div className="max-w-2xl space-y-6">
               <SectionHeading

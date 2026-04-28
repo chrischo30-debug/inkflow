@@ -60,7 +60,7 @@ export default async function ContactFormPage() {
             </div>
           )}
         </header>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-xl space-y-2">
             <div className="mb-6">
               <h2 className="text-base font-semibold text-on-surface">Contact form setup</h2>

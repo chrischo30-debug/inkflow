@@ -53,7 +53,7 @@ export default async function CalendarPage({
         </header>
 
         {params.message && (
-          <div className="px-8 pt-3 shrink-0">
+          <div className="px-4 md:px-8 pt-3 shrink-0">
             <p className="max-w-3xl p-3 rounded-lg border border-amber-300/50 bg-amber-50 text-amber-700 text-sm">
               {params.message}
             </p>
@@ -61,7 +61,7 @@ export default async function CalendarPage({
         )}
 
         {/* Calendar fills all remaining vertical space */}
-        <div className="flex-1 min-h-0 overflow-hidden px-8 pt-4 pb-4">
+        <div className="flex-1 min-h-0 overflow-hidden px-2 md:px-8 pt-4 pb-4">
           <CalendarView initialDate={params.date} />
         </div>
       </main>

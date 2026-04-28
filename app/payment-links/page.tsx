@@ -58,7 +58,7 @@ export default async function LinksPage() {
             </>,
           }]} />
         </header>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <LinksView
             initialPaymentLinks={normalizePaymentLinks(row?.payment_links)}
             initialCalendarLinks={row?.calendar_links ?? []}

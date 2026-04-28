@@ -31,14 +31,14 @@ export function BooksSettingsLayout({
         </div>
         <div className="flex items-center gap-2">
           {previewFn && (
-            <button onClick={previewFn} className={btnOutline}>
+            <button onClick={previewFn} className={btnOutline} title="Preview closed page">
               <Eye className="w-4 h-4" />
-              Preview closed page
+              <span className="hidden sm:inline">Preview closed page</span>
             </button>
           )}
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="max-w-xl space-y-2">
           <div className="mb-6">
             <h2 className="text-base font-semibold text-on-surface">Books open / closed</h2>
