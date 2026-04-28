@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { PipelineView } from "@/components/booking/PipelineView";
 import { BooksToggle } from "@/components/dashboard/BooksToggle";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
@@ -84,7 +85,10 @@ export default async function DashboardPage() {
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <header className="h-16 flex items-center justify-between px-4 md:px-6 xl:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Dashboard</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <MobileNavToggle />
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Dashboard</h1>
+          </div>
           <div className="flex items-center gap-2 md:gap-3">
             <BooksToggle initialOpen={booksOpen} statusLabel={booksLabel} />
             {artistData?.slug && (

@@ -9,6 +9,7 @@ import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import { ExternalApiSettings } from "./ExternalApiSettings";
 import { ReminderSettings } from "./ReminderSettings";
 import type { CalendarLink, PaymentLink, SchedulingLink } from "@/lib/pipeline-settings";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 
 const TABS = [
   { id: "profile",      label: "Profile",      icon: User },
@@ -55,8 +56,9 @@ export function SettingsShell(props: SettingsShellProps) {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
-      <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
-        <h1 className="text-xl font-heading font-semibold text-on-surface">Settings</h1>
+      <header className="h-16 flex items-center gap-2 px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
+        <MobileNavToggle />
+        <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Settings</h1>
       </header>
 
       <div className="flex flex-1 overflow-hidden">

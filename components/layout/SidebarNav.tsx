@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useEffect, useLayoutEffect, useState } from "react";
 import { signOut } from "@/app/actions/auth";
+import { useMobileNavOpen, setMobileNavOpen } from "@/lib/mobile-nav";
 import {
   LayoutDashboard,
   BookOpen,
@@ -19,6 +20,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -90,6 +92,18 @@ export function SidebarNav({
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const mobileOpen = useMobileNavOpen();
+
+  // Close mobile drawer on navigation. Desktop is unaffected.
+  useEffect(() => { setMobileNavOpen(false); }, [pathname]);
+
+  // Close mobile drawer on Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -122,41 +136,64 @@ export function SidebarNav({
     return () => { save(); el.removeEventListener("scroll", save); };
   }, []);
 
+  // On mobile (`<md`), the sidebar is an off-canvas drawer toggled by
+  // MobileNavToggle in the page header. On desktop it behaves as before
+  // (sticky in flex layout, expand/collapse via the bottom toggle).
+  const desktopWidth = collapsed ? "md:w-[58px]" : "md:w-56";
+  const mobileTransform = mobileOpen ? "translate-x-0" : "-translate-x-full";
+
   return (
-    <aside
-      className={`${
-        collapsed ? "w-[58px]" : "w-56"
-      } border-r border-outline-variant/20 bg-surface-container-low flex flex-col h-screen sticky top-0 shrink-0 transition-[width] duration-200`}
-    >
+    <>
+      {/* Backdrop — only when mobile drawer is open */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/40"
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed top-0 left-0 z-50 h-screen w-64 ${mobileTransform} transition-transform duration-200 md:sticky md:translate-x-0 md:transform-none md:z-auto md:w-56 md:transition-[width] ${desktopWidth} border-r border-outline-variant/20 bg-surface-container-low flex flex-col shrink-0`}
+      >
       {/* Logo */}
-      <div className={`flex items-center border-b border-outline-variant/10 shrink-0 h-16 ${collapsed ? "justify-center px-0" : "px-4"}`}>
-        <Link href="/" className={`flex items-center min-w-0 ${collapsed ? "justify-center" : "gap-2.5 flex-1"}`} title="Dashboard">
+      <div className={`flex items-center border-b border-outline-variant/10 shrink-0 h-16 px-4 ${collapsed ? "md:justify-center md:px-0" : ""}`}>
+        <Link href="/" className={`flex items-center min-w-0 gap-2.5 flex-1 ${collapsed ? "md:justify-center md:gap-0 md:flex-initial" : ""}`} title="Dashboard">
           <img
             src="/logo.png"
             alt="FlashBooker logo"
-            className={`object-contain shrink-0 ${collapsed ? "w-9 h-9" : "w-11 h-11"}`}
+            className={`object-contain shrink-0 w-11 h-11 ${collapsed ? "md:w-9 md:h-9" : ""}`}
           />
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-sm font-heading font-bold tracking-tight text-on-surface truncate leading-tight">{artistName}</p>
-              <p className="text-[11px] text-on-surface-variant truncate leading-tight">{artistSubtitle}</p>
-            </div>
-          )}
+          <div className={`min-w-0 ${collapsed ? "md:hidden" : ""}`}>
+            <p className="text-sm font-heading font-bold tracking-tight text-on-surface truncate leading-tight">{artistName}</p>
+            <p className="text-[11px] text-on-surface-variant truncate leading-tight">{artistSubtitle}</p>
+          </div>
         </Link>
+        {/* Mobile close button */}
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(false)}
+          aria-label="Close navigation menu"
+          className="md:hidden -mr-1 p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* Nav */}
-      <div ref={scrollRef} className={`overflow-y-auto flex-1 py-4 ${collapsed ? "px-2" : "px-3"}`}>
+      {/* Nav. On mobile the drawer is always full-width, so collapsed-only
+          desktop tweaks are gated behind `md:`. */}
+      <div ref={scrollRef} className={`overflow-y-auto flex-1 py-4 px-3 ${collapsed ? "md:px-2" : ""}`}>
         <nav className="space-y-4">
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi}>
-              {group.label && !collapsed && (
-                <p className="text-[10px] font-semibold text-on-surface-variant/50 uppercase tracking-wider px-3 mb-1.5">
-                  {group.label}
-                </p>
-              )}
-              {group.label && collapsed && (
-                <div className="h-px bg-outline-variant/15 mx-1 mb-2" />
+              {group.label && (
+                <>
+                  <p className={`text-[10px] font-semibold text-on-surface-variant/50 uppercase tracking-wider px-3 mb-1.5 ${collapsed ? "md:hidden" : ""}`}>
+                    {group.label}
+                  </p>
+                  {collapsed && (
+                    <div className="hidden md:block h-px bg-outline-variant/15 mx-1 mb-2" />
+                  )}
+                </>
               )}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
@@ -169,8 +206,8 @@ export function SidebarNav({
                       <Link
                         href={item.href}
                         title={collapsed ? item.label : undefined}
-                        className={`flex items-center rounded-lg transition-colors ${
-                          collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
+                        className={`flex items-center rounded-lg transition-colors gap-3 px-3 py-2.5 ${
+                          collapsed ? "md:justify-center md:p-2.5 md:gap-0" : ""
                         } ${
                           active
                             ? "bg-surface-container-lowest text-primary shadow-sm"
@@ -178,13 +215,13 @@ export function SidebarNav({
                         }`}
                       >
                         <Icon className="w-[18px] h-[18px] shrink-0" />
-                        {!collapsed && (
-                          <span className="text-sm font-medium truncate">{item.label}</span>
-                        )}
+                        <span className={`text-sm font-medium truncate ${collapsed ? "md:hidden" : ""}`}>
+                          {item.label}
+                        </span>
                       </Link>
 
-                      {expanded && !collapsed && item.children && (
-                        <div className="mt-0.5 ml-3 pl-3 border-l border-outline-variant/30 space-y-0.5">
+                      {expanded && item.children && (
+                        <div className={`mt-0.5 ml-3 pl-3 border-l border-outline-variant/30 space-y-0.5 ${collapsed ? "md:hidden" : ""}`}>
                           {item.children.map((child) => {
                             const childActive = pathname === child.href;
                             return (
@@ -207,8 +244,8 @@ export function SidebarNav({
                   );
                 })}
               </div>
-              {gi < NAV_GROUPS.length - 1 && !collapsed && (
-                <div className="mt-4 h-px bg-outline-variant/15" />
+              {gi < NAV_GROUPS.length - 1 && (
+                <div className={`mt-4 h-px bg-outline-variant/15 ${collapsed ? "md:hidden" : ""}`} />
               )}
             </div>
           ))}
@@ -219,8 +256,8 @@ export function SidebarNav({
               <Link
                 href="/admin"
                 title={collapsed ? "Superuser" : undefined}
-                className={`flex items-center rounded-lg transition-colors ${
-                  collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5"
+                className={`flex items-center rounded-lg transition-colors gap-3 px-3 py-2.5 ${
+                  collapsed ? "md:justify-center md:p-2.5 md:gap-0" : ""
                 } ${
                   pathname.startsWith("/admin")
                     ? "bg-surface-container-lowest text-primary shadow-sm"
@@ -228,21 +265,21 @@ export function SidebarNav({
                 }`}
               >
                 <ShieldAlert className="w-[18px] h-[18px] shrink-0" />
-                {!collapsed && <span className="text-sm font-medium">Superuser</span>}
+                <span className={`text-sm font-medium ${collapsed ? "md:hidden" : ""}`}>Superuser</span>
               </Link>
             </>
           )}
         </nav>
       </div>
 
-      {/* Sign out + expand toggle when collapsed */}
-      <div className={`border-t border-outline-variant/15 shrink-0 flex flex-col gap-1.5 ${collapsed ? "p-2" : "p-3"}`}>
+      {/* Sign out + (desktop-only) expand toggle */}
+      <div className={`border-t border-outline-variant/15 shrink-0 flex flex-col gap-1.5 p-3 ${collapsed ? "md:p-2" : ""}`}>
         <button
           type="button"
           onClick={toggleCollapsed}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
-            collapsed ? "flex items-center justify-center p-2.5" : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium"
+          className={`hidden md:flex items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
+            collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm font-medium"
           }`}
         >
           {collapsed ? (
@@ -258,15 +295,16 @@ export function SidebarNav({
           <button
             type="submit"
             title={collapsed ? "Sign Out" : undefined}
-            className={`w-full rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
-              collapsed ? "flex items-center justify-center p-2.5" : "flex items-center gap-3 px-3 py-2.5 text-sm font-medium"
+            className={`w-full flex items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors gap-3 px-3 py-2.5 text-sm font-medium ${
+              collapsed ? "md:justify-center md:p-2.5 md:gap-0" : ""
             }`}
           >
             <LogOut className="w-[18px] h-[18px] shrink-0" />
-            {!collapsed && "Sign Out"}
+            <span className={collapsed ? "md:hidden" : ""}>Sign Out</span>
           </button>
         </form>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

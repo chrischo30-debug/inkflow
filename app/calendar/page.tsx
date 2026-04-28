@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { CalendarView } from "@/components/calendar/CalendarView";
@@ -27,9 +28,10 @@ export default async function CalendarPage({
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-calendar">Calendar</h1>
+        <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+          <div className="flex items-center gap-2 md:gap-2.5 min-w-0">
+            <MobileNavToggle />
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-calendar">Calendar</h1>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${isCalendarConnected ? "bg-emerald-100 text-emerald-700" : "bg-surface-container-high text-on-surface-variant border border-outline-variant/20"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isCalendarConnected ? "bg-emerald-500" : "bg-on-surface-variant/40"}`} />
               {isCalendarConnected ? "syncing" : "not connected"}
