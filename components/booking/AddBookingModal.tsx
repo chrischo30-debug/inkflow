@@ -666,9 +666,10 @@ export function AddBookingModal() {
         type="button"
         onClick={() => setOpen(true)}
         data-coachmark="dashboard-add-booking"
-        className="px-3.5 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
+        title="Add booking"
+        className="px-2.5 sm:px-3.5 py-2 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity whitespace-nowrap"
       >
-        + Add booking
+        + <span className="hidden sm:inline">Add booking</span><span className="sm:hidden">New</span>
       </button>
       <BookingFormModal open={open} onClose={() => setOpen(false)} />
     </>

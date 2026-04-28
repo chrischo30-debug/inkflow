@@ -6,6 +6,7 @@ import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
 import { FormBuilderSettings } from "./FormBuilderSettings";
 import { FormFieldConfig, CustomFormFieldConfig } from "@/lib/form-fields";
 import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 
 const btnOutline = "inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium text-on-surface-variant border border-outline-variant/60 hover:text-on-surface hover:border-on-surface/30 hover:bg-surface-container-high transition-colors";
 const btnFilled = "inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-on-surface text-surface hover:opacity-80 transition-opacity";
@@ -26,8 +27,11 @@ export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields
 
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
-      <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-        <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-form-builder">Form Builder</h1>
+      <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+        <div className="flex items-center gap-2 min-w-0">
+          <MobileNavToggle />
+          <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-form-builder">Form Builder</h1>
+        </div>
         <CoachmarkSequence tips={[{
           id: "page.form-builder.intro",
           anchorSelector: '[data-coachmark="page-form-builder"]',
@@ -40,19 +44,21 @@ export function FormBuilderPageLayout({ slug, initialFields, initialCustomFields
         }]} />
         <div className="flex items-center gap-2">
           {previewFn && (
-            <button onClick={previewFn} className={btnOutline}>
+            <button onClick={previewFn} className={btnOutline} title="Preview">
               <Eye className="w-4 h-4" />
-              Preview
+              <span className="hidden sm:inline">Preview</span>
             </button>
           )}
-          <CopyLinkButton path={`/${slug}/book`} />
-          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled}>
+          <div className="hidden sm:block">
+            <CopyLinkButton path={`/${slug}/book`} />
+          </div>
+          <a href={`/${slug}/book`} target="_blank" rel="noopener noreferrer" className={btnFilled} title="Open live form">
             <ExternalLink className="w-4 h-4" />
-            Open
+            <span className="hidden sm:inline">Open</span>
           </a>
         </div>
       </header>
-      <div className="flex-1 overflow-y-auto p-8 space-y-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8">
         <section>
           <FormBuilderSettings
             initialFields={initialFields}

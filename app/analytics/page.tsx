@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { AnalyticsDashboard } from "@/components/analytics/AnalyticsDashboard";
 import type { Booking } from "@/lib/types";
 import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
@@ -278,8 +279,9 @@ export default async function AnalyticsPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
-          <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-analytics">Analytics</h1>
+        <header className="h-16 flex items-center gap-2 px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
+          <MobileNavToggle />
+          <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-analytics">Analytics</h1>
           <CoachmarkSequence tips={[{
             id: "page.analytics.intro",
             anchorSelector: '[data-coachmark="page-analytics"]',

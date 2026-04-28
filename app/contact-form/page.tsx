@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { ContactFormSettings } from "@/components/contact/ContactFormSettings";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
@@ -39,8 +40,11 @@ export default async function ContactFormPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Contact Form</h1>
+        <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <MobileNavToggle />
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Contact Form</h1>
+          </div>
           {contactPath && (
             <div className="flex items-center gap-2">
               <CopyLinkButton path={contactPath} />
@@ -56,7 +60,7 @@ export default async function ContactFormPage() {
             </div>
           )}
         </header>
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-xl space-y-2">
             <div className="mb-6">
               <h2 className="text-base font-semibold text-on-surface">Contact form setup</h2>

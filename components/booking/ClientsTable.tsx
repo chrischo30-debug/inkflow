@@ -483,7 +483,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
   return (
     <div className="flex flex-col h-full">
       {/* Tabs */}
-      <div className="px-6 pt-4 border-b border-outline-variant/10 shrink-0 flex gap-1">
+      <div className="px-3 sm:px-6 pt-4 border-b border-outline-variant/10 shrink-0 flex gap-1 overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -504,7 +504,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
       </div>
 
       {/* Search */}
-      <div className="px-6 py-4 border-b border-outline-variant/10 shrink-0">
+      <div className="px-3 sm:px-6 py-4 border-b border-outline-variant/10 shrink-0">
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant/50 pointer-events-none" />
           <input
@@ -517,7 +517,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-auto">
         {visible.length === 0 ? (
           <div className="flex items-center justify-center h-48">
             <p className="text-sm text-on-surface-variant">{q ? "No results found." : "No clients yet."}</p>
@@ -526,11 +526,11 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
           <table className="w-full">
             <thead>
               <tr className="border-b border-outline-variant/10 bg-surface-container-low/50">
-                <th className="text-left px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
-                <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
+                <th className="text-left pl-3 pr-1 sm:px-6 py-4 text-sm font-medium text-on-surface-variant w-8" />
+                <th className="text-left px-2 sm:px-4 py-4 text-sm font-medium text-on-surface-variant">Client</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden sm:table-cell">Sessions</th>
                 <th className="text-left px-4 py-4 text-sm font-medium text-on-surface-variant hidden md:table-cell">Last Session</th>
-                <th className="text-right px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
+                <th className="text-right px-2 sm:px-6 py-4 text-sm font-medium text-on-surface-variant">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -544,10 +544,10 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                       className={`border-b border-outline-variant/10 hover:bg-surface-container-low/40 transition-colors cursor-pointer ${expanded ? "bg-surface-container-low/60" : ""}`}
                       onClick={() => setExpandedEmail(expanded ? null : client.email.toLowerCase())}
                     >
-                      <td className="px-6 py-4">
+                      <td className="pl-3 pr-1 sm:px-6 py-4">
                         <ChevronRight className={`w-4 h-4 text-on-surface-variant transition-transform ${expanded ? "rotate-90" : ""}`} />
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-2 sm:px-4 py-4 min-w-0">
                         <p className="text-sm font-medium text-on-surface">{client.name}</p>
                         <div className="flex flex-col gap-1.5 mt-2">
                           <CopyText text={client.email} className="text-sm text-on-surface-variant" />
@@ -565,7 +565,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                       <td className="px-4 py-4 hidden md:table-cell">
                         <p className="text-sm text-on-surface-variant">{lastD ? fmtDate(lastD) : "—"}</p>
                       </td>
-                      <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                      <td className="px-2 sm:px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
@@ -598,7 +598,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
 
                     {expanded && (
                       <tr key={`${client.email}-expanded`} className="border-b border-outline-variant/15 bg-surface-container-low/30">
-                        <td colSpan={5} className="px-6 pb-5 pt-3">
+                        <td colSpan={5} className="px-3 sm:px-6 pb-5 pt-3">
                           <div className="border border-outline-variant/25 rounded-xl bg-surface shadow-sm overflow-hidden text-sm">
                             {/* Client header */}
                             <div className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-container-low/50 border-b border-outline-variant/10">

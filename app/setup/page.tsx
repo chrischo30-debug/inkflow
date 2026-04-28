@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import Link from "next/link";
 import { normalizePaymentLinks } from "@/lib/pipeline-settings";
 import type { CalendarLink } from "@/lib/pipeline-settings";
@@ -145,11 +146,12 @@ export default async function SetupPage({
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Setup Guide</h1>
+        <header className="h-16 flex items-center gap-2 px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
+          <MobileNavToggle />
+          <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Setup Guide</h1>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-8 py-8">
+        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
           <div className="max-w-2xl space-y-10">
 
             {/* Welcome banner for new accounts */}

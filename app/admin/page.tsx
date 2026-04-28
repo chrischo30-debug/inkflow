@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSuperUser } from "@/lib/admin";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import Link from "next/link";
 
 interface ArtistRow {
@@ -67,14 +68,15 @@ export default async function AdminPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Superuser — Artists</h1>
+        <header className="h-16 flex items-center gap-2 px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+          <MobileNavToggle />
+          <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Superuser — Artists</h1>
           <span className="ml-3 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
             {rows.length} artists
           </span>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-5xl mx-auto">
             <table className="w-full text-sm">
               <thead>

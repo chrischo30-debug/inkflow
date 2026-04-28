@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { BookingsTable } from "@/components/booking/BookingsTable";
 import { CopyFormLinkButton } from "@/components/booking/CopyFormLinkButton";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
@@ -53,8 +54,11 @@ export default async function BookingsPage({
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center justify-between px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface" data-coachmark="page-bookings">Bookings</h1>
+        <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+          <div className="flex items-center gap-2 min-w-0">
+            <MobileNavToggle />
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-bookings">Bookings</h1>
+          </div>
           <CoachmarkSequence tips={[{
             id: "page.bookings.intro",
             anchorSelector: '[data-coachmark="page-bookings"]',

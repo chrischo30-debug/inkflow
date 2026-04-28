@@ -8,7 +8,7 @@ interface Props {
 
 export function GoogleIntegrationSettings({ googleConfigured, hasRefreshToken, isCalendarConnected }: Props) {
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-6 shadow-sm">
       <h3 className="text-base font-semibold text-on-surface mb-2">Google Calendar</h3>
       <div className="text-sm text-on-surface-variant mb-5 space-y-2 leading-relaxed">
         <p>Sync confirmed appointments to your Google Calendar.</p>

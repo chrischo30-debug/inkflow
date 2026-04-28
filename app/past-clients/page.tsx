@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { ClientsTable } from "@/components/booking/ClientsTable";
 import type { Booking } from "@/lib/types";
 
@@ -26,8 +27,9 @@ export default async function PastClientsPage() {
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        <header className="h-16 flex items-center px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
-          <h1 className="text-xl font-heading font-semibold text-on-surface">Clients</h1>
+        <header className="h-16 flex items-center gap-2 px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
+          <MobileNavToggle />
+          <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Clients</h1>
         </header>
         <div className="flex-1 overflow-hidden">
           <Suspense>
