@@ -111,6 +111,8 @@ export function buildGoogleOAuthUrl({
     include_granted_scopes: "true",
     scope: [
       "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/calendar.freebusy",
+      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     ].join(" "),
     state,
   });

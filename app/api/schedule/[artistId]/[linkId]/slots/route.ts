@@ -174,25 +174,29 @@ export async function GET(
     });
   }
 
-  // Fetch freeBusy from Google Calendar
-  // Note: freeBusy only returns opaque (busy) periods — free/transparent events
-  // (birthdays, holidays) are correctly ignored. Use Blocked Dates for explicit closures.
+  // Fetch freeBusy from Google Calendar.
+  // Fail closed: if the artist has calendar sync enabled but we can't read their
+  // busy times, returning the unfiltered slot list would risk double-booking,
+  // so we return zero slots + a calendar_error flag and let the client surface it.
   let busyPeriods: Array<{ start: string; end: string }> = [];
   try {
     const accessToken = await getGoogleAccessToken(admin, artistId, artist.google_refresh_token);
-    if (accessToken) {
-      const dayStart = toUTCDate(date, link.start_hour, 0, link.timezone);
-      const dayEnd = toUTCDate(date, link.end_hour, 0, link.timezone);
-      const calendarIds: string[] | undefined = link.calendar_ids?.length ? link.calendar_ids : undefined;
-      busyPeriods = await getGoogleFreeBusy({
-        accessToken,
-        timeMin: dayStart.toISOString(),
-        timeMax: dayEnd.toISOString(),
-        calendarIds,
-      });
+    if (!accessToken) {
+      console.error("slots: getGoogleAccessToken returned null", { artistId });
+      return NextResponse.json({ slots: [], calendar_error: true });
     }
-  } catch {
-    // If calendar checks fail, return all candidates
+    const dayStart = toUTCDate(date, link.start_hour, 0, link.timezone);
+    const dayEnd = toUTCDate(date, link.end_hour, 0, link.timezone);
+    const calendarIds: string[] | undefined = link.calendar_ids?.length ? link.calendar_ids : undefined;
+    busyPeriods = await getGoogleFreeBusy({
+      accessToken,
+      timeMin: dayStart.toISOString(),
+      timeMax: dayEnd.toISOString(),
+      calendarIds,
+    });
+  } catch (err) {
+    console.error("slots: Google freeBusy failed", { artistId, linkId, date, err });
+    return NextResponse.json({ slots: [], calendar_error: true });
   }
 
   // Combine Google freeBusy + FlashBooker DB bookings, then inflate the end
