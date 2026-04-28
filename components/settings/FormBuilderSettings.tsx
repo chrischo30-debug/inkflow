@@ -754,7 +754,7 @@ export function FormBuilderSettings({
   const inactiveRefs = fieldOrder.filter((ref) => !isEnabledRef(ref));
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm space-y-8">
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-8 shadow-sm space-y-8">
       <div>
         <h3 className="text-lg font-heading font-semibold mb-1 text-on-surface">Public Form Builder</h3>
         <p className="text-sm text-on-surface-variant leading-relaxed">

@@ -332,7 +332,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
   };
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm space-y-8">
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-8 shadow-sm space-y-8">
       {/* Load all preview fonts once */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={PREVIEW_FONTS_URL} />

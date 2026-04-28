@@ -163,7 +163,7 @@ export function AccountSettings({
   };
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 shadow-sm">
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-8 shadow-sm">
       <h3 className="text-lg font-heading font-semibold mb-2 text-on-surface">Account Settings</h3>
       <p className="text-sm text-on-surface-variant mb-8 max-w-xl leading-relaxed">
         Manage your artist profile details and public booking URL.

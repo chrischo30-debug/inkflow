@@ -43,7 +43,7 @@ export function PaymentSettings({ initialLinks }: { initialLinks: PaymentLink[] 
   const canAdd = newLabel.trim().length > 0 && newUrl.trim().length > 0;
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 shadow-sm">
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-6 shadow-sm">
       <div className="flex items-start justify-between mb-1">
         <h3 className="text-sm font-semibold text-on-surface">Payment Links</h3>
         {status === "saved" && (
