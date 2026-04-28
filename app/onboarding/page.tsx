@@ -5,10 +5,9 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { SlugInput } from "@/components/onboarding/SlugInput"
-import type { DepositPolicy } from "@/lib/types"
 
 function StepBar({ step }: { step: 1 | 2 | 3 }) {
-  const labels = ["Profile", "Deposit", "Email"]
+  const labels = ["Profile", "Email", "Next steps"]
   return (
     <div className="flex items-center gap-3 mb-10">
       {labels.map((label, i) => {
@@ -103,47 +102,11 @@ export default async function OnboardingPage({
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return redirect("/login")
 
-    const depositAmountRaw = (formData.get("deposit_amount") as string | null)?.trim() ?? ""
-
-    const rp = new URLSearchParams({
-      step: "2",
-      deposit_amount: depositAmountRaw,
-    })
-
-    const errors: Record<string, string> = {}
-    const amount = Number(depositAmountRaw)
-    if (!depositAmountRaw || isNaN(amount) || amount < 0) {
-      errors.deposit_amount = "Enter a valid deposit amount."
-    }
-
-    if (Object.keys(errors).length > 0) {
-      for (const [field, error] of Object.entries(errors)) rp.set(`error_${field}`, error)
-      rp.set("message", "Please fix the highlighted fields.")
-      return redirect(`/onboarding?${rp.toString()}`)
-    }
-
-    const deposit_policy: DepositPolicy = { type: "fixed", amount }
-
-    const { error } = await supabase.from("artists").update({ deposit_policy }).eq("id", user.id)
-    if (error) {
-      rp.set("message", `Could not save: ${error.message}`)
-      return redirect(`/onboarding?${rp.toString()}`)
-    }
-
-    return redirect("/onboarding?step=3")
-  }
-
-  const saveStep3 = async (formData: FormData) => {
-    "use server"
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return redirect("/login")
-
     const replyToRaw = (formData.get("reply_to_email") as string | null)?.trim() ?? ""
     const replyTo = replyToRaw.toLowerCase()
 
     if (!replyTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
-      return redirect(`/onboarding?step=3&error=${encodeURIComponent("Enter a valid email address for client replies.")}`)
+      return redirect(`/onboarding?step=2&error=${encodeURIComponent("Enter a valid email address for client replies.")}`)
     }
 
     const { error } = await supabase
@@ -152,10 +115,10 @@ export default async function OnboardingPage({
       .eq("id", user.id)
 
     if (error) {
-      return redirect(`/onboarding?step=3&error=${encodeURIComponent(error.message)}`)
+      return redirect(`/onboarding?step=2&error=${encodeURIComponent(error.message)}`)
     }
 
-    return redirect("/setup?new=1")
+    return redirect("/onboarding?step=3")
   }
 
   const safeSlug = artist?.slug?.startsWith("artist-") ? "" : artist?.slug
@@ -241,9 +204,6 @@ export default async function OnboardingPage({
   }
 
   if (step === 3) {
-    const defaultReplyTo = artist?.gmail_address ?? user.email ?? ""
-    const displayName = artist?.name || artist?.studio_name || "Your Name"
-
     return (
       <div className="min-h-screen bg-surface">
         {header}
@@ -251,78 +211,56 @@ export default async function OnboardingPage({
           <StepBar step={3} />
 
           <div className="mb-8">
-            <h2 className="text-3xl font-heading tracking-tight mb-2">How email works</h2>
-            <p className="text-on-surface-variant">Here&apos;s what happens when you send a client an email — confirm your reply-to address below to finish.</p>
+            <h2 className="text-3xl font-heading tracking-tight mb-2">You&apos;re set up.</h2>
+            <p className="text-on-surface-variant">A few things worth doing next so your booking page is ready for clients.</p>
           </div>
 
-          {/* Visual explainer */}
-          <div className="bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 mb-6 space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">1. You send a message</p>
-              <p className="text-sm text-on-surface leading-relaxed">
-                You click <span className="font-medium">Send email</span>{" "}on a booking. We send it for you — you don&apos;t need to log into Gmail or anything else.
+          <div className="space-y-4 mb-8">
+            <Link
+              href="/form-builder"
+              className="block bg-surface-container-low rounded-2xl border border-outline-variant/20 p-5 hover:border-outline-variant/40 transition-colors"
+            >
+              <p className="text-base font-semibold text-on-surface mb-1">Customize your booking form →</p>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                Pick which questions clients answer when they request a booking. Add your own fields, change the header copy, set a confirmation message.
               </p>
-            </div>
+            </Link>
 
-            <div className="border-t border-outline-variant/15 pt-4">
-              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">2. Your client sees</p>
-              <div className="bg-surface rounded-lg border border-outline-variant/20 p-3 font-mono text-xs">
-                <p className="text-on-surface-variant/70">From:</p>
-                <p className="text-on-surface font-semibold">{displayName} via FlashBooker</p>
-                <p className="text-on-surface-variant mt-0.5">&lt;bookings@flashbooker.app&gt;</p>
-              </div>
-              <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">
-                Your name is on the email, so it feels personal — but it&apos;s sent from our system so it always gets delivered.
-              </p>
-            </div>
-
-            <div className="border-t border-outline-variant/15 pt-4">
-              <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">3. When they reply</p>
-              <p className="text-sm text-on-surface leading-relaxed">
-                Their reply goes <span className="font-semibold">straight to your personal email below</span> — just like a normal email. You can reply from your inbox, phone, wherever. FlashBooker isn&apos;t in the middle of your conversations.
-              </p>
+            <div className="bg-surface-container-low rounded-2xl border border-outline-variant/20 p-5">
+              <p className="text-base font-semibold text-on-surface mb-3">Recommended on the next page</p>
+              <ul className="space-y-2.5 text-sm text-on-surface-variant leading-relaxed">
+                <li className="flex gap-2">
+                  <span className="text-on-surface-variant/50 shrink-0">•</span>
+                  <span><span className="text-on-surface font-medium">Connect Google Calendar</span> so confirmed bookings sync to your personal calendar.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-on-surface-variant/50 shrink-0">•</span>
+                  <span><span className="text-on-surface font-medium">Connect Stripe or Square</span> so deposits get marked paid automatically.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-on-surface-variant/50 shrink-0">•</span>
+                  <span><span className="text-on-surface font-medium">Save reusable payment and scheduling links</span> so you can drop them into emails with one click.</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          <form className="flex flex-col w-full gap-5" action={saveStep3}>
-            <div className="flex flex-col gap-2">
-              <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="reply_to_email">
-                Your email (where client replies will land) <span className="text-error">*</span>
-              </Label>
-              <Input
-                id="reply_to_email"
-                name="reply_to_email"
-                type="email"
-                required
-                defaultValue={defaultReplyTo}
-                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
-              />
-              <p className="text-xs text-on-surface-variant/70">
-                Usually your Gmail, Outlook, or whatever email you check most. You can change this later in Settings.
-              </p>
-              {params.error && <p className="text-xs text-error">{params.error}</p>}
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <Link href="/onboarding?step=2" className="text-sm text-on-surface-variant hover:text-on-surface transition-colors">
-                ← Back
-              </Link>
-              <Button
-                type="submit"
-                className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
-              >
-                Finish setup →
-              </Button>
-            </div>
-          </form>
+          <div className="flex items-center justify-end pt-2">
+            <Link
+              href="/setup?new=1"
+              className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity inline-flex items-center"
+            >
+              Go to setup guide →
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
-  // Step 2
-  const artistDepositType = artist?.deposit_policy?.type ?? "fixed"
-  const defaultDepositAmount = params.deposit_amount ?? (artistDepositType === "fixed" ? String(artist?.deposit_policy?.amount ?? 0) : "")
+  // Step 2 — email
+  const defaultReplyTo = artist?.gmail_address ?? user.email ?? ""
+  const displayName = artist?.name || artist?.studio_name || "Your Name"
 
   return (
     <div className="min-h-screen bg-surface">
@@ -330,54 +268,70 @@ export default async function OnboardingPage({
       <div className="max-w-xl mx-auto px-6 py-12">
         <StepBar step={2} />
 
-        <div className="mb-10">
-          <h2 className="text-3xl font-heading tracking-tight mb-2">Deposit policy</h2>
-          <p className="text-on-surface-variant">The deposit amount you&apos;ll request once a booking is accepted.</p>
+        <div className="mb-8">
+          <h2 className="text-3xl font-heading tracking-tight mb-2">How email works</h2>
+          <p className="text-on-surface-variant">Here&apos;s what happens when you send a client an email — confirm your reply-to address below to finish.</p>
         </div>
 
-        <form className="flex flex-col w-full gap-8" action={saveStep2}>
-          <div className="flex flex-col gap-2">
-            <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="deposit_amount">
-              Deposit amount <span className="text-error">*</span>
-            </Label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">$</span>
-              <Input
-                id="deposit_amount"
-                name="deposit_amount"
-                type="number"
-                min="0"
-                step="1"
-                required
-                defaultValue={defaultDepositAmount}
-                placeholder="100"
-                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none pl-8 pr-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
-              />
+        {/* Visual explainer */}
+        <div className="bg-surface-container-low rounded-2xl border border-outline-variant/15 p-5 mb-6 space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">1. You send a message</p>
+            <p className="text-sm text-on-surface leading-relaxed">
+              You click <span className="font-medium">Send email</span>{" "}on a booking. We send it for you — you don&apos;t need to log into Gmail or anything else.
+            </p>
+          </div>
+
+          <div className="border-t border-outline-variant/15 pt-4">
+            <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">2. Your client sees</p>
+            <div className="bg-surface rounded-lg border border-outline-variant/20 p-3 font-mono text-xs">
+              <p className="text-on-surface-variant/70">From:</p>
+              <p className="text-on-surface font-semibold">{displayName} via FlashBooker</p>
+              <p className="text-on-surface-variant mt-0.5">&lt;bookings@flashbooker.app&gt;</p>
             </div>
-            <p className="text-xs text-on-surface-variant/60">A flat amount in US dollars. You can change it per booking later.</p>
-            {params.error_deposit_amount && <p className="text-xs text-error">{params.error_deposit_amount}</p>}
+            <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">
+              Your name is on the email, so it feels personal — but it&apos;s sent from our system so it always gets delivered.
+            </p>
+          </div>
+
+          <div className="border-t border-outline-variant/15 pt-4">
+            <p className="text-xs uppercase tracking-wide text-on-surface-variant font-semibold mb-1.5">3. When they reply</p>
+            <p className="text-sm text-on-surface leading-relaxed">
+              Their reply goes <span className="font-semibold">straight to your personal email below</span> — just like a normal email. You can reply from your inbox, phone, wherever. FlashBooker isn&apos;t in the middle of your conversations.
+            </p>
+          </div>
+        </div>
+
+        <form className="flex flex-col w-full gap-5" action={saveStep2}>
+          <div className="flex flex-col gap-2">
+            <Label className="text-sm font-sans tracking-wide text-on-surface-variant" htmlFor="reply_to_email">
+              Your email (where client replies will land) <span className="text-error">*</span>
+            </Label>
+            <Input
+              id="reply_to_email"
+              name="reply_to_email"
+              type="email"
+              required
+              defaultValue={defaultReplyTo}
+              className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
+            />
+            <p className="text-xs text-on-surface-variant/70">
+              Usually your Gmail, Outlook, or whatever email you check most. You can change this later in Settings.
+            </p>
+            {params.error && <p className="text-xs text-error">{params.error}</p>}
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <Link
-              href="/onboarding"
-              className="text-sm text-on-surface-variant hover:text-on-surface transition-colors"
-            >
+            <Link href="/onboarding" className="text-sm text-on-surface-variant hover:text-on-surface transition-colors">
               ← Back
             </Link>
             <Button
               type="submit"
               className="px-10 h-auto py-3 text-sm font-medium rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-sm hover:opacity-90 transition-opacity"
             >
-              Continue →
+              Finish setup →
             </Button>
           </div>
-
-          {params.message && (
-            <p className="p-4 bg-error-container/30 text-error text-sm rounded-lg border-b border-error">
-              {params.message}
-            </p>
-          )}
         </form>
       </div>
     </div>
