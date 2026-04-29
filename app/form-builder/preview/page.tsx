@@ -23,9 +23,13 @@ export default async function FormBuilderPreviewPage({
 
   let settings: Record<string, unknown>;
   try {
-    settings = JSON.parse(atob(s));
+    settings = JSON.parse(decodeURIComponent(escape(atob(s))));
   } catch {
-    return redirect("/form-builder/settings");
+    try {
+      settings = JSON.parse(atob(s));
+    } catch {
+      return redirect("/form-builder/settings");
+    }
   }
 
   const [{ data: artist }, { data: rawFields }, { data: rawCustomFields }] = await Promise.all([
@@ -49,6 +53,12 @@ export default async function FormBuilderPreviewPage({
   if (!artist) return redirect("/login");
 
   const artistName = artist.name;
+  const overrideFields = Array.isArray(settings.fields) ? settings.fields : null;
+  const overrideCustomFields = Array.isArray(settings.custom_fields) ? settings.custom_fields : null;
+  const previewRedirectUrl =
+    typeof settings.form_success_redirect_url === "string" && settings.form_success_redirect_url.trim()
+      ? settings.form_success_redirect_url.trim()
+      : null;
 
   return (
     <div className="relative">
@@ -69,10 +79,16 @@ export default async function FormBuilderPreviewPage({
         </Link>
       </div>
 
+      {previewRedirectUrl && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-blue-800 text-xs">
+          On submit, the live form will redirect to{" "}
+          <span className="font-mono break-all">{previewRedirectUrl}</span>. Preview keeps you here.
+        </div>
+      )}
       <BookingPageShell
         artistId={artist.id}
-        formFields={normalizeFormFields(rawFields ?? [])}
-        customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
+        formFields={normalizeFormFields(overrideFields ?? rawFields ?? [])}
+        customFormFields={normalizeCustomFormFields(overrideCustomFields ?? rawCustomFields ?? [])}
         formHeader={(settings.form_header as string) ?? artist.form_header ?? `Book with ${artistName}`}
         formSubtext={(settings.form_subtext as string) ?? artist.form_subtext ?? `Fill out the form below to request an appointment.<br />I'll review your idea and get back to you.`}
         buttonText={(settings.form_button_text as string) ?? artist.form_button_text ?? "Submit Inquiry"}
