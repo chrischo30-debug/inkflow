@@ -210,7 +210,13 @@ export async function POST(
 
   // Create Google Calendar event if connected
   let calHtmlLink: string | null = null;
-  if (body.bid && (artist as { calendar_sync_enabled?: boolean | null }).calendar_sync_enabled && (artist as { google_refresh_token?: string | null }).google_refresh_token) {
+  let calSyncFailed = false;
+  const calSyncAttempted = Boolean(
+    body.bid
+    && (artist as { calendar_sync_enabled?: boolean | null }).calendar_sync_enabled
+    && (artist as { google_refresh_token?: string | null }).google_refresh_token,
+  );
+  if (calSyncAttempted) {
     try {
       const accessToken = await getGoogleAccessToken(admin, artistId, (artist as { google_refresh_token: string }).google_refresh_token);
       if (accessToken) {
@@ -226,8 +232,14 @@ export async function POST(
         if (calResult.id) {
           await admin.from("bookings").update({ google_event_id: calResult.id }).eq("id", body.bid);
         }
+      } else {
+        calSyncFailed = true;
+        console.error("[calendar-sync-failed]", { artistId, bookingId: body.bid, reason: "no_access_token" });
       }
-    } catch (e) { console.error("Calendar event creation on schedule failed:", e); }
+    } catch (e) {
+      calSyncFailed = true;
+      console.error("[calendar-sync-failed]", { artistId, bookingId: body.bid, error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   const bookingUrl = body.bid ? `${APP_URL}/bookings?expand=${body.bid}` : null;
@@ -241,6 +253,12 @@ export async function POST(
         calHtmlLink ? `<a href="${calHtmlLink}" style="color:#4f46e5">View in Google Calendar →</a>` : null,
       ].filter(Boolean).join(" &nbsp;·&nbsp; ");
 
+      const calWarningHtml = calSyncFailed
+        ? `<p style="margin:0 0 16px;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;color:#9a3412;font-size:13px">
+Heads up — we couldn't sync this booking to your Google Calendar. Try reconnecting from Settings → Integrations.
+</p>`
+        : "";
+
       await resend.emails.send({
         from: `FlashBooker <noreply@${SENDING_DOMAIN}>`,
         to: [artist.email],
@@ -252,6 +270,7 @@ export async function POST(
 <tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Date</td><td>${formattedDate}</td></tr>
 <tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:nowrap">Time</td><td>${formattedStart} – ${formattedEnd} (${tzLabel})</td></tr>
 </table>
+${calWarningHtml}
 ${linksHtml ? `<p style="margin:0">${linksHtml}</p>` : ""}
 </div>`,
       });
