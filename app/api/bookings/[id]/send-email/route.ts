@@ -4,6 +4,7 @@ import { BookingState, EmailTemplate } from '@/lib/types';
 import { sendEmail, buildTemplateVars, applyPlaceholders, DEFAULT_EMAIL_TEMPLATES, STAGE_AUTOSEND_DEFAULTS, templateRequiresEdit } from '@/lib/email';
 import type { CalendarLink, SchedulingLink } from '@/lib/pipeline-settings';
 import { normalizePaymentLinks } from '@/lib/pipeline-settings';
+import { refreshPaymentLinkTemplates, RefreshTemplateError } from '@/lib/payments/refresh-templates';
 
 async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, bookingId: string, userId: string) {
   const { data: booking, error } = await supabase
@@ -18,7 +19,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const [{ data: artistRaw }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, studio_name, payment_links, gmail_address, email, calendar_links, scheduling_links, logo_url, email_logo_enabled, email_logo_bg, studio_address, payment_provider, stripe_api_key, square_access_token')
+      .select('name, studio_name, payment_links, gmail_address, email, calendar_links, scheduling_links, logo_url, email_logo_enabled, email_logo_bg, studio_address, payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment')
       .eq('id', userId)
       .single(),
     supabase
@@ -35,6 +36,8 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
     payment_provider?: "stripe" | "square" | null;
     stripe_api_key?: string | null;
     square_access_token?: string | null;
+    square_location_id?: string | null;
+    square_environment?: "sandbox" | "production" | null;
   };
   const a = artistRaw as ArtistRow | null;
   const artist = a ? {
@@ -56,7 +59,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
     ),
   } : null;
 
-  return { booking, artist, templateRows: templateRows ?? [] };
+  return { booking, artist, artistRaw: a, templateRows: templateRows ?? [] };
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -185,14 +188,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await loadContext(supabase, id, user.id);
   if (!ctx) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
-  const { booking, artist } = ctx;
+  const { booking, artist, artistRaw } = ctx;
 
   const reqBody = await req.json().catch(() => ({}));
   const subject: string = reqBody.subject ?? '';
   const body: string = reqBody.body ?? '';
 
   // subject/body may contain {variable} tokens — sendEmail resolves them at send time
-  const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
+  const initialPaymentLinks = normalizePaymentLinks(artist?.payment_links);
+  let paymentLinksList = initialPaymentLinks;
+  if (artistRaw) {
+    try {
+      paymentLinksList = await refreshPaymentLinkTemplates({
+        supabase, artistId: user.id,
+        artistRow: artistRaw as unknown as Record<string, unknown>,
+        paymentLinks: initialPaymentLinks,
+        emailTexts: [subject, body],
+      });
+    } catch (err) {
+      if (err instanceof RefreshTemplateError) {
+        // Fail closed — sending the saved (single-use) URL could deliver
+        // someone else's confirmation page. Surface the error so the artist
+        // can retry or pick a different link.
+        return NextResponse.json({ error: err.message }, { status: 502 });
+      }
+      throw err;
+    }
+  }
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
   const bookingSchedulingLinkIdPost = (booking as { scheduling_link_id?: string | null }).scheduling_link_id;
   const matchedLinkPost = bookingSchedulingLinkIdPost

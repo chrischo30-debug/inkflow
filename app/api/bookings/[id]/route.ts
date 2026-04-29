@@ -436,7 +436,7 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
       await supabase.from("bookings").update(updateFields).eq("id", id).eq("artist_id", user.id);
 
       const [{ data: artist }, { data: templateRow }] = await Promise.all([
-        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address").eq("id", booking.artist_id).single(),
+        supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address, payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment").eq("id", booking.artist_id).single(),
         supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", "completed").maybeSingle(),
       ]);
 
@@ -479,7 +479,7 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
     }
 
     const [{ data: artist }, { data: templateRow }] = await Promise.all([
-      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address").eq("id", booking.artist_id).single(),
+      supabase.from("artists").select("name, payment_links, calendar_sync_enabled, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address, payment_provider, stripe_api_key, square_access_token, square_location_id, square_environment").eq("id", booking.artist_id).single(),
       supabase.from("email_templates").select("*").eq("artist_id", booking.artist_id).eq("state", nextState).maybeSingle(),
     ]);
 
@@ -501,14 +501,23 @@ ${oldDate ? `<tr><td style="padding:3px 16px 3px 0;font-weight:600;white-space:n
     const shouldAutoEmail = masterAutoOn && advanceEnabled && (templateRow ? templateRow.auto_send : stageDefault);
     if (shouldAutoEmail) {
       try {
-        const { sendStateTransitionEmail, THREADING_STATES } = await import("@/lib/email");
+        const { sendStateTransitionEmail, THREADING_STATES, DEFAULT_EMAIL_TEMPLATES: ADVANCE_DEFAULTS } = await import("@/lib/email");
         const { normalizePaymentLinks } = await import("@/lib/pipeline-settings");
+        const { refreshPaymentLinkTemplates } = await import("@/lib/payments/refresh-templates");
+        const resolvedTpl = templateRow ?? ADVANCE_DEFAULTS[nextState as keyof typeof ADVANCE_DEFAULTS];
+        const refreshedLinks = await refreshPaymentLinkTemplates({
+          supabase,
+          artistId: booking.artist_id,
+          artistRow: (artist ?? {}) as Record<string, unknown>,
+          paymentLinks: normalizePaymentLinks(artist?.payment_links),
+          emailTexts: resolvedTpl ? [resolvedTpl.subject, resolvedTpl.body] : [],
+        });
         const { subject: sentSubject, messageId: advanceMsgId } = await sendStateTransitionEmail({
           toEmail: booking.client_email,
           clientName: booking.client_name,
           newState: nextState,
           artistName: artist?.name ?? "Your Artist",
-          paymentLinksList: normalizePaymentLinks(artist?.payment_links),
+          paymentLinksList: refreshedLinks,
           calendarLinksList: [],
           studioAddress: (artist as { studio_address?: string | null } | null)?.studio_address ?? undefined,
           template: templateRow ?? null,
