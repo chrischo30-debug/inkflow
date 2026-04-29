@@ -12,6 +12,24 @@ import {
   CustomFormFieldConfig,
 } from "@/lib/form-fields";
 import { useLocalDraft } from "@/lib/use-local-draft";
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const FIELD_LABELS: Record<FormFieldKey, string> = {
   name: "Full Name",
@@ -84,6 +102,28 @@ type EditDraft =
       required: boolean;
     };
 
+function SortableItem({
+  id,
+  children,
+}: {
+  id: string;
+  children: (api: {
+    setNodeRef: (node: HTMLElement | null) => void;
+    style: React.CSSProperties;
+    listeners: ReturnType<typeof useSortable>["listeners"];
+    attributes: ReturnType<typeof useSortable>["attributes"];
+    isDragging: boolean;
+  }) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return <>{children({ setNodeRef, style, listeners, attributes, isDragging })}</>;
+}
+
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -134,15 +174,14 @@ export function FormBuilderSettings({
   const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
-  const [draggingRef, setDraggingRef] = useState<ItemRef | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
   const openPreviewRef = useRef<() => void>(() => {});
-  const openPreview = () => {
-    const state = { form_header: formHeader, form_subtext: formSubtext, form_button_text: formButtonText, form_confirmation_message: confirmationMessage, form_success_redirect_url: successRedirectUrl };
-    window.open(`/form-builder/preview?s=${btoa(JSON.stringify(state))}`, "_blank");
-  };
-  openPreviewRef.current = openPreview;
-  useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
   const [showAddComposer, setShowAddComposer] = useState(false);
 
   const [draftField, setDraftField] = useState<CustomFormFieldConfig>({
@@ -187,6 +226,34 @@ export function FormBuilderSettings({
     [customFields]
   );
 
+  const openPreview = () => {
+    const orderedBase: FormFieldConfig[] = [];
+    const orderedCustom: CustomFormFieldConfig[] = [];
+    fieldOrder.forEach((ref, index) => {
+      const [kind, key] = ref.split(":");
+      if (kind === "base") {
+        const field = baseMap.get(key as FormFieldKey);
+        if (field) orderedBase.push({ ...field, sort_order: index });
+      } else if (kind === "custom") {
+        const field = customMap.get(key);
+        if (field) orderedCustom.push({ ...field, sort_order: index });
+      }
+    });
+    const state = {
+      form_header: formHeader,
+      form_subtext: formSubtext,
+      form_button_text: formButtonText,
+      form_confirmation_message: confirmationMessage,
+      form_success_redirect_url: afterSubmit === "redirect" ? successRedirectUrl : "",
+      fields: orderedBase,
+      custom_fields: orderedCustom,
+    };
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    window.open(`/form-builder/preview?s=${encoded}`, "_blank");
+  };
+  openPreviewRef.current = openPreview;
+  useEffect(() => { onPreviewReady?.(() => openPreviewRef.current()); }, []);
+
   const isEnabledRef = (ref: ItemRef) => {
     const [kind, key] = ref.split(":");
     if (kind === "base") return Boolean(baseMap.get(key as FormFieldKey)?.enabled);
@@ -229,18 +296,21 @@ export function FormBuilderSettings({
     updateCustom(field.field_key, { enabled, required: enabled ? field.required : false });
   };
 
-  const moveRef = (fromRef: ItemRef, toRef: ItemRef, targetEnabled?: boolean) => {
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const fromRef = String(active.id) as ItemRef;
+    const toRef = String(over.id) as ItemRef;
     if (fromRef === toRef) return;
-    setFieldOrder((prev) => {
-      const fromIdx = prev.indexOf(fromRef);
-      const toIdx = prev.indexOf(toRef);
-      if (fromIdx === -1 || toIdx === -1) return prev;
-      const next = [...prev];
-      const [item] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, item);
-      return next;
-    });
-    if (typeof targetEnabled === "boolean") setEnabledRef(fromRef, targetEnabled);
+    const fromIdx = fieldOrder.indexOf(fromRef);
+    const toIdx = fieldOrder.indexOf(toRef);
+    if (fromIdx === -1 || toIdx === -1) return;
+    setFieldOrder((prev) => arrayMove(prev, fromIdx, toIdx));
+    const fromEnabled = isEnabledRef(fromRef);
+    const toEnabled = isEnabledRef(toRef);
+    if (fromEnabled !== toEnabled) {
+      setEnabledRef(fromRef, toEnabled);
+    }
   };
 
   const moveRefToSectionEnd = (fromRef: ItemRef, enabled: boolean) => {
@@ -406,6 +476,15 @@ export function FormBuilderSettings({
       }
     });
 
+    const redirectRaw = successRedirectUrl.trim();
+    const redirectNormalized =
+      afterSubmit === "redirect" && redirectRaw
+        ? /^https?:\/\//i.test(redirectRaw) ? redirectRaw : `https://${redirectRaw}`
+        : null;
+    if (afterSubmit === "redirect" && redirectNormalized && redirectNormalized !== successRedirectUrl) {
+      setSuccessRedirectUrl(redirectNormalized);
+    }
+
     const appearanceRes = await fetch("/api/artist/form-settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -414,7 +493,7 @@ export function FormBuilderSettings({
         form_subtext: formSubtext.trim() || null,
         form_button_text: formButtonText.trim() || null,
         form_confirmation_message: confirmationMessage.trim() || null,
-        form_success_redirect_url: afterSubmit === "redirect" ? (successRedirectUrl.trim() || null) : null,
+        form_success_redirect_url: redirectNormalized,
       }),
     });
     if (!appearanceRes.ok) {
@@ -476,15 +555,14 @@ export function FormBuilderSettings({
       const isActive = field.enabled;
 
       return (
+        <SortableItem key={ref} id={ref}>
+          {({ setNodeRef, style, listeners, attributes, isDragging }) => (
         <div
-          key={ref}
-          draggable
-          onDragStart={() => setDraggingRef(ref)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => { if (draggingRef) moveRef(draggingRef, ref, field.enabled); setDraggingRef(null); }}
-          onDragEnd={() => setDraggingRef(null)}
+          ref={setNodeRef}
+          style={style}
+          {...attributes}
           className={`rounded-xl border transition-all ${
-            draggingRef === ref
+            isDragging
               ? "border-primary/60 bg-primary/5 shadow-md"
               : isActive
               ? "border-outline-variant/25 bg-surface-container-low"
@@ -496,10 +574,15 @@ export function FormBuilderSettings({
             className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none ${isEditing ? "border-b border-outline-variant/15" : ""}`}
             onClick={() => isEditing ? cancelEdit() : openEdit(ref)}
           >
-            <GripVertical
-              className="w-4 h-4 text-outline-variant/35 shrink-0 cursor-grab"
+            <button
+              type="button"
+              {...listeners}
               onClick={(e) => e.stopPropagation()}
-            />
+              className="touch-none p-1 -m-1 cursor-grab active:cursor-grabbing text-outline-variant/35 hover:text-on-surface-variant"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="w-4 h-4 shrink-0" />
+            </button>
             <div className="flex-1 min-w-0 flex items-center gap-2">
               <span className={`text-sm font-semibold truncate ${isActive ? "text-on-surface" : "text-on-surface-variant"}`}>
                 {field.label || FIELD_LABELS[field.field_key]}
@@ -607,6 +690,8 @@ export function FormBuilderSettings({
             </div>
           )}
         </div>
+          )}
+        </SortableItem>
       );
     }
 
@@ -615,15 +700,14 @@ export function FormBuilderSettings({
     const isActive = field.enabled;
 
     return (
+      <SortableItem key={ref} id={ref}>
+        {({ setNodeRef, style, listeners, attributes, isDragging }) => (
       <div
-        key={ref}
-        draggable
-        onDragStart={() => setDraggingRef(ref)}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={() => { if (draggingRef) moveRef(draggingRef, ref, field.enabled); setDraggingRef(null); }}
-        onDragEnd={() => setDraggingRef(null)}
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
         className={`rounded-xl border transition-all ${
-          draggingRef === ref
+          isDragging
             ? "border-primary/60 bg-primary/5 shadow-md"
             : isActive
             ? "border-outline-variant/25 bg-surface-container-low"
@@ -635,10 +719,15 @@ export function FormBuilderSettings({
           className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none ${isEditing ? "border-b border-outline-variant/15" : ""}`}
           onClick={() => isEditing ? cancelEdit() : openEdit(ref)}
         >
-          <GripVertical
-            className="w-4 h-4 text-outline-variant/35 shrink-0 cursor-grab"
+          <button
+            type="button"
+            {...listeners}
             onClick={(e) => e.stopPropagation()}
-          />
+            className="touch-none p-1 -m-1 cursor-grab active:cursor-grabbing text-outline-variant/35 hover:text-on-surface-variant"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="w-4 h-4 shrink-0" />
+          </button>
           <div className="flex-1 min-w-0 flex items-center gap-2">
             <span className={`text-sm font-semibold truncate ${isActive ? "text-on-surface" : "text-on-surface-variant"}`}>
               {field.label}
@@ -747,6 +836,8 @@ export function FormBuilderSettings({
           </div>
         )}
       </div>
+        )}
+      </SortableItem>
     );
   };
 
@@ -808,25 +899,27 @@ export function FormBuilderSettings({
       </section>
 
       {/* Active Fields */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-on-surface">Active Fields</h4>
-          <span className="text-xs text-on-surface-variant">{activeRefs.length} field{activeRefs.length !== 1 ? "s" : ""}</span>
-        </div>
-        <div
-          className="space-y-2 min-h-[48px]"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => { if (draggingRef) moveRefToSectionEnd(draggingRef, true); setDraggingRef(null); }}
-        >
-          {activeRefs.length > 0 ? (
-            activeRefs.map((ref) => renderFieldCard(ref))
-          ) : (
-            <div className="flex items-center justify-center h-12 rounded-xl border-2 border-dashed border-outline-variant/20 text-sm text-on-surface-variant">
-              No active fields — toggle the switch on a field below.
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={fieldOrder} strategy={verticalListSortingStrategy}>
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-on-surface">Active Fields</h4>
+              <span className="text-xs text-on-surface-variant">{activeRefs.length} field{activeRefs.length !== 1 ? "s" : ""}</span>
             </div>
-          )}
-        </div>
-      </section>
+            <div className="space-y-2 min-h-[48px]">
+              {activeRefs.length > 0 ? (
+                activeRefs.map((ref) => renderFieldCard(ref))
+              ) : (
+                <div className="flex items-center justify-center h-12 rounded-xl border-2 border-dashed border-outline-variant/20 text-sm text-on-surface-variant">
+                  No active fields — toggle the switch on a field below.
+                </div>
+              )}
+            </div>
+          </section>
 
       {/* Add Custom Field */}
       {!showAddComposer ? (
@@ -926,15 +1019,13 @@ export function FormBuilderSettings({
             <h4 className="text-sm font-semibold text-on-surface-variant">Inactive Fields</h4>
             <span className="text-xs text-on-surface-variant">{inactiveRefs.length} field{inactiveRefs.length !== 1 ? "s" : ""}</span>
           </div>
-          <div
-            className="space-y-2"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (draggingRef) moveRefToSectionEnd(draggingRef, false); setDraggingRef(null); }}
-          >
+          <div className="space-y-2">
             {inactiveRefs.map((ref) => renderFieldCard(ref))}
           </div>
         </section>
       )}
+        </SortableContext>
+      </DndContext>
 
       {message && (
         <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
