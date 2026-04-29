@@ -34,6 +34,20 @@ export default async function SchedulePage({
   const blockedDatesRaw = (artist as { blocked_dates?: unknown }).blocked_dates;
   const blockedDates = Array.isArray(blockedDatesRaw) ? (blockedDatesRaw as string[]) : [];
 
+  // If this is a per-client link, prefill name/email so the client only confirms.
+  let prefillName: string | null = null;
+  let prefillEmail: string | null = null;
+  if (bid) {
+    const { data: booking } = await admin
+      .from("bookings")
+      .select("client_name, client_email")
+      .eq("id", bid)
+      .eq("artist_id", artistId)
+      .single();
+    prefillName = booking?.client_name ?? null;
+    prefillEmail = booking?.client_email ?? null;
+  }
+
   return (
     <SchedulingPicker
       artistId={artistId}
@@ -45,6 +59,8 @@ export default async function SchedulePage({
       link={link}
       bid={bid}
       session={Number.isFinite(sessionNum) && sessionNum && sessionNum > 0 ? sessionNum : undefined}
+      prefillName={prefillName}
+      prefillEmail={prefillEmail}
     />
   );
 }
