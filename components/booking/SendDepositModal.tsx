@@ -141,10 +141,33 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
     finally { setGeneratingLink(false); }
   };
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(depositUrl).then(() => {
-      setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000);
-    });
+  const copyLink = async () => {
+    // Square deposit URLs are single-use — once paid, the URL serves a
+    // confirmation page. For Square, regenerate before copy so the artist
+    // never hands out a dead link. Stripe links are reusable, so plain copy.
+    if (paymentProvider === "square" && depositUrl) {
+      setGeneratingLink(true); setLinkError("");
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}/deposit-link/regenerate`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.url) {
+          setDepositUrl(data.url);
+          registerDepositLink(data.url);
+          await navigator.clipboard.writeText(data.url);
+        } else {
+          setLinkError(typeof data.error === "string" ? data.error : "Could not regenerate link");
+          return;
+        }
+      } finally {
+        setGeneratingLink(false);
+      }
+    } else {
+      await navigator.clipboard.writeText(depositUrl);
+    }
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const send = async () => {

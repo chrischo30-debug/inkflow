@@ -9,7 +9,7 @@ import { refreshPaymentLinkTemplates, RefreshTemplateError } from '@/lib/payment
 async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, bookingId: string, userId: string) {
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date, scheduling_link_id')
+    .select('state, client_email, client_name, artist_id, payment_link_sent, appointment_date, scheduling_link_id, deposit_link_url')
     .eq('id', bookingId)
     .eq('artist_id', userId)
     .single();
@@ -91,7 +91,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     artistName: artist?.name || artist?.studio_name || 'Your Artist',
     paymentLinksList,
     calendarLinksList,
-    primaryPaymentLink: booking.payment_link_sent ?? undefined,
+    primaryPaymentLink:
+      booking.payment_link_sent
+      ?? (booking as { deposit_link_url?: string | null }).deposit_link_url
+      ?? undefined,
     appointmentDate: booking.appointment_date ?? undefined,
     studioAddress: artist?.studio_address ?? undefined,
     schedulingLink: schedulingUrl,
@@ -197,6 +200,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // subject/body may contain {variable} tokens — sendEmail resolves them at send time
   const initialPaymentLinks = normalizePaymentLinks(artist?.payment_links);
   let paymentLinksList = initialPaymentLinks;
+  // The bare {paymentLink} token resolves to primaryPaymentLink (booking's
+  // deposit URL) when set, falling back to paymentLinksList[0]. For Square
+  // bookings we must force-refresh the matching template entry so the URL
+  // we substitute isn't a dead single-use page.
+  const bookingDepositUrl = (booking as { deposit_link_url?: string | null }).deposit_link_url ?? null;
+  const depositTemplateId = bookingDepositUrl
+    ? initialPaymentLinks.find(l => l.url === bookingDepositUrl && l.provider === "square" && !!l.id && typeof l.amount_cents === "number")?.id ?? null
+    : null;
   if (artistRaw) {
     try {
       paymentLinksList = await refreshPaymentLinkTemplates({
@@ -204,6 +215,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         artistRow: artistRaw as unknown as Record<string, unknown>,
         paymentLinks: initialPaymentLinks,
         emailTexts: [subject, body],
+        forceRefreshIds: depositTemplateId ? [depositTemplateId] : undefined,
       });
     } catch (err) {
       if (err instanceof RefreshTemplateError) {
@@ -214,6 +226,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       throw err;
     }
+  }
+  // After refresh, the deposit entry's URL may have changed. Use the fresh
+  // URL as primaryPaymentLink so bare {paymentLink} resolves to the booking's
+  // deposit, not paymentLinksList[0]. Also persist the new URL back to the
+  // booking so subsequent reads (e.g. SendDepositModal's existingDepositUrl)
+  // stay in sync.
+  let resolvedPrimaryPaymentLink: string | undefined = booking.payment_link_sent ?? undefined;
+  if (depositTemplateId) {
+    const refreshedDeposit = paymentLinksList.find(l => l.id === depositTemplateId);
+    if (refreshedDeposit) {
+      resolvedPrimaryPaymentLink = refreshedDeposit.url;
+      if (refreshedDeposit.url !== bookingDepositUrl) {
+        await supabase
+          .from('bookings')
+          .update({ deposit_link_url: refreshedDeposit.url })
+          .eq('id', id);
+      }
+    }
+  } else if (bookingDepositUrl) {
+    resolvedPrimaryPaymentLink = bookingDepositUrl;
   }
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
   const bookingSchedulingLinkIdPost = (booking as { scheduling_link_id?: string | null }).scheduling_link_id;
@@ -227,7 +259,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     artistName: artist?.name || artist?.studio_name || 'Your Artist',
     paymentLinksList,
     calendarLinksList,
-    primaryPaymentLink: booking.payment_link_sent ?? undefined,
+    primaryPaymentLink: resolvedPrimaryPaymentLink,
     appointmentDate: booking.appointment_date ?? undefined,
     studioAddress: artist?.studio_address ?? undefined,
     schedulingLink: schedulingUrlPost,
