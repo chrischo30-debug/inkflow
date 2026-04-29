@@ -7,6 +7,7 @@ import { PaymentSSEListener } from "@/components/booking/PaymentSSEListener";
 import { BooksToggle } from "@/components/dashboard/BooksToggle";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import type { Booking } from "@/lib/types";
@@ -54,10 +55,10 @@ export default async function DashboardPage() {
 
   const newInquiries = bookings.filter(b => b.state === "inquiry");
   const followUps = bookings.filter(b => b.state === "follow_up");
-  const awaitingConfirmation = bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted");
+  const awaitingConfirmation = bookings.filter(b => b.state === "sent_calendar");
   const weekAppointments = bookings.filter(b => {
     const d = b.appointment_date?.slice(0, 10);
-    return b.state === "confirmed" && d && d >= weekStart && d <= weekEnd;
+    return (b.state === "booked" || b.state === "confirmed") && d && d >= weekStart && d <= weekEnd;
   });
 
   const firstName = artistData?.name?.split(" ")[0] ?? "there";
@@ -104,7 +105,7 @@ export default async function DashboardPage() {
                 <span className="hidden md:inline">Live form</span>
               </a>
             )}
-            <Link href="/bookings?state=confirmed" className="hidden sm:block px-3 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
+            <Link href="/bookings?state=all" className="hidden sm:block px-3 py-2 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors">
               All bookings
             </Link>
             <AddBookingModal />
@@ -122,9 +123,20 @@ export default async function DashboardPage() {
                 <p className="text-sm text-on-surface-variant mt-1">No action items right now.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3" data-coachmark="dashboard-action-cards">
+                <CoachmarkSequence tips={[{
+                  id: "dashboard.action-cards",
+                  anchorSelector: '[data-coachmark="dashboard-action-cards"]',
+                  title: "What needs your attention today",
+                  body: <>
+                    <p><strong>New submissions</strong> — clients waiting on your review. Accept or reject from the pipeline below.</p>
+                    <p><strong>Awaiting confirmation</strong> — you sent the calendar link, now waiting on them to book a time.</p>
+                    <p><strong>This week</strong> — confirmed appointments coming up Mon–Sun.</p>
+                    <p>Click any card to jump straight to that filter on the Bookings page.</p>
+                  </>,
+                }]} />
                 <ActionCard
-                  label="New inquiries"
+                  label="New submissions"
                   count={newInquiries.length}
                   description={followUps.length > 0 ? `${followUps.length} follow-up${followUps.length > 1 ? "s" : ""} pending` : "Waiting for your review"}
                   urgent={newInquiries.length > 0}
@@ -135,18 +147,18 @@ export default async function DashboardPage() {
                 <ActionCard
                   label="Awaiting confirmation"
                   count={awaitingConfirmation.length}
-                  description="Deposit sent — needs to schedule"
+                  description="Calendar link sent — picking a time"
                   urgent={awaitingConfirmation.length > 0}
-                  href="/bookings?state=accepted"
-                  cta="Confirm"
-                  tooltip="Clients you've accepted and requested a deposit from. Use 'Confirm Appointment' to set a date and send them a booking confirmation."
+                  href="/bookings?state=sent_calendar"
+                  cta="View"
+                  tooltip="Clients you sent a calendar link to. Waiting on them to pick a time and book — once they do, the appointment locks in automatically."
                 />
                 <ActionCard
                   label="This week"
                   count={weekAppointments.length}
                   description={weekAppointments.length === 0 ? "No appointments this week" : weekAppointments.map((b: Booking) => b.client_name).join(", ")}
                   urgent={false}
-                  href="/bookings?state=confirmed"
+                  href="/bookings?state=booked"
                   cta="View"
                   tooltip="Confirmed tattoo appointments scheduled for this Mon–Sun. Mark as complete after the session to send a follow-up email."
                 />
@@ -221,8 +233,8 @@ function ActionCard({
           : "border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40"
       }`}
     >
-      <div className="flex items-center gap-1 mb-1">
-        <p className="text-xs md:text-sm font-medium text-on-surface-variant leading-tight">{label}</p>
+      <div className="flex items-center gap-1 mb-3">
+        <p className="text-sm md:text-base font-semibold text-on-surface leading-tight">{label}</p>
         {tooltip && <HelpTooltip body={tooltip} />}
       </div>
       <p className={`text-2xl md:text-3xl font-heading font-bold ${urgent && count > 0 ? "text-primary" : "text-on-surface"}`}>

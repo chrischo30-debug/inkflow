@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import { CoachmarkSequence } from "@/components/coachmarks/Coachmark";
 
 export default async function ContactFormPage() {
   const supabase = await createClient();
@@ -43,7 +44,17 @@ export default async function ContactFormPage() {
         <header className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <MobileNavToggle />
-            <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Contact Form</h1>
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-contact-form">Contact Form</h1>
+            <CoachmarkSequence tips={[{
+              id: "page.contact-form.intro",
+              anchorSelector: '[data-coachmark="page-contact-form"]',
+              title: "A separate way for visitors to reach you",
+              body: <>
+                <p>Different from your booking form. Use this for general questions, collabs, or whatever doesn&apos;t fit the booking flow.</p>
+                <p>Submissions land in your reply-to inbox so you can answer from anywhere.</p>
+                <p>Toggle &quot;Show on closed books page&quot; to keep clients reachable even when your books are closed.</p>
+              </>,
+            }]} />
           </div>
           {contactPath && (
             <div className="flex items-center gap-2">
@@ -63,8 +74,8 @@ export default async function ContactFormPage() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-xl space-y-2">
             <div className="mb-6">
-              <h2 className="text-base font-semibold text-on-surface">Contact form setup</h2>
-              <p className="text-sm text-on-surface-variant mt-0.5">
+              <h2 className="text-lg font-heading font-semibold text-on-surface">Contact form setup</h2>
+              <p className="text-base text-on-surface-variant mt-1 leading-relaxed">
                 A simple form for visitors to reach you — separate from your booking form.
               </p>
             </div>

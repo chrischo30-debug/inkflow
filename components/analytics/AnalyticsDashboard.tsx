@@ -52,15 +52,15 @@ function KpiCard({
   accent?: boolean;
 }) {
   return (
-    <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/15"}`}>
+    <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/30"}`}>
       <div className="flex items-center justify-between">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
+        <p className={`text-sm font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
         <div className={`p-2 rounded-xl ${accent ? "bg-surface/10" : "bg-surface-container-low"}`}>
           <Icon className={`w-4 h-4 ${accent ? "text-surface" : "text-on-surface-variant"}`} />
         </div>
       </div>
-      <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
-      {sub && <p className={`text-xs ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
+      <p className={`text-3xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
+      {sub && <p className={`text-sm ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
     </div>
   );
 }
@@ -89,21 +89,21 @@ function ToggleKpiCard({
   const inactiveClass = accent ? "text-surface hover:text-surface" : "text-on-surface-variant hover:text-on-surface-variant";
 
   return (
-    <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/15"}`}>
+    <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/30"}`}>
       <div className="flex items-center justify-between">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
+        <p className={`text-sm font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
         <div className={`p-2 rounded-xl ${accent ? "bg-surface/10" : "bg-surface-container-low"}`}>
           <Icon className={`w-4 h-4 ${accent ? "text-surface" : "text-on-surface-variant"}`} />
         </div>
       </div>
-      <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
-      {sub && <p className={`text-xs ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
-      <div className={`flex items-center gap-1 mt-auto pt-2 ${accent ? "border-t border-surface/10" : "border-t border-outline-variant/10"}`}>
+      <p className={`text-3xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
+      {sub && <p className={`text-sm ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
+      <div className={`flex items-center gap-1 mt-auto pt-2 ${accent ? "border-t border-surface/20" : "border-t border-outline-variant/30"}`}>
         {(["monthly", "year", "total"] as Period[]).map(p => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${period === p ? activeClass : inactiveClass}`}
+            className={`text-sm font-semibold px-3 py-1 rounded-lg transition-colors cursor-pointer ${period === p ? activeClass : inactiveClass}`}
           >
             {p === "monthly" ? "Month" : p === "year" ? "Year" : "Total"}
           </button>
@@ -116,8 +116,8 @@ function ToggleKpiCard({
 // ─── Section wrapper ─────────────────────────────────────────────────────────
 function Section({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-surface rounded-2xl border border-outline-variant/15 p-5 ${className}`}>
-      <p className="text-sm font-semibold text-on-surface mb-4">{title}</p>
+    <div className={`bg-surface rounded-2xl border border-outline-variant/30 p-5 ${className}`}>
+      <p className="text-base font-semibold text-on-surface mb-4">{title}</p>
       {children}
     </div>
   );
@@ -150,7 +150,7 @@ function HorizBar({ data, color, showRevenue = false }: { data: DistItem[]; colo
         const rev = item.revenue ?? 0;
         return (
           <div key={item.name} className="flex items-center gap-3">
-            <p className="text-xs text-on-surface-variant w-28 shrink-0 truncate capitalize">{item.name}</p>
+            <p className="text-sm text-on-surface-variant w-28 shrink-0 truncate capitalize">{item.name}</p>
             <div className="flex-1 h-5 bg-surface-container-low rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all"
@@ -158,18 +158,18 @@ function HorizBar({ data, color, showRevenue = false }: { data: DistItem[]; colo
               />
             </div>
             {showRevenue && (
-              <p className="text-xs text-emerald-600 font-medium w-14 text-right tabular-nums">
+              <p className="text-sm text-emerald-600 font-medium w-16 text-right tabular-nums">
                 {rev > 0 ? fmt$(rev) : <span className="text-on-surface-variant">—</span>}
               </p>
             )}
-            <p className="text-xs font-medium text-on-surface w-6 text-right tabular-nums">{item.count}</p>
+            <p className="text-sm font-medium text-on-surface w-8 text-right tabular-nums">{item.count}</p>
           </div>
         );
       })}
       {showRevenue && totalRevenue > 0 && (
-        <div className="flex items-center justify-between pt-2 mt-2 border-t border-outline-variant/10">
-          <p className="text-xs text-on-surface-variant">Revenue from completed</p>
-          <p className="text-xs font-semibold text-on-surface">{fmt$(totalRevenue)}</p>
+        <div className="flex items-center justify-between pt-2 mt-2 border-t border-outline-variant/30">
+          <p className="text-sm text-on-surface-variant">Revenue from completed</p>
+          <p className="text-sm font-semibold text-on-surface">{fmt$(totalRevenue)}</p>
         </div>
       )}
     </div>
@@ -196,16 +196,16 @@ function PipelineFunnel({ stateData, totalBookings }: { stateData: { state: stri
         const pctW = (count / max) * 100;
         return (
           <div key={s.state} className="flex items-center gap-3">
-            <p className="text-xs text-on-surface-variant w-24 shrink-0">{s.label}</p>
-            <div className="flex-1 h-6 bg-surface-container-low rounded-lg overflow-hidden">
+            <p className="text-sm text-on-surface-variant w-28 shrink-0">{s.label}</p>
+            <div className="flex-1 h-7 bg-surface-container-low rounded-lg overflow-hidden">
               <div
                 className="h-full rounded-lg flex items-center px-2 transition-all"
                 style={{ width: `${Math.max(pctW, 4)}%`, backgroundColor: STATE_COLORS[s.state] }}
               >
-                {pctW > 12 && <span className="text-[10px] font-semibold text-white">{count}</span>}
+                {pctW > 12 && <span className="text-xs font-semibold text-white">{count}</span>}
               </div>
             </div>
-            {pctW <= 12 && <p className="text-xs font-medium text-on-surface w-6">{count}</p>}
+            {pctW <= 12 && <p className="text-sm font-medium text-on-surface w-8">{count}</p>}
           </div>
         );
       })}
@@ -216,7 +216,7 @@ function PipelineFunnel({ stateData, totalBookings }: { stateData: { state: stri
 // ─── Budget vs Actual comparison ─────────────────────────────────────────────
 function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: number }) {
   if (avgBudget === 0 && avgPrice === 0) {
-    return <p className="text-xs text-on-surface-variant italic">No budget or pricing data yet.</p>;
+    return <p className="text-sm text-on-surface-variant">No budget or pricing data yet.</p>;
   }
   const max = Math.max(avgBudget, avgPrice, 1);
   const items = [
@@ -228,8 +228,8 @@ function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: 
       {items.map(item => (
         <div key={item.label}>
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-on-surface-variant">{item.label}</p>
-            <p className="text-xs font-semibold text-on-surface">{fmt$(item.value)}</p>
+            <p className="text-sm text-on-surface-variant">{item.label}</p>
+            <p className="text-sm font-semibold text-on-surface">{fmt$(item.value)}</p>
           </div>
           <div className="h-3 bg-surface-container-low rounded-full overflow-hidden">
             <div
@@ -240,7 +240,7 @@ function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: 
         </div>
       ))}
       {avgBudget > 0 && avgPrice > 0 && (
-        <p className="text-xs text-on-surface-variant pt-1">
+        <p className="text-sm text-on-surface-variant pt-1">
           Avg price is{" "}
           <span className={`font-semibold ${avgPrice > avgBudget ? "text-emerald-600" : "text-amber-600"}`}>
             {avgPrice > avgBudget ? "+" : ""}{fmt$(avgPrice - avgBudget)}
@@ -322,8 +322,8 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => fmt$(v)} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v => fmt$(v)} tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<RevenueTooltip />} />
                 <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#6366f1" strokeWidth={2} fill="url(#revGrad)" dot={false} />
               </AreaChart>
@@ -362,9 +362,9 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2">
                 {stateData.map(s => (
                   <div key={s.state} className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: STATE_COLORS[s.state] ?? "#94a3b8" }} />
-                    <span className="text-xs text-on-surface-variant truncate">{s.label}</span>
-                    <span className="text-xs font-medium text-on-surface ml-auto">{s.count}</span>
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: STATE_COLORS[s.state] ?? "#94a3b8" }} />
+                    <span className="text-sm text-on-surface-variant truncate">{s.label}</span>
+                    <span className="text-sm font-medium text-on-surface ml-auto">{s.count}</span>
                   </div>
                 ))}
               </div>
@@ -383,8 +383,8 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlyData} margin={{ top: 4, right: 4, bottom: 0, left: -10 }} barSize={16}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={ttStyle} itemStyle={{ fontSize: 12 }} cursor={{ fill: "rgba(99,102,241,0.05)" }} />
               <Bar dataKey="bookings" name="Bookings" fill="#6366f1" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -393,14 +393,14 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
         <Section title="Pipeline Funnel">
           <PipelineFunnel stateData={stateData} totalBookings={totalBookings} />
-          <div className="mt-4 pt-4 border-t border-outline-variant/10 grid grid-cols-2 gap-3">
+          <div className="mt-4 pt-4 border-t border-outline-variant/30 grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-on-surface-variant mb-0.5">Completion rate</p>
-              <p className="text-lg font-bold text-on-surface">{pct(conversionRate)}</p>
+              <p className="text-sm text-on-surface-variant mb-1">Completion rate</p>
+              <p className="text-xl font-bold text-on-surface">{pct(conversionRate)}</p>
             </div>
             <div>
-              <p className="text-xs text-on-surface-variant mb-0.5">Returning clients</p>
-              <p className="text-lg font-bold text-on-surface">{returningClients}</p>
+              <p className="text-sm text-on-surface-variant mb-1">Returning clients</p>
+              <p className="text-xl font-bold text-on-surface">{returningClients}</p>
             </div>
           </div>
         </Section>
@@ -410,13 +410,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Section title="Top Placements">
           {placements.length > 0 ? (
-            <>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
-                <span className="w-14 text-right">Revenue</span>
-                <span className="w-6 text-right">Count</span>
-              </div>
-              <HorizBar data={placements} color="#8b5cf6" showRevenue />
-            </>
+            <HorizBar data={placements} color="#8b5cf6" showRevenue />
           ) : (
             <p className="text-sm text-on-surface-variant">No placement data collected yet.</p>
           )}
@@ -424,13 +418,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
 
         <Section title="Size Distribution">
           {sizes.length > 0 ? (
-            <>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
-                <span className="w-14 text-right">Revenue</span>
-                <span className="w-6 text-right">Count</span>
-              </div>
-              <HorizBar data={sizes} color="#ec4899" showRevenue />
-            </>
+            <HorizBar data={sizes} color="#ec4899" showRevenue />
           ) : (
             <p className="text-sm text-on-surface-variant">No size data collected yet.</p>
           )}
@@ -442,13 +430,9 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Section title="Popular Request Types">
           {requestTypes.length > 0 ? (
             <>
-              <div className="flex items-center gap-2 mb-3 text-xs text-on-surface-variant">
-                <Sparkles className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 mb-3 text-sm text-on-surface-variant">
+                <Sparkles className="w-4 h-4" />
                 <span>Extracted from booking descriptions — a request may match multiple types.</span>
-              </div>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
-                <span className="w-14 text-right">Revenue</span>
-                <span className="w-6 text-right">Count</span>
               </div>
               <HorizBar data={requestTypes} color="#6366f1" showRevenue />
             </>
@@ -473,25 +457,25 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
                 <Users className="w-5 h-5 text-on-surface-variant" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-on-surface">{totalClients}</p>
-                <p className="text-xs text-on-surface-variant">unique clients</p>
+                <p className="text-3xl font-bold text-on-surface leading-none">{totalClients}</p>
+                <p className="text-sm text-on-surface-variant mt-1">unique clients</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-surface-container-low rounded-xl p-3">
-                <p className="text-xs text-on-surface-variant mb-1">First-timers</p>
+                <p className="text-sm text-on-surface-variant mb-1">First-timers</p>
                 <p className="text-xl font-bold text-on-surface">{totalClients - returningClients}</p>
               </div>
               <div className="bg-surface-container-low rounded-xl p-3">
                 <div className="flex items-center gap-1 mb-1">
-                  <Repeat2 className="w-3 h-3 text-on-surface-variant" />
-                  <p className="text-xs text-on-surface-variant">Returning</p>
+                  <Repeat2 className="w-4 h-4 text-on-surface-variant" />
+                  <p className="text-sm text-on-surface-variant">Returning</p>
                 </div>
                 <p className="text-xl font-bold text-emerald-600">{returningClients}</p>
               </div>
             </div>
             {returningClients > 0 && (
-              <p className="text-xs text-on-surface-variant">
+              <p className="text-sm text-on-surface-variant">
                 {pct((returningClients / Math.max(totalClients, 1)) * 100)} of your clients have booked more than once
               </p>
             )}

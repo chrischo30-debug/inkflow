@@ -24,7 +24,7 @@ function HowToGuide({ steps, defaultOpen = false }: { steps: ReactNode[]; defaul
       {open && (
         <ol className="mt-4 space-y-3 pl-0 list-none">
           {steps.map((step, i) => (
-            <li key={i} className="flex items-start gap-3 text-sm text-on-surface-variant">
+            <li key={i} className="flex items-start gap-3 text-base text-on-surface-variant">
               <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
                 {i + 1}
               </span>
@@ -67,25 +67,26 @@ function SecretField({
   );
 }
 
-const STRIPE_STEPS = [
+const STRIPE_STEPS: ReactNode[] = [
   "Go to stripe.com and create a free account (or log in if you have one).",
   "After signing up, Stripe will ask you to activate your account — complete this to receive payouts. You'll need to add your bank account, SSN (last 4), and a few business details. This takes about 5 minutes.",
-  "Once activated, go to Settings → Bank accounts to confirm your payout bank account is connected.",
-  "Go to Developers → API keys in the left sidebar.",
-  'Click Create secret key. When Stripe asks "How will you be using this key?" — select Powering an integration you built.',
-  "Under Secret key, click Reveal live key (for real payments) or use the test key while testing.",
-  "Copy the key — it starts with sk_live_ or sk_test_.",
-  "Paste it in the field above and click Save.",
+  <>Once activated, go to <strong className="font-semibold text-on-surface">Settings → Bank accounts</strong> to confirm your payout bank account is connected.</>,
+  <>Go to <strong className="font-semibold text-on-surface">Developers → API keys</strong> in the left sidebar.</>,
+  <>Click <strong className="font-semibold text-on-surface">Create secret key</strong>. When Stripe asks &quot;How will you be using this key?&quot; — select <strong className="font-semibold text-on-surface">Powering an integration you built</strong>.</>,
+  <>Under Secret key, click <strong className="font-semibold text-on-surface">Reveal live key</strong>.</>,
+  <>Copy the key — it starts with <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">sk_live_</code>.</>,
+  <>Paste it in the field above and click <strong className="font-semibold text-on-surface">Save</strong>.</>,
 ];
 
 const SQUARE_STEPS: ReactNode[] = [
-  <>Sign in to the <a href="https://developer.squareup.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Square Developer Console</a> using your existing Square account (same email and password as squareup.com — no separate signup needed).</>,
-  "Click + Add application and give it any name (e.g., \"Booking Deposits\"). Clients won't see this. If a \"What will you build first?\" wizard appears, check Accept payments, click Next, then Skip through the remaining steps.",
-  "At the top of your application page, switch the environment toggle to Production.",
-  "In the left sidebar, click Credentials. Under \"Production Access token,\" click Copy, then paste the token above.",
-  "In the left sidebar, click Locations. Copy the Location ID for your business (a string like L1A2B3C4D5E6F) and paste it above.",
-  "Click Save.",
-  "Finish setup: Complete the Webhook section below so paid deposits automatically move bookings forward.",
+  <>Go to <a href="https://squareup.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">squareup.com</a> and create a free account (or log in if you have one). Square will ask for your bank account and a few business details so payouts can reach you. This takes about 5 minutes.</>,
+  <>Sign in to the <a href="https://developer.squareup.com/apps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Square Developer Console</a> using the same Square account (same email and password as squareup.com — no separate signup needed).</>,
+  <>Click <strong className="font-semibold text-on-surface">+ Add application</strong> and give it any name (e.g., &quot;Booking Deposits&quot;). Clients won&apos;t see this. If a &quot;What will you build first?&quot; wizard appears, check <strong className="font-semibold text-on-surface">Accept payments</strong>, click <strong className="font-semibold text-on-surface">Next</strong>, then <strong className="font-semibold text-on-surface">Skip</strong> through the remaining steps.</>,
+  <>At the top of your application page, switch the environment toggle to <strong className="font-semibold text-on-surface">Production</strong>.</>,
+  <>In the left sidebar, click <strong className="font-semibold text-on-surface">Credentials</strong>. Under &quot;Production Access token,&quot; click <strong className="font-semibold text-on-surface">Copy</strong>, then paste the token above.</>,
+  <>In the left sidebar, click <strong className="font-semibold text-on-surface">Locations</strong>. Copy the Location ID for your business — it starts with <code className="text-xs bg-surface-container-high px-1.5 py-0.5 rounded font-mono">L</code> — and paste it above.</>,
+  <>Click <strong className="font-semibold text-on-surface">Save</strong>.</>,
+  <>Finish setup: Complete the Webhook section below so paid deposits automatically move bookings forward.</>,
 ];
 
 interface Props {
@@ -422,7 +423,7 @@ function StripePanel({
           </span>
           <p className="text-base font-semibold text-on-surface">Stripe API Key</p>
         </div>
-        <div className="text-sm text-on-surface-variant space-y-2 leading-relaxed">
+        <div className="text-base text-on-surface-variant space-y-2 leading-relaxed">
           <p>Generate deposit payment links directly from bookings.</p>
           <p>When a client pays, the deposit is automatically marked as paid and the booking moves forward on its own.</p>
         </div>
@@ -465,7 +466,7 @@ function StripePanel({
           )}
         </div>
 
-        <p className="text-sm text-on-surface-variant leading-relaxed">
+        <p className="text-base text-on-surface-variant leading-relaxed">
           Add this URL to Stripe so FlashBooker automatically marks deposits as paid when clients pay.
         </p>
         <ol className="space-y-2.5 pl-0 list-none">
@@ -549,7 +550,7 @@ function SquarePanel({
           </span>
           <p className="text-base font-semibold text-on-surface">Square Access Token & Location</p>
         </div>
-        <div className="text-sm text-on-surface-variant space-y-2 leading-relaxed">
+        <div className="text-base text-on-surface-variant space-y-2 leading-relaxed">
           <p>Generate Square Checkout payment links directly from bookings.</p>
           <p>When a client pays, the deposit is automatically marked as paid and the booking moves forward on its own.</p>
         </div>
@@ -608,7 +609,7 @@ function SquarePanel({
           )}
         </div>
 
-        <p className="text-sm text-on-surface-variant leading-relaxed">
+        <p className="text-base text-on-surface-variant leading-relaxed">
           Add this URL to Square so FlashBooker automatically marks deposits as paid when clients pay.
         </p>
         <ol className="space-y-2.5 pl-0 list-none">
@@ -663,7 +664,7 @@ function SquarePanel({
 
 function NumberedStep({ n, children }: { n: number; children: React.ReactNode }) {
   return (
-    <li className="flex items-start gap-3 text-sm text-on-surface-variant">
+    <li className="flex items-start gap-3 text-base text-on-surface-variant">
       <span className="w-5 h-5 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{n}</span>
       <span className="leading-relaxed pt-0.5">{children}</span>
     </li>

@@ -339,7 +339,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       <div>
         <h3 className="text-lg font-heading font-semibold mb-1 text-on-surface">Booking Page</h3>
-        <p className="text-sm text-on-surface-variant leading-relaxed">
+        <p className="text-base text-on-surface-variant leading-relaxed">
           Customize how your public booking form looks and what it shows.
         </p>
       </div>
@@ -357,7 +357,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Logo */}
       <section className="space-y-3" data-coachmark="booking-page-design">
-        <h4 className="text-base font-medium text-on-surface">Logo</h4>
+        <h4 className="text-base font-semibold text-on-surface">Logo</h4>
         <div className="flex items-center gap-4">
           {logoUrl && (
             <div className="relative group">
@@ -375,12 +375,12 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
             {uploadingLogo ? "Uploading…" : logoUrl ? "Replace" : "Upload logo"}
           </button>
         </div>
-        <p className="text-xs text-on-surface-variant">PNG or SVG with transparent background works best. Max 5MB.</p>
+        <p className="text-sm text-on-surface-variant mt-1">PNG or SVG with transparent background works best. Max 5MB.</p>
       </section>
 
       {/* Layout */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Layout</h4>
+        <h4 className="text-base font-semibold text-on-surface">Layout</h4>
         <div className="grid grid-cols-3 gap-3">
           {LAYOUTS.map(l => {
             const isSelected = layout === l.id;
@@ -394,9 +394,9 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
                 }`}
               >
                 <LayoutPreview id={l.id} />
-                <div>
-                  <p className="text-xs font-semibold text-on-surface">{l.label}</p>
-                  <p className="text-[11px] text-on-surface-variant leading-tight">{l.desc}</p>
+                <div className="pb-2">
+                  <p className="text-sm font-semibold text-on-surface mb-1">{l.label}</p>
+                  <p className="text-xs text-on-surface-variant leading-snug">{l.desc}</p>
                 </div>
                 {isMinimal && (
                   <div
@@ -416,7 +416,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
                       <span className={`relative w-7 h-4 rounded-full transition-colors shrink-0 ${headerAlign === "center" && isSelected ? "bg-primary" : "bg-outline-variant/40"}`}>
                         <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${headerAlign === "center" && isSelected ? "translate-x-3" : "translate-x-0"}`} />
                       </span>
-                      <span className="text-[11px] text-on-surface-variant leading-none">Center header</span>
+                      <span className="text-xs text-on-surface-variant leading-none">Center header</span>
                     </button>
                   </div>
                 )}
@@ -428,12 +428,12 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Font */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Font</h4>
+        <h4 className="text-base font-semibold text-on-surface">Font</h4>
         <button type="button" onClick={() => { setFontPickerOpen(v => !v); setFontSearch(""); }}
-          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
-            fontPickerOpen ? "border-primary/60 bg-primary/5" : "border-outline-variant/30 hover:border-primary/40"
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${
+            fontPickerOpen ? "border-primary/60 bg-primary/5" : "border-outline-variant/40 hover:border-primary/40"
           }`}>
-          <span className="text-base text-on-surface truncate" style={{ fontFamily: fontFamilyCss }}>{font}</span>
+          <span className="text-sm text-on-surface truncate" style={{ fontFamily: fontFamilyCss }}>{font}</span>
           <ChevronDown className={`w-4 h-4 text-on-surface-variant shrink-0 ml-2 transition-transform ${fontPickerOpen ? "rotate-180" : ""}`} />
         </button>
 
@@ -455,10 +455,10 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
                   {fonts.map(name => (
                     <button key={name} type="button"
                       onClick={() => { setFont(name); setFontPickerOpen(false); setFontSearch(""); }}
-                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface-container-high ${
+                      className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-container-high ${
                         font === name ? "bg-primary/5" : ""
                       }`}>
-                      <span className="text-base text-on-surface flex-1 truncate"
+                      <span className="text-sm text-on-surface flex-1 truncate"
                         style={{ fontFamily: `'${name}', sans-serif` }}>
                         Book a tattoo
                       </span>
@@ -475,8 +475,8 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Header Size */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Header Size</h4>
-        <div className="rounded-xl border border-outline-variant/20 p-4 space-y-3">
+        <h4 className="text-base font-semibold text-on-surface">Header Size</h4>
+        <div className="rounded-xl border border-outline-variant/40 p-4 space-y-3">
           <div className="overflow-hidden h-12 flex items-center">
             <span className="font-bold leading-none text-on-surface truncate"
               style={{ fontSize: Math.min(headerSizePx, 48) + "px", fontFamily: fontFamilyCss }}>
@@ -499,8 +499,8 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Form Text Size */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Form Text Size</h4>
-        <div className="rounded-xl border border-outline-variant/20 p-4 space-y-3">
+        <h4 className="text-base font-semibold text-on-surface">Form Text Size</h4>
+        <div className="rounded-xl border border-outline-variant/40 p-4 space-y-3">
           <div className="flex items-baseline gap-4">
             <span className="font-semibold text-on-surface leading-none" style={{ fontSize: formSizePx + "px" }}>Field label</span>
             <span className="text-on-surface-variant" style={{ fontSize: formSizePx + "px" }}>Input text</span>
@@ -521,8 +521,8 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Colors */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Colors</h4>
-        <div className="rounded-xl border border-outline-variant/20 divide-y divide-outline-variant/20 overflow-hidden">
+        <h4 className="text-base font-semibold text-on-surface">Colors</h4>
+        <div className="rounded-xl border border-outline-variant/40 divide-y divide-outline-variant/30 overflow-hidden">
 
           {/* Background */}
           <div className="flex items-start gap-4 px-4 py-3">
@@ -629,12 +629,12 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
             )}
           </div>
         </div>
-        <p className="text-xs text-on-surface-variant">Button color applies to the submit button, input focus ring, and interactive elements.</p>
+        <p className="text-sm text-on-surface-variant mt-1">Button color applies to the submit button, input focus ring, and interactive elements.</p>
       </section>
 
       {/* Links */}
       <section className="space-y-3">
-        <h4 className="text-base font-medium text-on-surface">Links</h4>
+        <h4 className="text-base font-semibold text-on-surface">Links</h4>
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Website</p>
           <input className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"
@@ -642,7 +642,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
             placeholder="https://yourwebsite.com" type="url" />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 pt-4">
           <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Social Links</p>
           {socialLinks.map((link, i) => (
             <div key={i} className="flex flex-col gap-1.5">
@@ -668,12 +668,12 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
             </div>
           ))}
           <button type="button" onClick={addSocialLink}
-            className="flex items-center gap-1.5 text-xs text-on-surface-variant hover:text-on-surface transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Add social link
+            className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-on-surface transition-colors mt-1">
+            <Plus className="w-4 h-4" /> Add social link
           </button>
         </div>
 
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label className="flex items-center gap-3 cursor-pointer pt-4">
           <button type="button" role="switch" aria-checked={showSocial}
             onClick={() => setShowSocial(v => !v)}
             className={`relative flex w-9 h-5 rounded-full transition-colors shrink-0 ${showSocial ? "bg-primary" : "bg-outline-variant/35"}`}>

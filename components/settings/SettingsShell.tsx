@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { User, Link2, Mail, Bell } from "lucide-react";
+import { User, Link2, Mail, Bell, LogOut, Lightbulb, Check } from "lucide-react";
+import { signOut } from "@/app/actions/auth";
+import { useCoachmarks } from "@/components/coachmarks/Coachmark";
 import { AccountSettings } from "./AccountSettings";
 import { ThemeSettings } from "./ThemeSettings";
 import { GoogleIntegrationSettings } from "./GoogleIntegrationSettings";
@@ -128,8 +130,8 @@ export function SettingsShell(props: SettingsShellProps) {
               <SectionHeading
                 title="Integrations"
                 description={[
-                  "Connect outside tools to automate parts of your workflow.",
-                  "Both are optional. You can run FlashBooker without either and still get the full pipeline.",
+                  "Connect outside tools to automate parts of your booking flow.",
+                  "Both are optional. You can run FlashBooker without either and still get the full booking flow.",
                 ]}
               />
               <GoogleIntegrationSettings
@@ -201,9 +203,36 @@ export function SettingsShell(props: SettingsShellProps) {
             </div>
           )}
 
+          <div className="max-w-2xl mt-12 pt-6 border-t border-outline-variant/15 space-y-3">
+            <ResetTipsButton />
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="w-full h-auto py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium rounded-xl border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </form>
+          </div>
         </main>
       </div>
     </div>
+  );
+}
+
+function ResetTipsButton() {
+  const { reset } = useCoachmarks();
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => { reset(); setDone(true); setTimeout(() => setDone(false), 2500); }}
+      className="w-full h-auto py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium rounded-xl border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
+    >
+      {done ? <Check className="w-4 h-4 text-emerald-600" /> : <Lightbulb className="w-4 h-4" />}
+      {done ? "Tips reset — they'll show again as you navigate" : "Show tips again"}
+    </button>
   );
 }
 

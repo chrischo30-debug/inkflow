@@ -1,7 +1,60 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Check } from "lucide-react";
+import { Check, CalendarDays, X } from "lucide-react";
+import { TimeSelect } from "@/components/ui/TimeSelect";
+
+function splitDateTime(v: string): { date: string; time: string } {
+  if (!v) return { date: "", time: "" };
+  const [d, t = "09:00"] = v.split("T");
+  return { date: d, time: t.slice(0, 5) };
+}
+function joinDateTime(date: string, time: string): string {
+  if (!date) return "";
+  return `${date}T${time || "09:00"}`;
+}
+
+function DateTimeField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { date, time } = splitDateTime(value);
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm text-on-surface-variant block">{label}</label>
+      <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-2.5 flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none" />
+          <input
+            type="date"
+            value={date}
+            onChange={e => onChange(joinDateTime(e.target.value, time || "09:00"))}
+            className="w-full pl-8 pr-2 h-10 text-sm bg-surface border border-outline-variant/30 rounded-lg text-on-surface focus:outline-none focus:border-primary"
+          />
+        </div>
+        <TimeSelect
+          value={time || "09:00"}
+          onChange={t => onChange(joinDateTime(date, t))}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            title="Clear"
+            className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type SaveError = string | null;
 
@@ -84,10 +137,10 @@ export function BooksSettings({
           <div className="flex items-center gap-3">
             <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${booksOpen ? "bg-emerald-500" : "bg-destructive"}`} />
             <div>
-              <p className={`text-sm font-semibold ${booksOpen ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"}`}>
+              <p className={`text-base font-semibold ${booksOpen ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"}`}>
                 Books {booksOpen ? "Open" : "Closed"}
               </p>
-              <p className="text-xs text-on-surface-variant mt-0.5">
+              <p className="text-sm text-on-surface-variant mt-1">
                 {booksOpen ? "Accepting new submissions" : "Booking form is hidden from clients"}
               </p>
             </div>
@@ -111,16 +164,16 @@ export function BooksSettings({
       </div>
 
       {/* Closed page content */}
-      <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
+      <div className="rounded-xl border border-outline-variant/40 p-5 space-y-5">
         <div>
-          <p className="text-base font-medium text-on-surface mb-0.5">Closed page</p>
-          <p className="text-sm text-on-surface-variant">
+          <p className="text-base font-semibold text-on-surface mb-1">Closed page</p>
+          <p className="text-base text-on-surface-variant">
             What visitors see when your booking form is closed.
           </p>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Page heading</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Page heading</label>
           <input
             type="text"
             value={closedHeader}
@@ -132,8 +185,8 @@ export function BooksSettings({
           <p className="text-sm text-on-surface-variant">Defaults to your artist name if left blank.</p>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Message</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Message</label>
           <textarea
             value={closedMessage}
             onChange={e => setClosedMessage(e.target.value)}
@@ -144,29 +197,13 @@ export function BooksSettings({
         </div>
 
         {/* Drop schedule */}
-        <div>
-          <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-3">Drop schedule (optional)</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">Auto-open at</label>
-              <input
-                type="datetime-local"
-                value={openAt}
-                onChange={e => setOpenAt(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">Auto-close at</label>
-              <input
-                type="datetime-local"
-                value={closeAt}
-                onChange={e => setCloseAt(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary"
-              />
-            </div>
+        <div className="pt-2">
+          <p className="text-sm font-semibold text-on-surface mb-3">Drop schedule (optional)</p>
+          <div className="space-y-3">
+            <DateTimeField label="Auto-open at" value={openAt} onChange={setOpenAt} />
+            <DateTimeField label="Auto-close at" value={closeAt} onChange={setCloseAt} />
           </div>
-          <p className="text-xs text-on-surface-variant mt-2">
+          <p className="text-sm text-on-surface-variant mt-2">
             Set dates to automatically open or close your books. Clear both fields to disable the schedule.
           </p>
         </div>

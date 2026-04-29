@@ -273,7 +273,7 @@ export function AccountSettings({
                       className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
                     />
                   </FormControl>
-                  <div className="text-xs text-on-surface-variant space-y-1">
+                  <div className="text-sm text-on-surface-variant space-y-1.5 mt-1">
                     <p>Included as a Google Maps link in client confirmation emails. Leave blank to skip.</p>
                     <p>For best results paste the full street address. Partial addresses or business names sometimes resolve to the wrong place.</p>
                     {mapsUrl && (
@@ -306,7 +306,7 @@ export function AccountSettings({
                     className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6 focus-visible:ring-0 focus-visible:border-primary shadow-none transition-colors"
                   />
                 </FormControl>
-                <p className="text-xs text-on-surface-variant">Where client replies land, and where system notifications are sent. Usually your personal email.</p>
+                <p className="text-sm text-on-surface-variant mt-1">Where client replies land, and where system notifications are sent. Usually your personal email.</p>
                 <FormMessage />
               </FormItem>
             )}
@@ -317,7 +317,7 @@ export function AccountSettings({
             <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium text-on-surface">Logo</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">
+                <p className="text-sm text-on-surface-variant mt-1">
                   Shown on your public booking page and at the top of client emails. Same logo, both places.
                 </p>
               </div>
@@ -347,7 +347,7 @@ export function AccountSettings({
                   {uploadingLogo ? "Uploading…" : logoUrl ? "Replace" : "Upload logo"}
                 </button>
               </div>
-              <p className="text-xs text-on-surface-variant">
+              <p className="text-sm text-on-surface-variant">
                 PNG or SVG with a transparent background works best. Max 5MB.
               </p>
               {logoError && <p className="text-xs text-destructive">{logoError}</p>}
@@ -357,7 +357,7 @@ export function AccountSettings({
             <div className="flex items-center justify-between gap-4 pt-3 border-t border-outline-variant/15">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-on-surface">Show logo in client emails</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">
+                <p className="text-sm text-on-surface-variant mt-1">
                   {logoUrl
                     ? "Your logo appears at the top of every client email."
                     : "Upload a logo first to enable this."}

@@ -81,8 +81,23 @@ function groupByClient(bookings: Booking[]): Client[] {
     if (b.client_phone) c.phone = b.client_phone;
     c.sessions.push(b);
   }
+  const STATE_ORDER: Record<string, number> = {
+    inquiry: 0,
+    follow_up: 1,
+    sent_deposit: 2,
+    accepted: 2,
+    sent_calendar: 3,
+    booked: 4,
+    confirmed: 4,
+    completed: 5,
+    cancelled: 6,
+    rejected: 7,
+  };
   for (const c of map.values()) {
     c.sessions.sort((a, b) => {
+      const oa = STATE_ORDER[a.state] ?? 99;
+      const ob = STATE_ORDER[b.state] ?? 99;
+      if (oa !== ob) return oa - ob;
       const da = a.appointment_date ?? a.created_at;
       const db = b.appointment_date ?? b.created_at;
       return new Date(db).getTime() - new Date(da).getTime();
@@ -612,17 +627,17 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                                   type="button"
                                   disabled={emailLoadingFor === client.email}
                                   onClick={() => openEmailCompose(client)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors disabled:opacity-40"
+                                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors disabled:opacity-40"
                                 >
-                                  <Mail className="w-3.5 h-3.5" />
+                                  <Mail className="w-4 h-4" />
                                   {emailLoadingFor === client.email ? "Loading…" : "Send email"}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setNewSessionClient(client)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
+                                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity"
                                 >
-                                  <Plus className="w-3.5 h-3.5" />
+                                  <Plus className="w-4 h-4" />
                                   New booking
                                 </button>
                               </div>
@@ -633,7 +648,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                               {client.sessions.map(session => (
                                 <div
                                   key={session.id}
-                                  className="rounded-xl bg-surface-container-low/40 border border-outline-variant/15 hover:border-outline-variant/30 transition-colors"
+                                  className="rounded-xl bg-surface-container-low/60 border border-outline-variant/40 hover:border-outline-variant/60 shadow-sm transition-colors"
                                 >
                                   <div className="flex items-start justify-between gap-3 px-4 py-3">
                                   <div className="flex-1 min-w-0">
@@ -683,7 +698,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                                   </div>
                                   </div>
                                 {(session.sent_emails ?? []).length > 0 && (
-                                  <div className="px-4 pb-3 border-t border-outline-variant/10 pt-2">
+                                  <div className="px-4 pb-3 border-t border-outline-variant/30 pt-2">
                                     <div className="flex items-center justify-between mb-1">
                                       <p className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant/70">Emails sent</p>
                                     </div>

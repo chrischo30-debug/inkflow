@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useEffect, useLayoutEffect, useState } from "react";
-import { signOut } from "@/app/actions/auth";
 import { useMobileNavOpen, setMobileNavOpen } from "@/lib/mobile-nav";
 import {
   LayoutDashboard,
@@ -17,7 +16,6 @@ import {
   Settings,
   HelpCircle,
   ShieldAlert,
-  LogOut,
   ChevronLeft,
   ChevronRight,
   X,
@@ -46,7 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Studio",
+    label: "Manage",
     items: [
       { href: "/past-clients",    label: "Clients",       icon: Users },
       { href: "/payment-links",   label: "Links",         icon: Link2 },
@@ -272,13 +270,13 @@ export function SidebarNav({
         </nav>
       </div>
 
-      {/* Sign out + (desktop-only) expand toggle */}
-      <div className={`border-t border-outline-variant/15 shrink-0 flex flex-col gap-1.5 p-3 ${collapsed ? "md:p-2" : ""}`}>
+      {/* Desktop-only expand/collapse toggle */}
+      <div className={`hidden md:block border-t-2 border-outline-variant/30 shrink-0 p-3 ${collapsed ? "md:p-2" : ""}`}>
         <button
           type="button"
           onClick={toggleCollapsed}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`hidden md:flex items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
+          className={`w-full flex items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors ${
             collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5 text-sm font-medium"
           }`}
         >
@@ -291,18 +289,6 @@ export function SidebarNav({
             </>
           )}
         </button>
-        <form action={signOut}>
-          <button
-            type="submit"
-            title={collapsed ? "Sign Out" : undefined}
-            className={`w-full flex items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors gap-3 px-3 py-2.5 text-sm font-medium ${
-              collapsed ? "md:justify-center md:p-2.5 md:gap-0" : ""
-            }`}
-          >
-            <LogOut className="w-[18px] h-[18px] shrink-0" />
-            <span className={collapsed ? "md:hidden" : ""}>Sign Out</span>
-          </button>
-        </form>
       </div>
       </aside>
     </>
