@@ -39,6 +39,12 @@ function CopyButton({ url }: { url: string }) {
   );
 }
 
+// Square payment links are single-use, so we regenerate from the saved
+// label+amount each time the user copies or opens the row.
+function isSquareTemplate(link: PaymentLink): boolean {
+  return link.provider === "square" && typeof link.amount_cents === "number" && !!link.id;
+}
+
 function StatusBadge({ status }: { status: SaveStatus }) {
   if (status === "saved") return <span className="flex items-center gap-1 text-xs text-emerald-600"><Check className="w-3 h-3" /> Saved</span>;
   if (status === "saving") return <span className="text-xs text-on-surface-variant">Saving…</span>;
@@ -47,6 +53,83 @@ function StatusBadge({ status }: { status: SaveStatus }) {
 }
 
 // ── Payment Links ─────────────────────────────────────────────────────────────
+
+function PaymentLinkRow({ link, onChange, onRemove }: { link: PaymentLink; onChange: (next: PaymentLink) => void; onRemove: () => void }) {
+  const isTemplate = isSquareTemplate(link);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Returns a fresh URL and updates the row's saved URL. Falls back to the
+  // existing URL on failure so the user still has something to use.
+  const getFreshUrl = async (): Promise<string | null> => {
+    if (!isTemplate) return link.url;
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch("/api/payments/payment-link/regenerate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: link.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        setError(typeof data.error === "string" ? data.error : "Could not regenerate link");
+        return null;
+      }
+      onChange({ ...link, url: data.url as string });
+      return data.url as string;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    const url = await getFreshUrl();
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleOpen = async () => {
+    if (!isTemplate) {
+      window.open(link.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // Open a placeholder synchronously so the popup blocker treats this as a
+    // user gesture, then redirect once we have the fresh URL.
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    const url = await getFreshUrl();
+    if (!url) { w?.close(); return; }
+    if (w) w.location.href = url; else window.location.href = url;
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-on-surface">{link.label}</p>
+        {isTemplate ? (
+          <p className="text-xs text-on-surface-variant">
+            Square · ${(link.amount_cents! / 100).toFixed(2)} · fresh link generated each copy
+          </p>
+        ) : (
+          <p className="text-xs text-on-surface-variant truncate">{link.url}</p>
+        )}
+        {error && <p className="text-xs text-destructive mt-0.5">{error}</p>}
+      </div>
+      <button type="button" onClick={handleCopy} disabled={busy} title="Copy link"
+        className="p-1.5 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors disabled:opacity-50">
+        {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
+      <button type="button" onClick={handleOpen} disabled={busy} title="Open"
+        className="p-1.5 rounded-md text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50">
+        <ExternalLink className="w-3.5 h-3.5" />
+      </button>
+      <button type="button" onClick={onRemove} className="p-1.5 rounded-md text-on-surface-variant hover:text-destructive transition-colors" title="Remove">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: PaymentLink[]; externalAdd?: PaymentLink | null }) {
   const [links, setLinks] = useState<PaymentLink[]>(initialLinks);
@@ -58,7 +141,10 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
   useEffect(() => {
     if (!externalAdd) return;
     // Server-side auto-save already wrote this entry — just reflect it locally.
-    setLinks(prev => prev.some(l => l.url === externalAdd.url) ? prev : [...prev, externalAdd]);
+    setLinks(prev => {
+      const matches = (l: PaymentLink) => (externalAdd.id && l.id === externalAdd.id) || l.url === externalAdd.url;
+      return prev.some(matches) ? prev : [...prev, externalAdd];
+    });
   }, [externalAdd]);
 
   const save = async (updated: PaymentLink[]) => {
@@ -75,6 +161,11 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
     save(updated);
   };
   const removeLink = (i: number) => { const updated = links.filter((_, idx) => idx !== i); setLinks(updated); save(updated); };
+  const updateLink = (i: number, next: PaymentLink) => {
+    // URL refresh from regenerate — the server already persisted it, so we
+    // only update local state and skip the PUT.
+    setLinks(prev => prev.map((l, idx) => idx === i ? next : l));
+  };
 
   const urlValid = newUrl.trim() === "" || isValidUrl(newUrl.trim());
   const canAdd = newLabel.trim().length > 0 && isValidUrl(newUrl.trim());
@@ -90,15 +181,12 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
           <p className="text-sm text-on-surface-variant py-1">No payment links yet.</p>
         )}
         {links.map((link, i) => (
-          <div key={i} className="flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-on-surface">{link.label}</p>
-              <p className="text-xs text-on-surface-variant truncate">{link.url}</p>
-            </div>
-            <CopyButton url={link.url} />
-            <a href={link.url} target="_blank" rel="noreferrer" className="p-1.5 rounded-md text-on-surface-variant hover:text-on-surface transition-colors" title="Open"><ExternalLink className="w-3.5 h-3.5" /></a>
-            <button type="button" onClick={() => removeLink(i)} className="p-1.5 rounded-md text-on-surface-variant hover:text-destructive transition-colors" title="Remove"><Trash2 className="w-3.5 h-3.5" /></button>
-          </div>
+          <PaymentLinkRow
+            key={link.id ?? `${link.url}-${i}`}
+            link={link}
+            onChange={next => updateLink(i, next)}
+            onRemove={() => removeLink(i)}
+          />
         ))}
       </div>
 
@@ -148,12 +236,19 @@ function PaymentLinkGeneratorSection({ provider, onLinkGenerated }: { provider: 
 
   const generate = async () => {
     setGenStatus("generating"); setGeneratedUrl(null); setErrorMsg(null); setSaved(false);
-    const res = await fetch("/api/payments/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), amount_cents: Math.round(amount * 100) }) });
+    const amount_cents = Math.round(amount * 100);
+    const res = await fetch("/api/payments/payment-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: label.trim(), amount_cents }) });
     const data = await res.json();
     if (res.ok && data.url) {
       setGeneratedUrl(data.url);
       setGenStatus("done");
-      onLinkGenerated({ label: label.trim(), url: data.url });
+      onLinkGenerated({
+        label: label.trim(),
+        url: data.url,
+        id: data.id,
+        provider: data.provider,
+        amount_cents,
+      });
       setSaved(true);
     } else {
       setErrorMsg(data.error ?? "Failed to generate link"); setGenStatus("error");

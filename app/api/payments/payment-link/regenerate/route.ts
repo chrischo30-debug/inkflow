@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getAdapter, readArtistPaymentConfig } from "@/lib/payments";
@@ -10,14 +9,9 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const label: unknown = body.label;
-  const amount_cents: unknown = body.amount_cents;
-
-  if (typeof label !== "string" || !label.trim()) {
-    return NextResponse.json({ error: "label is required" }, { status: 400 });
-  }
-  if (typeof amount_cents !== "number" || amount_cents < 100) {
-    return NextResponse.json({ error: "amount_cents must be at least 100" }, { status: 400 });
+  const id: unknown = body.id;
+  if (typeof id !== "string" || !id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
   const { data: artistRow } = await supabase
@@ -28,6 +22,13 @@ export async function POST(req: Request) {
 
   if (!artistRow) return NextResponse.json({ error: "Artist not found" }, { status: 404 });
 
+  const links = normalizePaymentLinks((artistRow as Record<string, unknown>).payment_links);
+  const entry = links.find(l => l.id === id);
+  if (!entry) return NextResponse.json({ error: "Link not found" }, { status: 404 });
+  if (typeof entry.amount_cents !== "number") {
+    return NextResponse.json({ error: "Link is not a regenerable template" }, { status: 400 });
+  }
+
   const config = readArtistPaymentConfig(artistRow as Record<string, unknown>);
   const adapter = getAdapter(config);
   if (!adapter) {
@@ -36,24 +37,16 @@ export async function POST(req: Request) {
 
   try {
     const created = await adapter.createGenericLink({
-      label: label.trim(),
-      amountCents: amount_cents,
+      label: entry.label,
+      amountCents: entry.amount_cents,
     });
 
-    const existing = normalizePaymentLinks(
-      (artistRow as Record<string, unknown>).payment_links,
+    const updated: PaymentLink[] = links.map(l =>
+      l.id === id ? { ...l, url: created.url, provider: adapter.provider } : l,
     );
-    const entry: PaymentLink = {
-      id: randomUUID(),
-      label: label.trim(),
-      url: created.url,
-      provider: adapter.provider,
-      amount_cents,
-    };
-    const updated = [...existing, entry];
     await supabase.from("artists").update({ payment_links: updated }).eq("id", user.id);
 
-    return NextResponse.json({ url: created.url, provider: adapter.provider, id: entry.id });
+    return NextResponse.json({ url: created.url, id });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Payment provider error";
     return NextResponse.json({ error: message }, { status: 500 });

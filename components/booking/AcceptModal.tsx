@@ -246,11 +246,23 @@ export function AcceptModal({
         const acceptedTpl = data.templates.find(t => t.state === "accepted");
         baseBody = acceptedTpl?.body ?? data.body;
         baseSubject = acceptedTpl?.subject ?? data.subject;
-        const depositLabel =
-          data.paymentLinks.find(l => l.url === effectiveDepositUrl)?.label ?? "Pay deposit";
+        const selectedLink = data.paymentLinks.find(l => l.url === effectiveDepositUrl) as
+          | (InsertLink & { id?: string; provider?: "stripe" | "square"; amount_cents?: number })
+          | undefined;
+        const depositLabel = selectedLink?.label ?? "Pay deposit";
+        // Square templates are single-use — keep the {paymentLink:Label} token
+        // so the server can regenerate a fresh URL just before sending. Inlining
+        // a saved URL would risk delivering another client's confirmation page.
+        const isSquareTemplate =
+          depositMode === "existing"
+          && selectedLink?.provider === "square"
+          && typeof selectedLink?.amount_cents === "number"
+          && !!selectedLink?.id;
         body = baseBody.replace(
           /\{paymentLink(?::[^}]+)?\}/g,
-          `[${depositLabel}](${effectiveDepositUrl})`
+          isSquareTemplate
+            ? `{paymentLink:${depositLabel}}`
+            : `[${depositLabel}](${effectiveDepositUrl})`,
         );
       } else if (session1Link) {
         // No-deposit accept flow — schedule-only copy.
@@ -585,25 +597,33 @@ export function AcceptModal({
               <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-2">
                 {data && data.paymentLinks.length > 0 ? (
                   <div className="space-y-1.5">
-                    {data.paymentLinks.map(link => (
-                      <label key={link.url} className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-surface-container-high transition-colors"
-                        onClick={() => setSelectedExistingPaymentUrl(link.url)}>
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedExistingPaymentUrl === link.url ? "border-on-surface" : "border-outline-variant/50"}`}>
-                          {selectedExistingPaymentUrl === link.url && <div className="w-2 h-2 rounded-full bg-on-surface" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
-                          <p className="text-[11px] text-on-surface-variant/70 truncate">{link.url}</p>
-                        </div>
-                      </label>
-                    ))}
+                    {data.paymentLinks.map(link => {
+                      const tpl = link as InsertLink & { id?: string; provider?: "stripe" | "square"; amount_cents?: number };
+                      const isTemplate = tpl.provider === "square" && typeof tpl.amount_cents === "number" && !!tpl.id;
+                      return (
+                        <label key={link.url} className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-surface-container-high transition-colors"
+                          onClick={() => setSelectedExistingPaymentUrl(link.url)}>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedExistingPaymentUrl === link.url ? "border-on-surface" : "border-outline-variant/50"}`}>
+                            {selectedExistingPaymentUrl === link.url && <div className="w-2 h-2 rounded-full bg-on-surface" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
+                            <p className="text-[11px] text-on-surface-variant/70 truncate">
+                              {isTemplate
+                                ? `Square · $${(tpl.amount_cents! / 100).toFixed(2)} · fresh link generated each send`
+                                : link.url}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
                     <a href="/payment-links"
                       className="flex items-center gap-1.5 px-2 pt-1 text-xs font-medium text-primary hover:underline">
                       <Plus className="w-3.5 h-3.5" /> Add a new payment link
                     </a>
                     <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2">
                       {paymentsConnected
-                        ? `With a saved link, you'll need to mark the deposit paid manually — auto-detection only works with ${providerLabel}-generated links.`
+                        ? `With an external link, you'll need to mark the deposit paid manually — auto-detection only works with ${providerLabel}-generated links.`
                         : <>No payment provider is configured, so you&apos;ll confirm deposits manually. Set one up in <a href="/settings?tab=integrations" className="underline">Settings → Integrations</a> to enable auto-detection.</>
                       }
                     </p>

@@ -5,6 +5,9 @@ import { createClient } from "@/utils/supabase/server";
 const paymentLinkSchema = z.object({
   label: z.string().min(1),
   url: z.string().min(1),
+  id: z.string().optional(),
+  provider: z.enum(["stripe", "square"]).optional(),
+  amount_cents: z.number().int().positive().optional(),
 });
 
 const bodySchema = z.object({

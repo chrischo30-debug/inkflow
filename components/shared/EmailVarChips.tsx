@@ -69,14 +69,21 @@ function PaymentLinkChip({ paymentLinks, onInsert }: { paymentLinks: PaymentLink
               No payment links saved yet.{" "}
               <a href="/payment-links" className="text-primary hover:underline">Add some →</a>
             </p>
-          ) : paymentLinks.map(link => (
-            <button key={link.label} type="button"
-              onClick={() => { onInsert(`{paymentLink:${link.label}}`); setOpen(false); }}
-              className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors">
-              <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
-              <p className="text-[10px] text-on-surface-variant/70 truncate mt-0.5">{link.url}</p>
-            </button>
-          ))}
+          ) : paymentLinks.map(link => {
+            const isTemplate = link.provider === "square" && typeof link.amount_cents === "number" && !!link.id;
+            return (
+              <button key={link.label} type="button"
+                onClick={() => { onInsert(`{paymentLink:${link.label}}`); setOpen(false); }}
+                className="w-full text-left px-3 py-2 hover:bg-surface-container-high transition-colors">
+                <p className="text-sm font-medium text-on-surface truncate">{link.label}</p>
+                <p className="text-[10px] text-on-surface-variant/70 truncate mt-0.5">
+                  {isTemplate
+                    ? `Square · $${(link.amount_cents! / 100).toFixed(2)} · fresh link generated each send`
+                    : link.url}
+                </p>
+              </button>
+            );
+          })}
         </div>,
         document.body
       )}
