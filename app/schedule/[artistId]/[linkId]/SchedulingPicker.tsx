@@ -48,6 +48,8 @@ export function SchedulingPicker({
   link,
   bid,
   session,
+  prefillName,
+  prefillEmail,
 }: {
   artistId: string;
   linkId: string;
@@ -58,7 +60,11 @@ export function SchedulingPicker({
   link: SchedulingLink;
   bid?: string;
   session?: number;
+  prefillName?: string | null;
+  prefillEmail?: string | null;
 }) {
+  const [clientName, setClientName] = useState(prefillName ?? "");
+  const [clientEmail, setClientEmail] = useState(prefillEmail ?? "");
   const mapsUrl = studioAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(studioAddress)}` : null;
   const blockedSet = new Set(blockedDates);
   const today = new Date();
@@ -125,15 +131,27 @@ export function SchedulingPicker({
   };
 
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const trimmedName = clientName.trim();
+  const trimmedEmail = clientEmail.trim();
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const detailsValid = trimmedName.length > 0 && emailValid;
   const confirmSlot = async () => {
-    if (!selectedSlot || !selectedDate) return;
+    if (!selectedSlot || !selectedDate || !detailsValid) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const res = await fetch(`/api/schedule/${artistId}/${linkId}/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, start: selectedSlot.start, end: selectedSlot.end, ...(bid ? { bid } : {}), ...(session ? { session } : {}) }),
+        body: JSON.stringify({
+          date: selectedDate,
+          start: selectedSlot.start,
+          end: selectedSlot.end,
+          client_name: trimmedName,
+          client_email: trimmedEmail,
+          ...(bid ? { bid } : {}),
+          ...(session ? { session } : {}),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({} as { error?: string }));
@@ -214,6 +232,37 @@ export function SchedulingPicker({
                 Add to Google Calendar
               </a>
             )}
+          </div>
+        )}
+
+        {view === "picker" && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+            <div className="p-6 grid md:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-600 mb-1.5">Your name</span>
+                <input
+                  type="text"
+                  value={clientName}
+                  onChange={e => setClientName(e.target.value)}
+                  placeholder="Full name"
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400"
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-600 mb-1.5">Email</span>
+                <input
+                  type="email"
+                  value={clientEmail}
+                  onChange={e => setClientEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400"
+                  autoComplete="email"
+                  required
+                />
+              </label>
+            </div>
           </div>
         )}
 
@@ -317,10 +366,10 @@ export function SchedulingPicker({
                         <button
                           type="button"
                           onClick={confirmSlot}
-                          disabled={submitting}
+                          disabled={submitting || !detailsValid}
                           className="mt-4 w-full py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
                         >
-                          {submitting ? "Confirming…" : `Confirm ${formatTime12(selectedSlot.start)}`}
+                          {submitting ? "Confirming…" : !detailsValid ? "Add your name and email" : `Confirm ${formatTime12(selectedSlot.start)}`}
                         </button>
                         {submitError && (
                           <p className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">

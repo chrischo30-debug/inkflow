@@ -23,6 +23,8 @@ const bodySchema = z.object({
   bid: z.string().uuid().optional(),
   /** 1-based session index for multi-session bookings; defaults to 1. */
   session: z.number().int().min(1).optional(),
+  client_name: z.string().trim().min(1).max(200).optional(),
+  client_email: z.string().trim().email().optional(),
 });
 
 function formatDate(dateStr: string) {
@@ -126,6 +128,9 @@ export async function POST(
   let clientEmailToConfirm: string | null = null;
   let clientNameToConfirm: string | null = null;
   let scheduleThreadMessageId: string | undefined = undefined;
+  // Resolved booking id for downstream calendar sync — set by the bid path,
+  // the email-match fallback, or the brand-new insert below.
+  let resolvedBid: string | undefined = body.bid;
   if (body.bid) {
     const { data: booking } = await admin
       .from("bookings")
@@ -198,6 +203,50 @@ export async function POST(
       clientNameToConfirm = booking.client_name;
       scheduleThreadMessageId = (booking as { thread_message_id?: string | null }).thread_message_id ?? undefined;
     }
+  } else if (body.client_name && body.client_email) {
+    // Public link path: try to match an existing non-terminal booking for this
+    // artist by email. If found, treat it like the bid path. If not, insert a
+    // fresh booking row so the artist at least sees the appointment on their
+    // dashboard with name/email captured.
+    const appointmentISO = toAppointmentISO(body.date, body.start, link.timezone);
+    const emailLower = body.client_email.toLowerCase();
+    const { data: matchRows } = await admin
+      .from("bookings")
+      .select("id, state, client_email, client_name, thread_message_id, appointment_date")
+      .eq("artist_id", artistId)
+      .ilike("client_email", emailLower)
+      .not("state", "in", '("completed","cancelled","rejected","booked")')
+      .is("appointment_date", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const matched = (matchRows ?? [])[0];
+    if (matched) {
+      await admin
+        .from("bookings")
+        .update({ appointment_date: appointmentISO, state: "booked" })
+        .eq("id", matched.id);
+      resolvedBid = matched.id;
+      clientEmailToConfirm = matched.client_email || body.client_email;
+      clientNameToConfirm = matched.client_name || body.client_name;
+      scheduleThreadMessageId = (matched as { thread_message_id?: string | null }).thread_message_id ?? undefined;
+    } else {
+      const { data: inserted } = await admin
+        .from("bookings")
+        .insert({
+          artist_id: artistId,
+          client_name: body.client_name,
+          client_email: body.client_email,
+          state: "booked",
+          appointment_date: appointmentISO,
+          description: `Booked via scheduling link: ${link.label}`,
+          reference_urls: [],
+        })
+        .select("id")
+        .single();
+      resolvedBid = inserted?.id;
+      clientEmailToConfirm = body.client_email;
+      clientNameToConfirm = body.client_name;
+    }
   }
 
   const formattedDate = formatDate(body.date);
@@ -212,7 +261,7 @@ export async function POST(
   let calHtmlLink: string | null = null;
   let calSyncFailed = false;
   const calSyncAttempted = Boolean(
-    body.bid
+    resolvedBid
     && (artist as { calendar_sync_enabled?: boolean | null }).calendar_sync_enabled
     && (artist as { google_refresh_token?: string | null }).google_refresh_token,
   );
@@ -230,19 +279,19 @@ export async function POST(
         });
         calHtmlLink = calResult.htmlLink;
         if (calResult.id) {
-          await admin.from("bookings").update({ google_event_id: calResult.id }).eq("id", body.bid);
+          await admin.from("bookings").update({ google_event_id: calResult.id }).eq("id", resolvedBid);
         }
       } else {
         calSyncFailed = true;
-        console.error("[calendar-sync-failed]", { artistId, bookingId: body.bid, reason: "no_access_token" });
+        console.error("[calendar-sync-failed]", { artistId, bookingId: resolvedBid, reason: "no_access_token" });
       }
     } catch (e) {
       calSyncFailed = true;
-      console.error("[calendar-sync-failed]", { artistId, bookingId: body.bid, error: e instanceof Error ? e.message : String(e) });
+      console.error("[calendar-sync-failed]", { artistId, bookingId: resolvedBid, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  const bookingUrl = body.bid ? `${APP_URL}/bookings?expand=${body.bid}` : null;
+  const bookingUrl = resolvedBid ? `${APP_URL}/bookings?expand=${resolvedBid}` : null;
   const clientDisplay = clientNameToConfirm ?? "A client";
 
   const notifyNewBooking = (artist as { notify_new_booking?: boolean | null }).notify_new_booking !== false;
@@ -324,8 +373,8 @@ ${linksHtml ? `<p style="margin:0">${linksHtml}</p>` : ""}
         },
         threadMessageId: scheduleThreadMessageId,
       });
-      if (schedMsgId && !scheduleThreadMessageId && body.bid) {
-        await admin.from("bookings").update({ thread_message_id: schedMsgId }).eq("id", body.bid);
+      if (schedMsgId && !scheduleThreadMessageId && resolvedBid) {
+        await admin.from("bookings").update({ thread_message_id: schedMsgId }).eq("id", resolvedBid);
       }
     } catch (err) {
       console.error("Client confirmation email failed:", err);
