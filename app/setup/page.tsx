@@ -1,10 +1,10 @@
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import Link from "next/link";
-import { normalizePaymentLinks } from "@/lib/pipeline-settings";
-import type { CalendarLink } from "@/lib/pipeline-settings";
+import { normalizePaymentLinks, normalizeSchedulingLinks } from "@/lib/pipeline-settings";
 
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL ?? "support@flashbooker.app";
 
@@ -23,7 +23,7 @@ function StepCard({
 }: {
   done: boolean;
   title: string;
-  description: string;
+  description: ReactNode;
   note?: string;
   action: string;
   actionHref: string;
@@ -36,7 +36,7 @@ function StepCard({
       <CheckIcon done={done} />
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-semibold ${done ? "text-emerald-800" : "text-on-surface"}`}>{title}</p>
-        <p className="text-sm text-on-surface-variant mt-0.5">{description}</p>
+        <div className="text-sm text-on-surface-variant mt-2 space-y-1.5">{typeof description === "string" ? <p>{description}</p> : description}</div>
         {note && <p className="text-xs text-emerald-700 mt-1 font-medium">{note}</p>}
       </div>
       <Link
@@ -106,7 +106,7 @@ export default async function SetupPage({
     payment_links?: unknown;
     calendar_sync_enabled?: boolean | null;
     gmail_address?: string | null;
-    calendar_links?: CalendarLink[];
+    scheduling_links?: unknown;
     payment_provider?: "stripe" | "square" | null;
     stripe_api_key?: string | null;
     square_access_token?: string | null;
@@ -117,7 +117,7 @@ export default async function SetupPage({
   const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
   const calendarConnected = Boolean(artist.calendar_sync_enabled && artist.google_refresh_token);
   const paymentLinks = normalizePaymentLinks(artist.payment_links);
-  const calendarLinks = (artist.calendar_links ?? []) as CalendarLink[];
+  const schedulingLinks = normalizeSchedulingLinks(artist.scheduling_links);
   const hasLogo = Boolean(artist.logo_url);
   const hasSlug = Boolean(artist.slug);
   const hasStripe = Boolean(artist.stripe_api_key);
@@ -132,7 +132,7 @@ export default async function SetupPage({
   const hasPaymentMethod = paymentLinks.length > 0 || paymentsConnected;
 
   const requiredSteps = [hasSlug, hasReplyTo];
-  const recommendedSteps = [hasPaymentMethod, calendarLinks.length > 0, hasLogo];
+  const recommendedSteps = [hasPaymentMethod, schedulingLinks.length > 0, hasLogo];
   const integrationSteps = [calendarConnected, paymentsConnected];
 
   const requiredComplete = requiredSteps.filter(Boolean).length;
@@ -180,7 +180,6 @@ export default async function SetupPage({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-on-surface">How email works in FlashBooker</p>
-                  <p className="text-xs text-on-surface-variant mt-0.5">Two things to confirm below. No SMTP, no Gmail login, no DNS.</p>
                 </div>
               </div>
 
@@ -245,7 +244,7 @@ export default async function SetupPage({
                 <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Required</h2>
                 <span className="text-[10px] font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Bare minimum</span>
               </div>
-              <p className="text-xs text-on-surface-variant -mt-1 mb-2">These two make the app work. Everything else is optional.</p>
+              <p className="text-sm text-on-surface-variant mb-4">These two make the app work. Everything else is optional.</p>
 
               <StepCard
                 done={hasSlug}
@@ -272,12 +271,12 @@ export default async function SetupPage({
                 <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Recommended</h2>
                 <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">Best experience</span>
               </div>
-              <p className="text-xs text-on-surface-variant -mt-1 mb-2">These make your booking flow feel finished. Add them when you&apos;re ready.</p>
+              <p className="text-sm text-on-surface-variant mb-4">These make your booking flow feel finished. Add them when you&apos;re ready.</p>
 
               <StepCard
                 done={hasPaymentMethod}
                 title="Add a way to take deposits"
-                description="Stripe, Square, Venmo, Cash App, or any link clients can pay with. Sent automatically when you request a deposit."
+                description="Stripe, Square, Venmo, PayPal, or any link clients can pay with. Sent automatically when you request a deposit."
                 note={
                   paymentLinks.length > 0
                     ? `${paymentLinks.length} link${paymentLinks.length !== 1 ? "s" : ""} saved`
@@ -290,10 +289,15 @@ export default async function SetupPage({
               />
 
               <StepCard
-                done={calendarLinks.length > 0}
+                done={schedulingLinks.length > 0}
                 title="Add scheduling links"
-                description="Your Calendly or other scheduling link. Sent automatically once a client pays their deposit so they can pick a time."
-                note={calendarLinks.length > 0 ? `${calendarLinks.length} link${calendarLinks.length !== 1 ? "s" : ""} saved` : undefined}
+                description={
+                  <>
+                    <p>Create scheduling links, paste in existing ones, or sync with Google Calendar.</p>
+                    <p>Sent automatically once a client pays their deposit so they can pick a time.</p>
+                  </>
+                }
+                note={schedulingLinks.length > 0 ? `${schedulingLinks.length} link${schedulingLinks.length !== 1 ? "s" : ""} saved` : undefined}
                 action="Add links"
                 actionHref="/settings"
               />
@@ -301,7 +305,12 @@ export default async function SetupPage({
               <StepCard
                 done={hasLogo}
                 title="Upload your logo"
-                description="Shown on your booking form and at the top of client emails. PNG or SVG with a transparent background works best on both light and dark surfaces."
+                description={
+                  <>
+                    <p>Shown on your booking form and at the top of client emails.</p>
+                    <p>PNG or SVG with a transparent background works best on both light and dark surfaces.</p>
+                  </>
+                }
                 note={hasLogo ? "Logo uploaded" : undefined}
                 action="Upload logo"
                 actionHref="/settings"
@@ -311,15 +320,21 @@ export default async function SetupPage({
             {/* POWER INTEGRATIONS — save time with automations */}
             <section className="space-y-3">
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Power integrations</h2>
+                <h2 className="text-xs font-bold text-on-surface uppercase tracking-wide">Syncing &amp; Automations</h2>
                 <span className="text-[10px] font-semibold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full uppercase tracking-wide">Optional</span>
               </div>
-              <p className="text-xs text-on-surface-variant -mt-1 mb-2">Connect API keys to automate the boring parts — no more copy-pasting deposit amounts or creating calendar events.</p>
+              <p className="text-sm text-on-surface-variant mb-4">Connect API keys to automate the boring parts. No more copy-pasting deposit amounts or creating calendar events.</p>
 
               <StepCard
                 done={paymentsConnected}
                 title="Connect Stripe or Square for automated deposits"
-                description="Pick one. Generates per-booking payment links without leaving the dashboard, and auto-marks deposits paid when the client checks out. Requires a fully activated account with a bank account connected so payouts actually reach you."
+                description={
+                  <>
+                    <p>Pick one. Generates per-booking payment links without leaving the dashboard.</p>
+                    <p>Auto-marks deposits paid when the client checks out.</p>
+                    <p>Requires a fully activated account with a bank account connected so payouts actually reach you.</p>
+                  </>
+                }
                 note={paymentsConnected
                   ? `${paymentProvider === "square" ? "Square" : "Stripe"} connected`
                   : "Already use one? Connect it. Don't have either? Stripe is the easier setup for most artists."}
@@ -330,7 +345,12 @@ export default async function SetupPage({
               <StepCard
                 done={calendarConnected}
                 title="Sync appointments to Google Calendar"
-                description="Confirmed bookings show up on your personal Google Calendar automatically. Skip if you use a different calendar — you can still use FlashBooker&apos;s built-in calendar view."
+                description={
+                  <>
+                    <p>Confirmed bookings show up on your personal Google Calendar automatically.</p>
+                    <p>Skip if you use a different calendar. You can still use FlashBooker&apos;s built-in calendar view.</p>
+                  </>
+                }
                 action={googleConfigured ? "Connect Calendar" : "Not configured"}
                 actionHref={googleConfigured ? "/api/auth/google/connect" : "/settings"}
               />

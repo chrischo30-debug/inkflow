@@ -81,10 +81,7 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between min-h-[20px]">
-        <p className="text-xs text-on-surface-variant">
-          Use <code className="bg-surface-container-high px-1 py-0.5 rounded text-[11px]">{"{paymentLinks}"}</code> in email templates.
-        </p>
+      <div className="flex items-center justify-end min-h-[20px]">
         <StatusBadge status={status} />
       </div>
 

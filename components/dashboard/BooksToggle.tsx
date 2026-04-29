@@ -56,7 +56,7 @@ export function BooksToggle({
         <span className={`w-2 h-2 rounded-full inline-block shrink-0 ${open ? "bg-emerald-500" : "bg-destructive"}`} />
         <span className="hidden sm:inline">Books </span>{open ? "Open" : "Closed"}
         <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 ${open ? "bg-emerald-500" : "bg-outline-variant/40"}`}>
-          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${open ? "translate-x-4" : "translate-x-0.5"}`} />
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${open ? "translate-x-5" : "translate-x-0.5"}`} />
         </span>
       </button>
       {error && (

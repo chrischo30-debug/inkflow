@@ -48,13 +48,13 @@ export default async function LinksPage() {
           <MobileNavToggle />
           <h1 className="text-xl font-heading font-semibold text-on-surface truncate" data-coachmark="page-links">Links</h1>
           <CoachmarkSequence tips={[{
-            id: "page.links.intro",
+            id: "page.links.intro.v2",
             anchorSelector: '[data-coachmark="page-links"]',
-            title: "All your links live here",
+            title: "Payment + scheduling links live here",
             body: <>
-              <p>Three kinds of links: payment, calendar (Google Cal style invites), and scheduling.</p>
-              <p>You can drop these into emails using <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{paymentLink}"}</code> or <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{schedulingLink}"}</code> placeholders.</p>
-              <p>Or just copy and paste any link manually whenever you need it.</p>
+              <p><strong>Payment</strong> — Stripe, Square, PayPal, Venmo, or any deposit URL clients can pay with.</p>
+              <p><strong>Scheduling</strong> — let clients pick their own appointment time once a deposit is in. Sync with Google Calendar or paste an existing Calendly link.</p>
+              <p>Drop them into emails with <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{paymentLink:Label}"}</code> or <code className="px-1 py-0.5 bg-gray-100 rounded text-xs font-mono">{"{schedulingLink}"}</code>, or copy any link manually.</p>
             </>,
           }]} />
         </header>

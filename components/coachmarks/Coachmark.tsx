@@ -7,6 +7,26 @@ import { Lightbulb } from "lucide-react";
 const STORAGE_KEY = "fb_coachmarks";
 const CHANGE_EVENT = "fb_coachmarks_changed";
 
+// Global single-active lock: only one Coachmark may render at a time across
+// the page so a fresh user isn't hit with multiple overlapping tips on load.
+const CLAIM_EVENT = "fb_coachmark_claim_changed";
+let activeClaimId: string | null = null;
+
+function tryClaim(id: string): boolean {
+  if (activeClaimId && activeClaimId !== id) return false;
+  if (activeClaimId !== id) {
+    activeClaimId = id;
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(CLAIM_EVENT));
+  }
+  return true;
+}
+function releaseClaim(id: string) {
+  if (activeClaimId === id) {
+    activeClaimId = null;
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(CLAIM_EVENT));
+  }
+}
+
 type Stored = { disabled: boolean; seen: string[] };
 
 function readStore(): Stored {
@@ -76,10 +96,23 @@ export function Coachmark({
   const cardRef = useRef<HTMLDivElement>(null);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number; placement: "top" | "bottom" } | null>(null);
+  const [hasClaim, setHasClaim] = useState(false);
   const { markSeen, disableAll } = useCoachmarks();
+
+  // Single-active lock: claim the slot if free; otherwise wait for it to free.
+  useEffect(() => {
+    const tryAcquire = () => setHasClaim(tryClaim(id));
+    tryAcquire();
+    window.addEventListener(CLAIM_EVENT, tryAcquire);
+    return () => {
+      window.removeEventListener(CLAIM_EVENT, tryAcquire);
+      releaseClaim(id);
+    };
+  }, [id]);
 
   // Poll for the anchor element until found (handles late-rendering targets)
   useEffect(() => {
+    if (!hasClaim) return;
     let cancelled = false;
     const find = () => {
       if (cancelled) return;
@@ -89,7 +122,7 @@ export function Coachmark({
     };
     find();
     return () => { cancelled = true; };
-  }, [anchorSelector]);
+  }, [anchorSelector, hasClaim]);
 
   // Compute position when anchor or layout changes
   useLayoutEffect(() => {
@@ -108,9 +141,17 @@ export function Coachmark({
       setPos({ top, left, placement });
     };
     compute();
+    // The first compute() runs before the portal mounts, so cardRef is still
+    // null and we use a fallback height. After the next frame the card is in
+    // the DOM with real dimensions — recompute so the tip lands correctly
+    // instead of being clipped at the viewport edge.
+    const raf1 = requestAnimationFrame(compute);
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(compute));
     window.addEventListener("scroll", compute, true);
     window.addEventListener("resize", compute);
     return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
       window.removeEventListener("scroll", compute, true);
       window.removeEventListener("resize", compute);
     };
@@ -118,7 +159,7 @@ export function Coachmark({
 
   // Spotlight ring on the anchor
   useEffect(() => {
-    if (!anchorEl) return;
+    if (!anchorEl || !hasClaim) return;
     const prevShadow = anchorEl.style.boxShadow;
     const prevTransition = anchorEl.style.transition;
     const prevZ = anchorEl.style.zIndex;
@@ -135,7 +176,7 @@ export function Coachmark({
       anchorEl.style.zIndex = prevZ;
       anchorEl.style.position = prevPos;
     };
-  }, [anchorEl]);
+  }, [anchorEl, hasClaim]);
 
   const handleDismiss = useCallback(() => {
     markSeen(id);
@@ -160,7 +201,7 @@ export function Coachmark({
     };
   }, [anchorEl, handleDismiss]);
 
-  if (typeof document === "undefined" || !pos) return null;
+  if (typeof document === "undefined" || !pos || !hasClaim) return null;
 
   return createPortal(
     <div

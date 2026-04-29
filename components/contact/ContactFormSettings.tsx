@@ -101,15 +101,15 @@ export function ContactFormSettings({
   return (
     <div className="space-y-5">
       {/* Enable toggle */}
-      <div className={`rounded-xl border p-5 transition-colors ${enabled ? "border-emerald-500/30 bg-emerald-500/5" : "border-outline-variant/20 bg-surface-container-low"}`}>
+      <div className={`rounded-xl border p-5 transition-colors ${enabled ? "border-emerald-500/30 bg-emerald-500/5" : "border-outline-variant/40 bg-surface-container-low"}`}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${enabled ? "bg-emerald-500" : "bg-outline-variant/60"}`} />
             <div>
-              <p className={`text-sm font-semibold ${enabled ? "text-emerald-700 dark:text-emerald-400" : "text-on-surface"}`}>
+              <p className={`text-base font-semibold ${enabled ? "text-emerald-700 dark:text-emerald-400" : "text-on-surface"}`}>
                 Contact form {enabled ? "enabled" : "disabled"}
               </p>
-              <p className="text-xs text-on-surface-variant mt-0.5">
+              <p className="text-sm text-on-surface-variant mt-1">
                 {enabled
                   ? `Live at ${slug ? `/${slug}/contact` : "your contact URL"}`
                   : "Form is not publicly accessible"}
@@ -129,21 +129,21 @@ export function ContactFormSettings({
       </div>
 
       {/* Fields */}
-      <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
+      <div className="rounded-xl border border-outline-variant/40 p-5 space-y-4">
         <div>
-          <p className="text-sm font-semibold text-on-surface mb-0.5">Form fields</p>
-          <p className="text-sm text-on-surface-variant">Name, email, and message are always included.</p>
+          <p className="text-base font-semibold text-on-surface mb-1">Form fields</p>
+          <p className="text-base text-on-surface-variant">Name, email, and message are always included.</p>
         </div>
 
         {/* Phone */}
-        <div className="flex items-center justify-between py-3 border-t border-outline-variant/15">
+        <div className="flex items-center justify-between py-3 border-t border-outline-variant/30">
           <div>
-            <p className="text-sm font-medium text-on-surface">Phone Number</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">Add a phone number field to the form</p>
+            <p className="text-base font-semibold text-on-surface">Phone Number</p>
+            <p className="text-sm text-on-surface-variant mt-1">Add a phone number field to the form</p>
           </div>
           <div className="flex items-center gap-4">
             {phoneEnabled && (
-              <label className="flex items-center gap-2 text-xs text-on-surface-variant cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={phoneRequired}
@@ -167,11 +167,11 @@ export function ContactFormSettings({
       </div>
 
       {/* Text content */}
-      <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
-        <p className="text-sm font-semibold text-on-surface">Form text</p>
+      <div className="rounded-xl border border-outline-variant/40 p-5 space-y-5">
+        <p className="text-base font-semibold text-on-surface">Form text</p>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Heading</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Heading</label>
           <input
             type="text"
             value={header}
@@ -182,8 +182,8 @@ export function ContactFormSettings({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Subtext</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Subtext</label>
           <textarea
             value={subtext}
             onChange={e => setSubtext(e.target.value)}
@@ -194,8 +194,8 @@ export function ContactFormSettings({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Button text</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Button text</label>
           <input
             type="text"
             value={buttonText}
@@ -206,8 +206,8 @@ export function ContactFormSettings({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-on-surface-variant">Confirmation message</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-on-surface">Confirmation message</label>
           <textarea
             value={confirmationMessage}
             onChange={e => setConfirmationMessage(e.target.value)}
@@ -239,11 +239,11 @@ export function ContactFormSettings({
       </div>
 
       {/* Show on closed books page */}
-      <div className="rounded-xl border border-outline-variant/20 p-5">
+      <div className="rounded-xl border border-outline-variant/40 p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-on-surface">Show on closed books page</p>
-            <p className="text-sm text-on-surface-variant mt-0.5">
+            <p className="text-base font-semibold text-on-surface">Show on closed books page</p>
+            <p className="text-sm text-on-surface-variant mt-1">
               When your books are closed, embed this contact form so visitors can still reach you.
             </p>
           </div>
@@ -261,9 +261,9 @@ export function ContactFormSettings({
 
       {/* Public link */}
       {publicUrl && (
-        <div className="rounded-xl border border-outline-variant/20 p-5">
-          <p className="text-sm font-semibold text-on-surface mb-1">Public URL</p>
-          <p className="text-xs text-on-surface-variant mb-3">Share this link or embed it anywhere.</p>
+        <div className="rounded-xl border border-outline-variant/40 p-5">
+          <p className="text-base font-semibold text-on-surface mb-1">Public URL</p>
+          <p className="text-sm text-on-surface-variant mb-3">Share this link or embed it anywhere.</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 px-3 py-2 text-xs bg-surface-container-low border border-outline-variant/20 rounded-lg text-on-surface-variant truncate">
               {typeof window !== "undefined" ? `${window.location.origin}${publicUrl}` : publicUrl}

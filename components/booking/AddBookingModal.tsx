@@ -324,7 +324,7 @@ function SendFormOption({
       <div className="rounded-xl bg-primary/5 border border-primary/15 p-4 space-y-3">
         <div>
           <p className="text-base font-medium text-on-surface">Send {firstName} the form</p>
-          <p className="text-xs text-on-surface-variant mt-0.5">Their name, email, and phone are pre-filled — they just fill in the tattoo details and submit.</p>
+          <p className="text-sm text-on-surface-variant mt-1">Their name, email, and phone are pre-filled — they just fill in the tattoo details and submit.</p>
         </div>
         <div className="flex items-center gap-2">
           <input

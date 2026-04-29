@@ -848,7 +848,7 @@ export function FormBuilderSettings({
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-8 shadow-sm space-y-8">
       <div>
         <h3 className="text-lg font-heading font-semibold mb-1 text-on-surface">Public Form Builder</h3>
-        <p className="text-sm text-on-surface-variant leading-relaxed">
+        <p className="text-base text-on-surface-variant leading-relaxed">
           Toggle which fields appear on your public booking form and choose which ones are required.
         </p>
       </div>
