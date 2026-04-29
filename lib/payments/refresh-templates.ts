@@ -46,8 +46,12 @@ export async function refreshPaymentLinkTemplates(opts: {
   artistRow: Record<string, unknown>;
   paymentLinks: PaymentLink[];
   emailTexts: string[];
+  // Force-refresh these template ids regardless of whether tokens reference them
+  // — used by callers that resolve a payment link out-of-band (e.g. a booking's
+  // deposit_link_url that fills the bare {paymentLink} via primaryPaymentLink).
+  forceRefreshIds?: string[];
 }): Promise<PaymentLink[]> {
-  const { supabase, artistId, artistRow, paymentLinks, emailTexts } = opts;
+  const { supabase, artistId, artistRow, paymentLinks, emailTexts, forceRefreshIds } = opts;
   if (paymentLinks.length === 0) return paymentLinks;
   if (!paymentLinks.some(isTemplate)) return paymentLinks;
 
@@ -72,6 +76,12 @@ export async function refreshPaymentLinkTemplates(opts: {
   paymentLinks.forEach((l, i) => {
     if (isTemplate(l) && refs.labels.has(l.label.trim().toLowerCase())) indices.add(i);
   });
+  if (forceRefreshIds && forceRefreshIds.length > 0) {
+    const ids = new Set(forceRefreshIds);
+    paymentLinks.forEach((l, i) => {
+      if (l.id && ids.has(l.id) && isTemplate(l)) indices.add(i);
+    });
+  }
 
   if (indices.size === 0) return paymentLinks;
 
