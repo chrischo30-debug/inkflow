@@ -84,9 +84,11 @@ export default async function SignUpPage({
 
             <p className="text-xs text-center text-on-surface-variant/70 mt-2 leading-relaxed">
               By creating an account you agree to our{" "}
-              <Link href="/terms" className="text-primary hover:underline underline-offset-4">Terms</Link>
+              <a href="https://flashbooker.app/terms-and-conditions/" target="_blank" rel="noopener noreferrer"
+                className="text-primary hover:underline underline-offset-4">Terms</a>
               {" "}and{" "}
-              <Link href="/privacy" className="text-primary hover:underline underline-offset-4">Privacy Policy</Link>.
+              <a href="https://flashbooker.app/privacy-policy/" target="_blank" rel="noopener noreferrer"
+                className="text-primary hover:underline underline-offset-4">Privacy Policy</a>.
             </p>
 
             <div className="flex items-center gap-3 my-2">
