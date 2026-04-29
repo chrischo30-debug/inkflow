@@ -186,11 +186,10 @@ export function ConfirmAppointmentModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
       <div
         className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-3xl flex flex-col"
         style={{ maxHeight: "min(90vh, 680px)" }}
-        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant/10 shrink-0">
@@ -212,7 +211,7 @@ export function ConfirmAppointmentModal({
               <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm font-semibold text-on-surface">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+              <span className="text-base font-medium text-on-surface">{MONTH_NAMES[viewMonth]} {viewYear}</span>
               <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -307,7 +306,7 @@ export function ConfirmAppointmentModal({
                   Selected date
                 </p>
                 {date ? (
-                  <p className="text-sm font-semibold text-on-surface leading-tight">
+                  <p className="text-base font-medium text-on-surface leading-tight">
                     {new Date(date + "T12:00:00").toLocaleDateString(undefined, {
                       weekday: "short", month: "long", day: "numeric",
                     })}
@@ -421,11 +420,11 @@ export function ConfirmAppointmentModal({
               </button>
               <div className="flex items-center justify-between">
                 {onSkip ? (
-                  <button type="button" onClick={onSkip} className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2">
+                  <button type="button" onClick={onSkip} className="text-sm text-on-surface-variant hover:text-on-surface-variant transition-colors underline underline-offset-2">
                     skip
                   </button>
                 ) : <span />}
-                <button type="button" onClick={onClose} className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors">
+                <button type="button" onClick={onClose} className="text-sm text-on-surface-variant hover:text-on-surface-variant transition-colors">
                   Cancel
                 </button>
               </div>

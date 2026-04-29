@@ -49,11 +49,16 @@ export async function GET(request: Request) {
     type Busy = { start: string; end: string; source: "google" | "flashbook" };
     const busy: Busy[] = [];
 
+    // Any scheduled booking is a potential conflict — exclude only the
+    // explicit dead-end states. State "confirmed" was the legacy single-stage
+    // value; pipeline_v2 spreads scheduled work across sent_deposit /
+    // sent_calendar / booked / completed (and "confirmed" for legacy rows).
     const { data: bookingRows } = await supabase
       .from("bookings")
       .select("id, appointment_date, state")
       .eq("artist_id", user.id)
-      .eq("state", "confirmed")
+      .not("state", "in", "(cancelled,rejected)")
+      .not("appointment_date", "is", null)
       .gte("appointment_date", start)
       .lte("appointment_date", end);
 

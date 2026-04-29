@@ -128,7 +128,7 @@ export function InquiryForm({
   artistId,
   formFields,
   customFormFields,
-  buttonText = "Submit Inquiry",
+  buttonText = "Submit",
   confirmationMessage,
   successRedirectUrl,
   prefill,

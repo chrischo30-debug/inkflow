@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 import { PipelineView } from "@/components/booking/PipelineView";
+import { PaymentSSEListener } from "@/components/booking/PaymentSSEListener";
 import { BooksToggle } from "@/components/dashboard/BooksToggle";
 import { AddBookingModal } from "@/components/booking/AddBookingModal";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
@@ -26,7 +27,7 @@ export default async function DashboardPage() {
 
   const { data: bookingsData } = await supabase
     .from("bookings")
-    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, inquiry_email_failed, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, sort_order, created_at, updated_at")
+    .select("id, artist_id, client_name, client_email, client_phone, description, size, placement, budget, reference_urls, custom_answers, state, appointment_date, payment_link_sent, last_email_sent_at, sent_emails, inquiry_email_failed, deposit_paid, deposit_link_url, deposit_external_id, payment_provider, stripe_payment_link_url, session_count, session_durations, session_appointments, completed_session_count, sort_order, created_at, updated_at")
     .eq("artist_id", user.id)
     .neq("state", "cancelled")
     .order("sort_order", { ascending: true, nullsFirst: false })
@@ -83,13 +84,13 @@ export default async function DashboardPage() {
   return (
     <div className="dashboard flex fixed inset-0 bg-surface overflow-hidden">
       <Sidebar />
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
+      <main className="flex-1 flex flex-col h-full overflow-hidden" style={{ zoom: 0.9 }}>
         <header className="h-16 flex items-center justify-between px-4 md:px-6 xl:px-8 border-b border-outline-variant/10 bg-surface/80 backdrop-blur-xl sticky top-0 z-40">
           <div className="flex items-center gap-2 min-w-0">
             <MobileNavToggle />
-            <h1 className="text-xl font-heading font-semibold text-on-surface truncate">Dashboard</h1>
+            <h1 className="text-xl font-heading font-semibold text-on-surface truncate" style={{ zoom: 1.1111 }}>Dashboard</h1>
           </div>
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-2 md:gap-3" style={{ zoom: 1.1111 }}>
             <BooksToggle initialOpen={booksOpen} statusLabel={booksLabel} />
             {artistData?.slug && (
               <a
@@ -113,10 +114,10 @@ export default async function DashboardPage() {
         <div className="flex-1 overflow-y-auto">
           {/* Action items */}
           <div className="px-4 md:px-6 xl:px-8 pt-6 pb-4">
-            <p className="text-base text-on-surface-variant mb-5">{greeting}, {firstName}.</p>
+            <p className="text-base text-on-surface-variant mb-5" style={{ zoom: 1.1111 }}>{greeting}, {firstName}.</p>
 
             {newInquiries.length === 0 && followUps.length === 0 && awaitingConfirmation.length === 0 && weekAppointments.length === 0 ? (
-              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 text-center">
+              <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6 text-center" style={{ zoom: 1.1111 }}>
                 <p className="text-sm font-medium text-on-surface">You&apos;re all caught up.</p>
                 <p className="text-sm text-on-surface-variant mt-1">No action items right now.</p>
               </div>
@@ -176,15 +177,18 @@ export default async function DashboardPage() {
               </HelpTooltip>
             </div>
             {bookings.length > 0 ? (
-              <PipelineView
-                initialBookings={bookings}
-                fieldLabelMap={fieldLabelMap}
-                calendarSyncEnabled={Boolean(artistData?.calendar_sync_enabled)}
-                paymentsConnected={paymentsConnected}
-                paymentProvider={effectiveProvider}
-                artistId={user.id}
-                schedulingLinks={Array.isArray((artistData as Record<string,unknown>)?.scheduling_links) ? (artistData as Record<string,unknown>).scheduling_links as import("@/lib/pipeline-settings").SchedulingLink[] : []}
-              />
+              <>
+                <PaymentSSEListener artistId={user.id} />
+                <PipelineView
+                  initialBookings={bookings}
+                  fieldLabelMap={fieldLabelMap}
+                  calendarSyncEnabled={Boolean(artistData?.calendar_sync_enabled)}
+                  paymentsConnected={paymentsConnected}
+                  paymentProvider={effectiveProvider}
+                  artistId={user.id}
+                  schedulingLinks={Array.isArray((artistData as Record<string,unknown>)?.scheduling_links) ? (artistData as Record<string,unknown>).scheduling_links as import("@/lib/pipeline-settings").SchedulingLink[] : []}
+                />
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-outline-variant/30 p-12 text-center">
                 <p className="text-sm text-on-surface-variant">No bookings yet. Share your booking form to get started.</p>

@@ -45,7 +45,7 @@ export function PaymentSettings({ initialLinks }: { initialLinks: PaymentLink[] 
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-6 shadow-sm">
       <div className="flex items-start justify-between mb-1">
-        <h3 className="text-sm font-semibold text-on-surface">Payment Links</h3>
+        <h3 className="text-base font-medium text-on-surface">Payment Links</h3>
         {status === "saved" && (
           <span className="flex items-center gap-1 text-xs text-emerald-600">
             <Check className="w-3 h-3" /> Saved
@@ -59,7 +59,7 @@ export function PaymentSettings({ initialLinks }: { initialLinks: PaymentLink[] 
 
       <div className="space-y-2 mb-3">
         {links.length === 0 && !adding && (
-          <p className="text-xs text-on-surface-variant/60 py-2">No payment links added yet.</p>
+          <p className="text-sm text-on-surface-variant py-2">No payment links added yet.</p>
         )}
         {links.map((link, i) => (
           <div key={i} className="flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2.5">

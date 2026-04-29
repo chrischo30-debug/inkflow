@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays, Plus, Eye, Pencil } from "lucide-react";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
-import { BodyPreview } from "./EmailComposeModal";
+import { BodyPreview, type InsertLink } from "./EmailComposeModal";
 import { EmailVarChips } from "@/components/shared/EmailVarChips";
 import { FormatToolbar } from "@/components/shared/FormatToolbar";
 
@@ -19,7 +19,7 @@ interface Props {
 
 interface Template { state: string | null; subject: string; body: string; }
 
-const DURATIONS = [60, 90, 120, 150, 180, 210, 240];
+const DURATIONS = [60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360];
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS = Array.from({ length: 18 }, (_, i) => {
   const h = i + 6;
@@ -58,23 +58,49 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
   const [origin, setOrigin] = useState("");
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
+  // Variable-resolution context — populated from /send-email so the preview
+  // shows real values and the variable chips list the artist's saved links.
+  const [paymentLinks, setPaymentLinks] = useState<InsertLink[]>([]);
+  const [calendarLinks, setCalendarLinks] = useState<InsertLink[]>([]);
+  const [previewVars, setPreviewVars] = useState<Record<string, string>>({});
+  const [chipSchedulingLinks, setChipSchedulingLinks] = useState<{ id: string; label: string }[]>([]);
+
   useEffect(() => {
     fetch(`/api/bookings/${bookingId}/send-email`)
       .then(r => r.json())
       .then(data => {
         const all: Template[] = data.templates ?? [];
         setTemplates(all);
+        setPaymentLinks(data.paymentLinks ?? []);
+        setCalendarLinks(data.calendarLinks ?? []);
+        setPreviewVars(data.previewVars ?? {});
+        setChipSchedulingLinks(
+          Array.isArray(data.schedulingLinks)
+            ? data.schedulingLinks
+            : initialLinks.map(l => ({ id: l.id, label: l.label }))
+        );
         const calTpl = all.find(t => t.state === "sent_calendar") ?? all[0];
         if (calTpl) { setSubject(calTpl.subject); setBody(calTpl.body); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [bookingId]);
+  }, [bookingId, initialLinks]);
 
   const effectiveLinkId = creatingNew ? "" : selectedLinkId;
   const schedulingUrl = effectiveLinkId
     ? `${origin}/schedule/${artistId}/${effectiveLinkId}?bid=${bookingId}`
     : "";
+
+  // Keep the Preview tab in sync with the currently picked scheduling link so
+  // {schedulingLink} resolves to a live URL instead of the placeholder mark.
+  useEffect(() => {
+    const matched = links.find(l => l.id === effectiveLinkId);
+    setPreviewVars(prev => ({
+      ...prev,
+      schedulingLink: schedulingUrl,
+      schedulingLinkLabel: matched?.label ?? prev.schedulingLinkLabel ?? "",
+    }));
+  }, [schedulingUrl, effectiveLinkId, links]);
 
   const toggleNewDay = (d: number) => {
     setNewLink(prev => ({
@@ -153,8 +179,8 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         <div className="px-6 pt-6 pb-4 border-b border-outline-variant/10 shrink-0">
           <h2 className="text-base font-semibold text-on-surface">Send Calendar Link</h2>
           <p className="text-sm text-on-surface-variant mt-0.5">Send {clientName} a link to pick their appointment time.</p>
@@ -191,7 +217,7 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-medium text-on-surface-variant">New scheduling link</p>
                   {links.length > 0 && (
-                    <button type="button" onClick={() => setCreatingNew(false)} className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant underline">
+                    <button type="button" onClick={() => setCreatingNew(false)} className="text-sm text-on-surface-variant hover:text-on-surface-variant underline">
                       Use existing
                     </button>
                   )}
@@ -253,7 +279,7 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
           <div className="space-y-3">
             <p className="text-xs font-semibold text-on-surface uppercase tracking-wide">Email to client</p>
             {loading ? (
-              <p className="text-xs text-on-surface-variant/60">Loading template…</p>
+              <p className="text-sm text-on-surface-variant">Loading template…</p>
             ) : (
               <>
                 {/* Subject */}
@@ -266,7 +292,7 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
                       className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors" />
                   ) : (
                     <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text" onClick={() => setMode("edit")}>
-                      <BodyPreview text={subject} compact />
+                      <BodyPreview text={subject} vars={previewVars} resolved compact paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
                     </div>
                   )}
                 </div>
@@ -301,7 +327,7 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
                     </div>
                   ) : (
                     <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text min-h-[140px]" onClick={() => setMode("edit")}>
-                      <BodyPreview text={body} />
+                      <BodyPreview text={body} vars={previewVars} resolved paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
                     </div>
                   )}
                 </div>
@@ -309,7 +335,7 @@ export function SendCalendarModal({ bookingId, clientName, schedulingLinks: init
                 {/* Variable chips */}
                 <div className="space-y-1.5">
                   <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
-                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={[]} calendarLinks={[]} schedulingLinks={links} />
+                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={chipSchedulingLinks.length > 0 ? chipSchedulingLinks : links} />
                 </div>
               </>
             )}

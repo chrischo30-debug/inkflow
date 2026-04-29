@@ -24,6 +24,16 @@ export interface SentEmailEntry {
   sent_at: string;
 }
 
+export interface SessionAppointment {
+  appointment_date?: string;
+  completed_at?: string;
+  total_amount?: number;
+  tip_amount?: number;
+  payment_source?: string;
+  notes?: string;
+  google_event_id?: string;
+}
+
 export interface Booking {
   id: string;
   artist_id: string;
@@ -60,6 +70,14 @@ export interface Booking {
   /** @deprecated Use deposit_link_url. Kept on the type so legacy reads still type-check. */
   stripe_payment_link_url?: string;
   scheduling_link_id?: string;
+  /** How many sessions this booking covers (1 for single-session). */
+  session_count?: number;
+  /** Per-session durations in minutes (length = session_count - 1, sessions 2..N). Session 1 uses the scheduling link's duration. */
+  session_durations?: number[];
+  /** Per-session metadata indexed 0..session_count-1. Each entry can hold appointment_date, completed_at, total_amount, tip_amount, google_event_id. */
+  session_appointments?: SessionAppointment[];
+  /** How many sessions the artist has marked complete. When it equals session_count, booking moves to "completed". */
+  completed_session_count?: number;
   total_amount?: number;
   tip_amount?: number;
   payment_source?: string;

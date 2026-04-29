@@ -54,13 +54,13 @@ function KpiCard({
   return (
     <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/15"}`}>
       <div className="flex items-center justify-between">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface/60" : "text-on-surface-variant"}`}>{label}</p>
+        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
         <div className={`p-2 rounded-xl ${accent ? "bg-surface/10" : "bg-surface-container-low"}`}>
-          <Icon className={`w-4 h-4 ${accent ? "text-surface/80" : "text-on-surface-variant"}`} />
+          <Icon className={`w-4 h-4 ${accent ? "text-surface" : "text-on-surface-variant"}`} />
         </div>
       </div>
       <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
-      {sub && <p className={`text-xs ${accent ? "text-surface/50" : "text-on-surface-variant/60"}`}>{sub}</p>}
+      {sub && <p className={`text-xs ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
     </div>
   );
 }
@@ -86,18 +86,18 @@ function ToggleKpiCard({
   const sub = period === "monthly" ? monthSub : period === "year" ? yearSub : totalSub;
 
   const activeClass = accent ? "bg-surface/20 text-surface" : "bg-surface-container text-on-surface";
-  const inactiveClass = accent ? "text-surface/40 hover:text-surface/60" : "text-on-surface-variant/50 hover:text-on-surface-variant";
+  const inactiveClass = accent ? "text-surface hover:text-surface" : "text-on-surface-variant hover:text-on-surface-variant";
 
   return (
     <div className={`rounded-2xl border p-5 flex flex-col gap-3 ${accent ? "bg-on-surface text-surface border-transparent" : "bg-surface border-outline-variant/15"}`}>
       <div className="flex items-center justify-between">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface/60" : "text-on-surface-variant"}`}>{label}</p>
+        <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-surface" : "text-on-surface-variant"}`}>{label}</p>
         <div className={`p-2 rounded-xl ${accent ? "bg-surface/10" : "bg-surface-container-low"}`}>
-          <Icon className={`w-4 h-4 ${accent ? "text-surface/80" : "text-on-surface-variant"}`} />
+          <Icon className={`w-4 h-4 ${accent ? "text-surface" : "text-on-surface-variant"}`} />
         </div>
       </div>
       <p className={`text-2xl font-bold font-heading leading-none ${accent ? "text-surface" : "text-on-surface"}`}>{value}</p>
-      {sub && <p className={`text-xs ${accent ? "text-surface/50" : "text-on-surface-variant/60"}`}>{sub}</p>}
+      {sub && <p className={`text-xs ${accent ? "text-surface" : "text-on-surface-variant"}`}>{sub}</p>}
       <div className={`flex items-center gap-1 mt-auto pt-2 ${accent ? "border-t border-surface/10" : "border-t border-outline-variant/10"}`}>
         {(["monthly", "year", "total"] as Period[]).map(p => (
           <button
@@ -159,7 +159,7 @@ function HorizBar({ data, color, showRevenue = false }: { data: DistItem[]; colo
             </div>
             {showRevenue && (
               <p className="text-xs text-emerald-600 font-medium w-14 text-right tabular-nums">
-                {rev > 0 ? fmt$(rev) : <span className="text-on-surface-variant/40">—</span>}
+                {rev > 0 ? fmt$(rev) : <span className="text-on-surface-variant">—</span>}
               </p>
             )}
             <p className="text-xs font-medium text-on-surface w-6 text-right tabular-nums">{item.count}</p>
@@ -216,7 +216,7 @@ function PipelineFunnel({ stateData, totalBookings }: { stateData: { state: stri
 // ─── Budget vs Actual comparison ─────────────────────────────────────────────
 function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: number }) {
   if (avgBudget === 0 && avgPrice === 0) {
-    return <p className="text-xs text-on-surface-variant/60 italic">No budget or pricing data yet.</p>;
+    return <p className="text-xs text-on-surface-variant italic">No budget or pricing data yet.</p>;
   }
   const max = Math.max(avgBudget, avgPrice, 1);
   const items = [
@@ -240,7 +240,7 @@ function BudgetVsActual({ avgBudget, avgPrice }: { avgBudget: number; avgPrice: 
         </div>
       ))}
       {avgBudget > 0 && avgPrice > 0 && (
-        <p className="text-xs text-on-surface-variant/70 pt-1">
+        <p className="text-xs text-on-surface-variant pt-1">
           Avg price is{" "}
           <span className={`font-semibold ${avgPrice > avgBudget ? "text-emerald-600" : "text-amber-600"}`}>
             {avgPrice > avgBudget ? "+" : ""}{fmt$(avgPrice - avgBudget)}
@@ -330,7 +330,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </ResponsiveContainer>
           ) : (
             <div className="h-[220px] flex items-center justify-center">
-              <p className="text-sm text-on-surface-variant/60">Revenue will appear once sessions are completed.</p>
+              <p className="text-sm text-on-surface-variant">Revenue will appear once sessions are completed.</p>
             </div>
           )}
         </Section>
@@ -371,7 +371,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
             </>
           ) : (
             <div className="h-40 flex items-center justify-center">
-              <p className="text-sm text-on-surface-variant/60">No bookings yet.</p>
+              <p className="text-sm text-on-surface-variant">No bookings yet.</p>
             </div>
           )}
         </Section>
@@ -411,28 +411,28 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Section title="Top Placements">
           {placements.length > 0 ? (
             <>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant/60">
+              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
                 <span className="w-14 text-right">Revenue</span>
                 <span className="w-6 text-right">Count</span>
               </div>
               <HorizBar data={placements} color="#8b5cf6" showRevenue />
             </>
           ) : (
-            <p className="text-sm text-on-surface-variant/60">No placement data collected yet.</p>
+            <p className="text-sm text-on-surface-variant">No placement data collected yet.</p>
           )}
         </Section>
 
         <Section title="Size Distribution">
           {sizes.length > 0 ? (
             <>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant/60">
+              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
                 <span className="w-14 text-right">Revenue</span>
                 <span className="w-6 text-right">Count</span>
               </div>
               <HorizBar data={sizes} color="#ec4899" showRevenue />
             </>
           ) : (
-            <p className="text-sm text-on-surface-variant/60">No size data collected yet.</p>
+            <p className="text-sm text-on-surface-variant">No size data collected yet.</p>
           )}
         </Section>
       </div>
@@ -442,18 +442,18 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
         <Section title="Popular Request Types">
           {requestTypes.length > 0 ? (
             <>
-              <div className="flex items-center gap-2 mb-3 text-xs text-on-surface-variant/70">
+              <div className="flex items-center gap-2 mb-3 text-xs text-on-surface-variant">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Extracted from booking descriptions — a request may match multiple types.</span>
               </div>
-              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant/60">
+              <div className="flex items-center justify-end gap-3 mb-2 text-[10px] uppercase tracking-wide text-on-surface-variant">
                 <span className="w-14 text-right">Revenue</span>
                 <span className="w-6 text-right">Count</span>
               </div>
               <HorizBar data={requestTypes} color="#6366f1" showRevenue />
             </>
           ) : (
-            <p className="text-sm text-on-surface-variant/60">
+            <p className="text-sm text-on-surface-variant">
               Request-type analytics will appear once bookings include descriptions.
             </p>
           )}
@@ -491,7 +491,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsData }) {
               </div>
             </div>
             {returningClients > 0 && (
-              <p className="text-xs text-on-surface-variant/70">
+              <p className="text-xs text-on-surface-variant">
                 {pct((returningClients / Math.max(totalClients, 1)) * 100)} of your clients have booked more than once
               </p>
             )}

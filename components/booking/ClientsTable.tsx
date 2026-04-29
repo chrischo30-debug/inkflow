@@ -5,7 +5,7 @@ import { formatPhone } from "@/lib/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Search, ChevronRight, Plus, Pencil, Trash2, X, Mail, Copy, Check, ExternalLink, Send } from "lucide-react";
+import { Search, ChevronRight, Plus, Pencil, Trash2, X, Mail, Copy, Check, ExternalLink } from "lucide-react";
 import type { Booking } from "@/lib/types";
 import { BookingFormModal } from "./AddBookingModal";
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
@@ -171,8 +171,8 @@ function EditClientModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant/20">
           <h2 className="text-base font-semibold text-on-surface">Edit client</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
@@ -227,8 +227,8 @@ function DeleteConfirmModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="px-6 pt-6 pb-4">
           <h2 className="text-base font-semibold text-on-surface mb-2">Delete client?</h2>
           <p className="text-sm text-on-surface-variant">
@@ -306,8 +306,8 @@ function EditSessionModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center sm:p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center sm:p-4 bg-black/40">
+      <div className="bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
           <h2 className="text-base font-semibold text-on-surface">Edit session</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
@@ -361,6 +361,7 @@ type EmailCompose = {
   defaultTemplateState?: string | null;
   paymentLinks?: InsertLink[];
   calendarLinks?: InsertLink[];
+  schedulingLinks?: { id: string; label: string }[];
   previewVars?: Record<string, string>;
 };
 
@@ -410,6 +411,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
         defaultTemplateState: null,
         paymentLinks: data.paymentLinks ?? [],
         calendarLinks: data.calendarLinks ?? [],
+        schedulingLinks: data.schedulingLinks ?? [],
         previewVars: data.previewVars,
       });
     } finally {
@@ -603,7 +605,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                             {/* Client header */}
                             <div className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-container-low/50 border-b border-outline-variant/10">
                               <div>
-                                <p className="text-sm font-semibold text-on-surface">{client.name}</p>
+                                <p className="text-base font-medium text-on-surface">{client.name}</p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <button
@@ -647,7 +649,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                                       {session.description || <span className="italic opacity-50">No description</span>}
                                     </p>
                                     {session.total_amount != null && (
-                                      <p className="text-xs text-on-surface-variant/70 mt-1">
+                                      <p className="text-sm text-on-surface-variant mt-1">
                                         ${session.total_amount.toLocaleString()}
                                         {session.tip_amount != null && session.tip_amount > 0 && ` + $${session.tip_amount} tip`}
                                       </p>
@@ -663,15 +665,6 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
-                                    <button
-                                      type="button"
-                                      title="Send email about this booking"
-                                      disabled={emailLoadingFor === session.id}
-                                      onClick={() => openEmailComposeForSession(session.id, session.id)}
-                                      className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary transition-colors disabled:opacity-40"
-                                    >
-                                      <Send className="w-3.5 h-3.5" />
-                                    </button>
                                     <Link
                                       href={`/bookings?expand=${session.id}`}
                                       title="View in bookings"
@@ -696,19 +689,10 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
                                     </div>
                                     <div className="space-y-1">
                                       {(session.sent_emails ?? []).map((entry, i) => (
-                                        <div key={i} className="flex items-center justify-between gap-3 group">
-                                          <span className="text-xs text-on-surface-variant truncate">{entry.label}</span>
+                                        <div key={i} className="flex items-center justify-between gap-3">
+                                          <span className="text-sm text-on-surface truncate">{entry.label}</span>
                                           <div className="flex items-center gap-2 shrink-0">
-                                            <span className="text-[11px] text-on-surface-variant/60">{fmtDate(entry.sent_at)}</span>
-                                            <button
-                                              type="button"
-                                              title="Resend"
-                                              disabled={emailLoadingFor === session.id}
-                                              onClick={() => openEmailComposeForSession(session.id, session.id)}
-                                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-primary disabled:opacity-30"
-                                            >
-                                              <Send className="w-3 h-3" />
-                                            </button>
+                                            <span className="text-xs text-on-surface-variant">{fmtDate(entry.sent_at)}</span>
                                           </div>
                                         </div>
                                       ))}
@@ -773,6 +757,7 @@ export function ClientsTable({ bookings: initialBookings, artistSlug = "" }: { b
           defaultTemplateState={emailCompose.defaultTemplateState}
           paymentLinks={emailCompose.paymentLinks}
           calendarLinks={emailCompose.calendarLinks}
+          schedulingLinks={emailCompose.schedulingLinks}
           previewVars={emailCompose.previewVars}
           draftKey={`fb:email-draft:${emailCompose.bookingId}:clients`}
           onSend={sendEmail}

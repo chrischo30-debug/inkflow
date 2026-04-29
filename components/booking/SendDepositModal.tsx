@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Check, DollarSign, Eye, Pencil } from "lucide-react";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
-import { BodyPreview } from "./EmailComposeModal";
+import { BodyPreview, type InsertLink } from "./EmailComposeModal";
 import { EmailVarChips } from "@/components/shared/EmailVarChips";
 import { FormatToolbar } from "@/components/shared/FormatToolbar";
 
@@ -46,18 +46,33 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
   // Automation scheduling link (only shown when a payment provider is connected)
   const [automationLinkId, setAutomationLinkId] = useState<string>("");
 
+  // Variable-resolution context — populated from /send-email so the preview
+  // shows real values and the variable chips list the artist's saved links.
+  const [paymentLinks, setPaymentLinks] = useState<InsertLink[]>([]);
+  const [calendarLinks, setCalendarLinks] = useState<InsertLink[]>([]);
+  const [previewVars, setPreviewVars] = useState<Record<string, string>>({});
+  const [chipSchedulingLinks, setChipSchedulingLinks] = useState<{ id: string; label: string }[]>([]);
+
   useEffect(() => {
     fetch(`/api/bookings/${bookingId}/send-email`)
       .then(r => r.json())
       .then(data => {
         const all: Template[] = data.templates ?? [];
         setTemplates(all);
+        setPaymentLinks(data.paymentLinks ?? []);
+        setCalendarLinks(data.calendarLinks ?? []);
+        setPreviewVars(data.previewVars ?? {});
+        setChipSchedulingLinks(
+          Array.isArray(data.schedulingLinks)
+            ? data.schedulingLinks
+            : schedulingLinks.map(l => ({ id: l.id, label: l.label }))
+        );
         const tpl = all.find(t => t.state === "accepted") ?? all.find(t => t.state === "sent_deposit") ?? all[0];
         if (tpl) { setSubject(tpl.subject); setBody(tpl.body); setSelectedState(tpl.state ?? ""); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [bookingId]);
+  }, [bookingId, schedulingLinks]);
 
   const selectTemplate = (state: string) => {
     setSelectedState(state);
@@ -90,6 +105,22 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
     });
   };
 
+  // When a deposit link is in play (just generated, or pre-existing on the
+  // booking), surface it in the variable picker and resolve {paymentLink} in
+  // the Preview tab. The backend also appends to artist.payment_links, but we
+  // don't refetch — local merge keeps the modal snappy.
+  const registerDepositLink = (url: string) => {
+    const label = `Deposit — ${clientName}`;
+    setPaymentLinks(prev => prev.some(l => l.url === url) ? prev : [...prev, { label, url }]);
+    setPreviewVars(prev => ({ ...prev, paymentLink: url }));
+  };
+
+  useEffect(() => {
+    if (existingDepositUrl) registerDepositLink(existingDepositUrl);
+    // existingDepositUrl is stable for the modal's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingDepositUrl]);
+
   const generateDepositLink = async () => {
     const cents = Math.round(parseFloat(depositAmount) * 100);
     if (!cents || cents < 100) { setLinkError("Enter a valid amount (min $1)"); return; }
@@ -102,6 +133,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
       const data = await res.json();
       if (!res.ok) { setLinkError(data.error ?? "Failed to generate link"); return; }
       setDepositUrl(data.url);
+      registerDepositLink(data.url);
       navigator.clipboard.writeText(data.url).then(() => {
         setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000);
       });
@@ -140,8 +172,8 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-outline-variant/10 shrink-0">
           <h2 className="text-base font-semibold text-on-surface">Send Deposit</h2>
@@ -226,7 +258,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
               )}
             </div>
             {loading ? (
-              <p className="text-xs text-on-surface-variant/60">Loading template…</p>
+              <p className="text-sm text-on-surface-variant">Loading template…</p>
             ) : (
               <>
                 {/* Subject */}
@@ -239,7 +271,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
                       className="w-full border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-3 text-sm text-on-surface focus:outline-none focus:border-primary transition-colors" />
                   ) : (
                     <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text" onClick={() => setMode("edit")}>
-                      <BodyPreview text={subject} compact />
+                      <BodyPreview text={subject} vars={previewVars} resolved compact paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
                     </div>
                   )}
                 </div>
@@ -274,7 +306,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
                     </div>
                   ) : (
                     <div className="px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text min-h-[140px]" onClick={() => setMode("edit")}>
-                      <BodyPreview text={body} />
+                      <BodyPreview text={body} vars={previewVars} resolved paymentLinks={paymentLinks} calendarLinks={calendarLinks} />
                     </div>
                   )}
                 </div>
@@ -282,7 +314,7 @@ export function SendDepositModal({ bookingId, clientName, existingDepositUrl, pa
                 {/* Variable chips */}
                 <div className="space-y-1.5">
                   <p className="text-xs text-on-surface-variant">Insert variable into focused field:</p>
-                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={[]} calendarLinks={[]} schedulingLinks={[]} />
+                  <EmailVarChips onInsert={insertAtCursor} paymentLinks={paymentLinks} calendarLinks={calendarLinks} schedulingLinks={chipSchedulingLinks} />
                 </div>
               </>
             )}

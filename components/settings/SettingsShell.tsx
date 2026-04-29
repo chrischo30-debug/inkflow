@@ -8,6 +8,8 @@ import { GoogleIntegrationSettings } from "./GoogleIntegrationSettings";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import { ExternalApiSettings } from "./ExternalApiSettings";
 import { ReminderSettings } from "./ReminderSettings";
+import { AdminEmailSettings } from "./AdminEmailSettings";
+import { ExportSettings } from "./ExportSettings";
 import type { CalendarLink, PaymentLink, SchedulingLink } from "@/lib/pipeline-settings";
 import { MobileNavToggle } from "@/components/layout/MobileNavToggle";
 
@@ -47,6 +49,10 @@ export interface SettingsShellProps {
   schedulingLinks: SchedulingLink[];
   reminderEnabled: boolean;
   reminderHoursBefore: number;
+  notifyNewSubmission: boolean;
+  notifyNewBooking: boolean;
+  notifyReschedule: boolean;
+  notifyContactForm: boolean;
   initialTab?: TabId;
 }
 
@@ -106,6 +112,14 @@ export function SettingsShell(props: SettingsShellProps) {
                   logo_url: props.logoUrl,
                 }}
               />
+
+              <div className="pt-4">
+                <h2 className="text-xl font-heading font-semibold text-on-surface mb-1">Export your data</h2>
+                <p className="text-base text-on-surface-variant mb-4">
+                  Download a CSV of your bookings or client list. Open in any spreadsheet app.
+                </p>
+                <ExportSettings />
+              </div>
             </div>
           )}
 
@@ -137,7 +151,7 @@ export function SettingsShell(props: SettingsShellProps) {
           )}
 
           {tab === "emails" && (
-            <div className="max-w-2xl space-y-6">
+            <div className="max-w-2xl space-y-8">
               <SectionHeading
                 title="Email Templates"
                 description={[
@@ -153,6 +167,21 @@ export function SettingsShell(props: SettingsShellProps) {
                 studioAddress={props.studioAddress}
                 artistId={props.artistId}
               />
+
+              <div className="pt-4">
+                <h2 className="text-xl font-heading font-semibold text-on-surface mb-1">Notifications to you</h2>
+                <p className="text-base text-on-surface-variant mb-4">
+                  System emails FlashBooker sends to your inbox. Toggle off any you don&apos;t want.
+                </p>
+                <AdminEmailSettings
+                  initial={{
+                    notify_new_submission: props.notifyNewSubmission,
+                    notify_new_booking: props.notifyNewBooking,
+                    notify_reschedule: props.notifyReschedule,
+                    notify_contact_form: props.notifyContactForm,
+                  }}
+                />
+              </div>
             </div>
           )}
 
@@ -162,7 +191,7 @@ export function SettingsShell(props: SettingsShellProps) {
                 title="Appointment Reminders"
                 description={[
                   "Send clients a reminder email before their appointment.",
-                  "Pick how far ahead the reminder goes out. We&rsquo;ll only send for confirmed bookings.",
+                  "Pick how far ahead the reminder goes out. We’ll only send for confirmed bookings.",
                 ]}
               />
               <ReminderSettings
@@ -182,8 +211,8 @@ function SectionHeading({ title, description }: { title: string; description: st
   const lines = Array.isArray(description) ? description : [description];
   return (
     <div className="mb-2">
-      <h2 className="text-lg font-heading font-semibold text-on-surface">{title}</h2>
-      <div className="mt-2 space-y-2">
+      <h2 className="text-xl font-heading font-semibold text-on-surface">{title}</h2>
+      <div className="mt-1 space-y-1.5">
         {lines.map((line, i) => (
           <p key={i} className="text-base text-on-surface-variant leading-relaxed">{line}</p>
         ))}

@@ -21,6 +21,8 @@ const bodySchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/),
   end: z.string().regex(/^\d{2}:\d{2}$/),
   bid: z.string().uuid().optional(),
+  /** 1-based session index for multi-session bookings; defaults to 1. */
+  session: z.number().int().min(1).optional(),
 });
 
 function formatDate(dateStr: string) {
@@ -60,7 +62,7 @@ export async function POST(
   const admin = createAdminClient();
   const { data: artist } = await admin
     .from("artists")
-    .select("scheduling_links, email, name, gmail_address, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, google_refresh_token, calendar_sync_enabled")
+    .select("scheduling_links, email, name, gmail_address, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, google_refresh_token, calendar_sync_enabled, notify_new_booking")
     .eq("id", artistId)
     .single();
 
@@ -77,6 +79,48 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  // Defense in depth: re-check the slot against existing bookings server-side
+  // so a crafted request can't bypass the buffer/overlap rules enforced by
+  // the slots endpoint. Buffer is symmetric — applies before and after each
+  // existing booking.
+  {
+    const buffer = Math.max(0, link.buffer_minutes ?? 0);
+    const slotStart = new Date(toAppointmentISO(body.date, body.start, link.timezone));
+    const slotEnd = new Date(toAppointmentISO(body.date, body.end, link.timezone));
+    const dayStartISO = `${body.date}T00:00:00.000Z`;
+    const nextDate = new Date(body.date);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    const dayEndISO = `${nextDate.toISOString().slice(0, 10)}T00:00:00.000Z`;
+
+    const { data: dayBookings } = await admin
+      .from("bookings")
+      .select("id, appointment_date")
+      .eq("artist_id", artistId)
+      .not("state", "in", '("cancelled","rejected")')
+      .gte("appointment_date", dayStartISO)
+      .lt("appointment_date", dayEndISO);
+
+    const fallbackDuration = link.is_half_day
+      ? (link.half_day_minutes ?? 240)
+      : link.duration_minutes;
+    const conflict = (dayBookings ?? [])
+      .filter(b => b.appointment_date && b.id !== body.bid)
+      .some(b => {
+        const bStart = new Date(b.appointment_date as string);
+        const bEnd = new Date(bStart.getTime() + fallbackDuration * 60000);
+        const inflStart = new Date(bStart.getTime() - buffer * 60000);
+        const inflEnd = new Date(bEnd.getTime() + buffer * 60000);
+        return slotStart < inflEnd && slotEnd > inflStart;
+      });
+
+    if (conflict) {
+      return NextResponse.json(
+        { error: "That time conflicts with another booking. Please pick a different slot." },
+        { status: 409 },
+      );
+    }
+  }
+
   // If a booking ID was provided, update it — verify it belongs to this artist first.
   // Also capture client details so we can send them a confirmation email below.
   let clientEmailToConfirm: string | null = null;
@@ -85,23 +129,70 @@ export async function POST(
   if (body.bid) {
     const { data: booking } = await admin
       .from("bookings")
-      .select("id, state, artist_id, client_email, client_name, thread_message_id")
+      .select("id, state, artist_id, client_email, client_name, thread_message_id, session_count, session_appointments, appointment_date")
       .eq("id", body.bid)
       .eq("artist_id", artistId)
       .single();
 
     if (booking) {
       const appointmentISO = toAppointmentISO(body.date, body.start, link.timezone);
-      const terminalStates = ["booked", "confirmed", "completed", "cancelled", "rejected"];
-      const shouldBook = !terminalStates.includes(booking.state);
 
-      await admin
-        .from("bookings")
-        .update({
-          appointment_date: appointmentISO,
-          ...(shouldBook ? { state: "booked" } : {}),
-        })
-        .eq("id", body.bid);
+      type Br = { session_count?: number | null; session_appointments?: unknown; appointment_date?: string | null };
+      const br = booking as Br;
+      const sessionCount = br.session_count ?? 1;
+      const sessionIdxParam = body.session && body.session > 0 ? body.session : 1;
+      const sessionIdx0 = sessionIdxParam - 1;
+
+      // Guardrail: a per-client booking link is single-use per session.
+      // If the booking is already booked / completed / cancelled / rejected, or
+      // if the targeted session already has a date, reject the request so the
+      // client can't overwrite the appointment by reopening the same email link.
+      const terminalStates = ["completed", "cancelled", "rejected"];
+      if (terminalStates.includes(booking.state)) {
+        return NextResponse.json(
+          { error: "This booking is no longer accepting scheduling. Reach out to your artist if you need to change the time." },
+          { status: 409 },
+        );
+      }
+
+      if (sessionCount > 1) {
+        const apps = Array.isArray(br.session_appointments)
+          ? (br.session_appointments as Record<string, unknown>[])
+          : [];
+        const existingDate = (apps[sessionIdx0] as { appointment_date?: string } | undefined)?.appointment_date;
+        if (existingDate) {
+          return NextResponse.json(
+            { error: `Session ${sessionIdxParam} is already booked. Reach out to your artist if you need to change the time.` },
+            { status: 409 },
+          );
+        }
+      } else if (br.appointment_date || booking.state === "booked" || booking.state === "confirmed") {
+        return NextResponse.json(
+          { error: "This booking already has an appointment. Reach out to your artist if you need to change the time." },
+          { status: 409 },
+        );
+      }
+
+      const updates: Record<string, unknown> = {};
+
+      if (sessionCount > 1) {
+        // Multi-session: slot the picked date into session_appointments[idx]
+        // and only set the top-level appointment_date when session 1 is booked
+        // (so the upcoming-appointment / reminders still target the next session).
+        const apps = Array.isArray(br.session_appointments)
+          ? [...(br.session_appointments as Record<string, unknown>[])]
+          : [];
+        while (apps.length <= sessionIdx0) apps.push({});
+        apps[sessionIdx0] = { ...(apps[sessionIdx0] ?? {}), appointment_date: appointmentISO };
+        updates.session_appointments = apps;
+        if (sessionIdxParam === 1) updates.appointment_date = appointmentISO;
+        if (booking.state !== "booked" && booking.state !== "confirmed") updates.state = "booked";
+      } else {
+        updates.appointment_date = appointmentISO;
+        updates.state = "booked";
+      }
+
+      await admin.from("bookings").update(updates).eq("id", body.bid);
 
       clientEmailToConfirm = booking.client_email;
       clientNameToConfirm = booking.client_name;
@@ -139,11 +230,12 @@ export async function POST(
     } catch (e) { console.error("Calendar event creation on schedule failed:", e); }
   }
 
-  const bookingUrl = body.bid ? `${APP_URL}/bookings/${body.bid}` : null;
+  const bookingUrl = body.bid ? `${APP_URL}/bookings?expand=${body.bid}` : null;
   const clientDisplay = clientNameToConfirm ?? "A client";
 
+  const notifyNewBooking = (artist as { notify_new_booking?: boolean | null }).notify_new_booking !== false;
   try {
-    if (process.env.NODE_ENV === "production" || process.env.RESEND_API_KEY) {
+    if (notifyNewBooking && (process.env.NODE_ENV === "production" || process.env.RESEND_API_KEY)) {
       const linksHtml = [
         bookingUrl ? `<a href="${bookingUrl}" style="color:#4f46e5">View booking →</a>` : null,
         calHtmlLink ? `<a href="${calHtmlLink}" style="color:#4f46e5">View in Google Calendar →</a>` : null,

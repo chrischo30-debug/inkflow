@@ -11,10 +11,11 @@ export default async function SchedulePage({
   searchParams,
 }: {
   params: Promise<{ artistId: string; linkId: string }>;
-  searchParams?: Promise<{ bid?: string }>;
+  searchParams?: Promise<{ bid?: string; session?: string }>;
 }) {
   const { artistId, linkId } = await params;
-  const { bid } = searchParams ? await searchParams : {};
+  const { bid, session } = searchParams ? await searchParams : {};
+  const sessionNum = session ? parseInt(session, 10) : undefined;
 
   const admin = createAdminClient();
   // Use select(*) so a single missing column (e.g. studio_address before migration) doesn't wipe the row
@@ -43,6 +44,7 @@ export default async function SchedulePage({
       blockedDates={blockedDates}
       link={link}
       bid={bid}
+      session={Number.isFinite(sessionNum) && sessionNum && sessionNum > 0 ? sessionNum : undefined}
     />
   );
 }

@@ -57,8 +57,8 @@ export function ReminderSettings({
     <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold text-on-surface">Appointment reminders</p>
-          <p className="text-sm text-on-surface-variant mt-0.5">
+          <p className="text-base font-medium text-on-surface">Appointment reminders</p>
+          <p className="text-sm text-on-surface-variant mt-1">
             Automatically email clients a reminder before their appointment.
           </p>
         </div>

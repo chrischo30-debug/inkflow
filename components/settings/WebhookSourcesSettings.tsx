@@ -355,7 +355,7 @@ export function WebhookSourcesSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-on-surface mb-1">Webhook Sources</h3>
+        <h3 className="text-base font-medium text-on-surface mb-1">Webhook Sources</h3>
         <p className="text-xs text-on-surface-variant leading-relaxed">
           Connect JotForm, Wix, Forminator, or any form tool that supports webhooks. Submissions are routed directly into your bookings pipeline.
         </p>

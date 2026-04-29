@@ -170,8 +170,12 @@ export function AccountSettings({
       </p>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
-          <div className="space-y-2">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-6 max-w-2xl"
+          suppressHydrationWarning
+        >
+          <div className="space-y-2" suppressHydrationWarning>
             <FormLabel className="text-sm font-sans tracking-wide text-on-surface-variant">Login Email</FormLabel>
             <Input value={initialValues.email} disabled className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-6" />
           </div>

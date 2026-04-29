@@ -343,7 +343,7 @@ export function ExternalApiSettings(props: Props) {
       </div>
 
       {stripeConnected && squareConnected && (
-        <p className="text-xs text-on-surface-variant/70">
+        <p className="text-sm text-on-surface-variant">
           Both providers have credentials saved. Only the active one ({activeProvider ?? "—"}) is used for new deposits — switch by saving on the other tab.
         </p>
       )}
@@ -457,7 +457,7 @@ function StripePanel({
           }`}>
             {savedStripeWebhookSecret ? "✓" : "2"}
           </span>
-          <p className="text-sm font-semibold text-on-surface">Stripe Webhook</p>
+          <p className="text-base font-medium text-on-surface">Stripe Webhook</p>
           {step2Flash && !savedStripeWebhookSecret && (
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 animate-pulse">
               Do this next
@@ -487,7 +487,7 @@ function StripePanel({
         </ol>
 
         <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-3">
-          <p className="text-sm font-semibold text-on-surface">Webhook Signing Secret</p>
+          <p className="text-base font-medium text-on-surface">Webhook Signing Secret</p>
           <div className="flex gap-2">
             <SecretField
               value={stripeWebhookSecret}
@@ -600,7 +600,7 @@ function SquarePanel({
           }`}>
             {savedSquareWebhookKey ? "✓" : "2"}
           </span>
-          <p className="text-sm font-semibold text-on-surface">Square Webhook</p>
+          <p className="text-base font-medium text-on-surface">Square Webhook</p>
           {step2Flash && !savedSquareWebhookKey && (
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 animate-pulse">
               Do this next
@@ -636,7 +636,7 @@ function SquarePanel({
         </ol>
 
         <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-3">
-          <p className="text-sm font-semibold text-on-surface">Webhook Signature Key</p>
+          <p className="text-base font-medium text-on-surface">Webhook Signature Key</p>
           <div className="flex gap-2">
             <SecretField
               value={squareWebhookKey}

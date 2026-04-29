@@ -113,7 +113,7 @@ export function BooksSettings({
       {/* Closed page content */}
       <div className="rounded-xl border border-outline-variant/20 p-5 space-y-4">
         <div>
-          <p className="text-sm font-semibold text-on-surface mb-0.5">Closed page</p>
+          <p className="text-base font-medium text-on-surface mb-0.5">Closed page</p>
           <p className="text-sm text-on-surface-variant">
             What visitors see when your booking form is closed.
           </p>
@@ -129,7 +129,7 @@ export function BooksSettings({
             placeholder="Your artist name (default)"
             className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888]"
           />
-          <p className="text-xs text-on-surface-variant/60">Defaults to your artist name if left blank.</p>
+          <p className="text-sm text-on-surface-variant">Defaults to your artist name if left blank.</p>
         </div>
 
         <div className="space-y-1.5">

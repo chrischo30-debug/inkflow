@@ -271,14 +271,13 @@ export function EmailComposeModal({
   const previewClass = "px-4 py-3 bg-surface-container-high/40 border-b border-outline-variant rounded-t-lg rounded-b-none cursor-text";
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
       <div
         className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl w-full max-w-3xl flex flex-col overflow-hidden max-h-[92vh]"
-        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
-          <h2 className="text-sm font-semibold text-on-surface">Send Email</h2>
+          <h2 className="text-base font-medium text-on-surface">Send Email</h2>
           <button type="button" onClick={onClose} className="p-2 -mr-1 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
             <X className="w-4 h-4" />
           </button>
@@ -416,7 +415,7 @@ export function EmailComposeModal({
               <button
                 type="button"
                 onClick={handleSkip}
-                className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2"
+                className="text-sm text-on-surface-variant hover:text-on-surface-variant transition-colors underline underline-offset-2"
               >
                 skip email
               </button>

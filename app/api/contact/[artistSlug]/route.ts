@@ -22,7 +22,7 @@ export async function POST(
 
     const { data: artist } = await admin
       .from("artists")
-      .select("id, email, name, contact_form_enabled, contact_phone_enabled, contact_phone_required")
+      .select("id, email, name, contact_form_enabled, contact_phone_enabled, contact_phone_required, notify_contact_form")
       .eq("slug", artistSlug)
       .single();
 
@@ -53,9 +53,10 @@ export async function POST(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // Notify the artist by email
+    // Notify the artist by email — gated on the per-artist preference.
     const resendKey = process.env.RESEND_API_KEY;
-    if (artist.email && resendKey) {
+    const notifyContactForm = (artist as { notify_contact_form?: boolean | null }).notify_contact_form !== false;
+    if (artist.email && resendKey && notifyContactForm) {
       try {
         const resend = new Resend(resendKey);
         const fromAddress = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
