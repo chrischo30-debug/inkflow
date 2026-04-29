@@ -92,7 +92,7 @@ export default async function BookPage({
       customFormFields={normalizeCustomFormFields(rawCustomFields ?? [])}
       formHeader={artist.form_header || `Book with ${artistName}`}
       formSubtext={artist.form_subtext || `Fill out the form below to request an appointment.<br />I'll review your idea and get back to you.`}
-      buttonText={artist.form_button_text || "Submit Inquiry"}
+      buttonText={artist.form_button_text || "Submit"}
       layout={(artist.booking_layout as "centered" | "banner" | "minimal" | "full") || "centered"}
       font={(artist.booking_font as string) || "Manrope"}
       fontScale={(artist.booking_font_scale as string) || "17"}

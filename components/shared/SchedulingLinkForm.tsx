@@ -9,7 +9,9 @@ export const DURATIONS = [
   { label: "1 hr", minutes: 60 }, { label: "1.5 hrs", minutes: 90 },
   { label: "2 hrs", minutes: 120 }, { label: "2.5 hrs", minutes: 150 },
   { label: "3 hrs", minutes: 180 }, { label: "3.5 hrs", minutes: 210 },
-  { label: "4 hrs", minutes: 240 },
+  { label: "4 hrs", minutes: 240 }, { label: "4.5 hrs", minutes: 270 },
+  { label: "5 hrs", minutes: 300 }, { label: "5.5 hrs", minutes: 330 },
+  { label: "6 hrs", minutes: 360 },
 ];
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const HOURS = Array.from({ length: 18 }, (_, i) => {
@@ -65,8 +67,8 @@ export type LinkDraft = Omit<SchedulingLink, "id">;
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button type="button" onClick={onToggle} role="switch" aria-checked={on}
-      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${on ? "bg-on-surface" : "bg-outline-variant/40"}`}>
-      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-surface shadow-sm transition-transform ${on ? "translate-x-4" : "translate-x-0.5"}`} />
+      className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-on-surface" : "bg-outline-variant/40"}`}>
+      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-4" : "translate-x-0"}`} />
     </button>
   );
 }

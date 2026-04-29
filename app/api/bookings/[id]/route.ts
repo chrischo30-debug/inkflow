@@ -33,7 +33,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = await req.json();
     const action: string = body.action;
 
-    if (!["advance", "cancel", "update_appointment", "confirm_appointment", "move", "complete", "edit_details", "mark_deposit_paid"].includes(action)) {
+    if (!["advance", "cancel", "update_appointment", "confirm_appointment", "move", "complete", "complete_session", "edit_details", "mark_deposit_paid", "unmark_deposit_paid"].includes(action)) {
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
     }
 
@@ -42,9 +42,63 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ success: true });
     }
 
+    if (action === "unmark_deposit_paid") {
+      await supabase.from("bookings").update({ deposit_paid: false }).eq("id", id).eq("artist_id", user.id);
+      return NextResponse.json({ success: true });
+    }
+
+    // Mark a single session of a multi-session booking complete. Bumps
+    // completed_session_count by 1 and stamps the per-session entry with any
+    // totals / tip / payment source / notes the artist supplied. When the
+    // count reaches session_count, the booking moves to "completed".
+    if (action === "complete_session") {
+      const { data: row } = await supabase
+        .from("bookings")
+        .select("session_count, completed_session_count, session_appointments")
+        .eq("id", id)
+        .eq("artist_id", user.id)
+        .single();
+      if (!row) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+      type Row = { session_count?: number | null; completed_session_count?: number | null; session_appointments?: unknown };
+      const r = row as Row;
+      const sessionCount = r.session_count ?? 1;
+      const currentDone = r.completed_session_count ?? 0;
+      if (currentDone >= sessionCount) {
+        return NextResponse.json({ error: "All sessions already complete" }, { status: 400 });
+      }
+      const idx = currentDone; // mark the next session done (zero-indexed)
+      const apps = Array.isArray(r.session_appointments) ? [...(r.session_appointments as Record<string, unknown>[])] : [];
+      while (apps.length <= idx) apps.push({});
+      const totalAmount = body.total_amount != null && body.total_amount !== "" ? Number(body.total_amount) : null;
+      const tipAmount = body.tip_amount != null && body.tip_amount !== "" ? Number(body.tip_amount) : null;
+      const paymentSource = typeof body.payment_source === "string" && body.payment_source.trim() ? body.payment_source.trim() : null;
+      const notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
+      apps[idx] = {
+        ...(apps[idx] ?? {}),
+        completed_at: new Date().toISOString(),
+        ...(totalAmount != null ? { total_amount: totalAmount } : {}),
+        ...(tipAmount != null ? { tip_amount: tipAmount } : {}),
+        ...(paymentSource ? { payment_source: paymentSource } : {}),
+        ...(notes ? { notes } : {}),
+      };
+      const nextDone = currentDone + 1;
+      const updates: Record<string, unknown> = {
+        completed_session_count: nextDone,
+        session_appointments: apps,
+      };
+      if (nextDone >= sessionCount) updates.state = "completed";
+      const { error: updErr } = await supabase
+        .from("bookings")
+        .update(updates)
+        .eq("id", id)
+        .eq("artist_id", user.id);
+      if (updErr) return NextResponse.json({ error: "Failed to complete session" }, { status: 500 });
+      return NextResponse.json({ success: true, completed_session_count: nextDone, allDone: nextDone >= sessionCount });
+    }
+
     const { data: booking, error: fetchErr } = await supabase
       .from("bookings")
-      .select("state, client_email, client_name, artist_id, appointment_date, description, thread_message_id, google_event_id, gmail_thread_id, sent_emails")
+      .select("state, client_email, client_name, artist_id, appointment_date, description, thread_message_id, google_event_id, gmail_thread_id, sent_emails, scheduling_link_id")
       .eq("id", id)
       .eq("artist_id", user.id)
       .single();
@@ -120,6 +174,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const targetState = body.target_state as BookingState;
       if (!VALID_STATES.includes(targetState)) {
         return NextResponse.json({ error: "Invalid target_state" }, { status: 400 });
+      }
+      // Guardrail: a booking in "booked" / "confirmed" must have an
+      // appointment_date. Reject the move so the caller knows to set one
+      // (UI typically pops the ConfirmAppointmentModal in this case).
+      if ((targetState === "booked" || targetState === "confirmed") && !booking.appointment_date) {
+        return NextResponse.json({ error: "Booked appointments require a date — set one first." }, { status: 400 });
       }
       const moveFields: Record<string, unknown> = { state: targetState, has_unread_reply: false };
       if (body.scheduling_link_id) moveFields.scheduling_link_id = body.scheduling_link_id;
@@ -218,7 +278,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         try {
           const { data: artist } = await supabase
             .from("artists")
-            .select("name, gmail_address, email, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled")
+            .select("name, gmail_address, email, studio_name, studio_address, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, scheduling_links, notify_reschedule")
             .eq("id", user.id)
             .single();
           if (artist && (artist as { auto_emails_enabled?: boolean | null }).auto_emails_enabled !== false) {
@@ -231,9 +291,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             const venueLine = (artist as { studio_name?: string | null }).studio_name || artistName;
             const replyTo = (artist as { gmail_address?: string | null }).gmail_address || (artist as { email?: string | null }).email || null;
 
+            // Format dates in the artist's scheduling-link timezone, not the
+            // server's UTC default — otherwise the email shows times shifted
+            // by the server-vs-artist offset.
+            const bookingSchedulingLinkId = (booking as { scheduling_link_id?: string | null }).scheduling_link_id;
+            type SLink = { id: string; timezone?: string };
+            const allLinks = ((artist as { scheduling_links?: unknown }).scheduling_links ?? []) as SLink[];
+            const matchedLink = bookingSchedulingLinkId
+              ? allLinks.find(l => l.id === bookingSchedulingLinkId)
+              : allLinks[0];
+            const tz = matchedLink?.timezone || "America/New_York";
+
             const fmtDateTime = (iso: string) => {
               const d = new Date(iso);
-              return `${d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+              return `${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: tz })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz })}`;
             };
 
             const bodyLines = [
@@ -249,7 +320,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             }
             bodyLines.push(``, `Reply to this email if the new time doesn't work.`, ``, artistName);
 
-            const sendDateLabel = new Date(newDate).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+            const sendDateLabel = new Date(newDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: tz });
             const { subject: sentSubject, messageId: reschedMsgId } = await sendEmail({
               toEmail: booking.client_email,
               vars: buildTemplateVars({
@@ -277,15 +348,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             await appendSentEmail(sentSubject ?? "Appointment rescheduled");
             await storeThreadRoot(reschedMsgId);
 
-            // Notify the artist too
+            // Notify the artist too — gated on the per-artist preference.
             try {
               const artistEmail = (artist as { email?: string | null }).email;
-              if (artistEmail) {
+              const notifyReschedule = (artist as { notify_reschedule?: boolean | null }).notify_reschedule !== false;
+              if (artistEmail && notifyReschedule) {
                 const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || `https://${process.env.FLASHBOOKER_SENDING_DOMAIN || "flashbooker.app"}`;
-                const bookingUrl = `${appUrl}/bookings/${id}`;
+                const bookingUrl = `${appUrl}/bookings?expand=${id}`;
                 const fmtDt = (iso: string) => {
                   const d = new Date(iso);
-                  return `${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+                  return `${d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: tz })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz })}`;
                 };
                 const { Resend } = await import("resend");
                 const r = new Resend(process.env.RESEND_API_KEY || "re_mock_key");

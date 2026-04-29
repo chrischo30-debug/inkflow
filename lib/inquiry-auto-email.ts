@@ -30,7 +30,7 @@ export async function sendInquiryAutoEmail(opts: {
 
   const [{ data: artist }, { data: templateRow }] = await Promise.all([
     admin.from("artists")
-      .select("name, payment_links, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address")
+      .select("name, payment_links, gmail_address, email, logo_url, email_logo_enabled, email_logo_bg, auto_emails_enabled, studio_address, notify_new_submission")
       .eq("id", artistId)
       .single(),
     admin.from("email_templates")
@@ -40,11 +40,13 @@ export async function sendInquiryAutoEmail(opts: {
       .maybeSingle(),
   ]);
 
-  // Always notify the artist about the new submission regardless of auto-email settings
+  // Notify the artist about the new submission unless they've turned off the
+  // "new submission" admin notification in Settings → Reminders.
   const artistEmail = (artist as { email?: string | null } | null)?.email;
-  if (artistEmail) {
+  const notifySubmission = (artist as { notify_new_submission?: boolean | null } | null)?.notify_new_submission !== false;
+  if (artistEmail && notifySubmission) {
     try {
-      const bookingUrl = `${APP_URL}/bookings/${bookingId}`;
+      const bookingUrl = `${APP_URL}/bookings?expand=${bookingId}`;
       const clientFirstName = clientName.split(" ")[0];
       const clientDisplay = clientEmail && !clientEmail.includes("no-email-provided")
         ? `${clientName} (${clientEmail})`

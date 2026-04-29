@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
+// `passthrough()` keeps any extra keys the client may add (e.g. future
+// platform metadata) from being silently stripped on save.
 const socialLinkSchema = z.object({
   platform: z.enum(["instagram", "tiktok", "twitter", "facebook", "website", "other"]),
   url: z.string().url(),
   label: z.string().optional(),
-});
+}).passthrough();
 
 // All optional string fields use .nullish() to accept null|undefined — the
 // form components send null for cleared values.

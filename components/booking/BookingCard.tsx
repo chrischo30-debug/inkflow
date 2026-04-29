@@ -4,7 +4,7 @@ import { Booking, BookingState, SentEmailEntry } from "@/lib/types";
 import { formatPhone } from "@/lib/format";
 import { StateBadge } from "./StateBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Copy, MoreHorizontal, CalendarDays, ExternalLink, Send } from "lucide-react";
+import { Check, Copy, MoreHorizontal, CalendarDays, ExternalLink, Send, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ALL_BOOKING_STATES } from "@/lib/pipeline-settings";
@@ -36,6 +36,8 @@ interface BookingCardProps {
   onMoveState?: (bookingId: string, targetState: BookingState) => Promise<void>;
   onEditAppointment?: (bookingId: string) => void;
   onDepositPaid?: (bookingId: string) => void;
+  onDepositUnpaid?: (bookingId: string) => void;
+  onCompleteSession?: (bookingId: string) => void;
   dragging?: boolean;
   paymentsConnected?: boolean;
   artistId?: string;
@@ -106,7 +108,7 @@ function CardOverflowMenu({
   };
 
   const canCancel = onCancel && current !== "completed" && current !== "cancelled" && current !== "rejected";
-  const canEmail = onEmail && current !== "completed" && current !== "cancelled" && current !== "rejected";
+  const canEmail = Boolean(onEmail);
 
   const menuStyle = menuRect ? {
     position: "fixed" as const,
@@ -131,7 +133,7 @@ function CardOverflowMenu({
             <ExternalLink className="w-3.5 h-3.5" /> View all details
           </a>
           <div className="my-1 border-t border-outline-variant/20" />
-          {canEmail && (
+          {canEmail && onEmail && (
             <>
               <button type="button"
                 className="w-full text-left px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-primary/5 hover:text-on-surface transition-colors"
@@ -180,7 +182,7 @@ function CardOverflowMenu({
 export function BookingCard({
   booking, fieldLabelMap = {}, nextActionLabel,
   onAdvanceState, onAcceptInquiry, onRejectInquiry, onFollowUpInquiry,
-  onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid,
+  onOpenEmail, onCancel, onMoveState, onEditAppointment, onDepositPaid, onDepositUnpaid, onCompleteSession,
   dragging,
   paymentsConnected = false, artistId, schedulingLinks = [],
 }: BookingCardProps) {
@@ -195,7 +197,17 @@ export function BookingCard({
 
   const isInquiry = booking.state === "inquiry" || booking.state === "follow_up";
   const isBooked = booking.state === "booked" || booking.state === "confirmed";
-  const appointmentToday = booking.appointment_date && isToday(booking.appointment_date) && (isBooked || booking.state === "completed");
+
+  // For multi-session bookings, the prominent date should reflect the NEXT
+  // upcoming session — not session 1, which may already be completed. Falls
+  // back to the booking's primary appointment_date for single-session.
+  const sessionTotal = booking.session_count ?? 1;
+  const sessionDoneCount = booking.completed_session_count ?? 0;
+  const nextSessionDate = sessionTotal > 1
+    ? (booking.session_appointments ?? [])[sessionDoneCount]?.appointment_date
+    : undefined;
+  const displayAppointmentDate = nextSessionDate || booking.appointment_date;
+  const appointmentToday = displayAppointmentDate && isToday(displayAppointmentDate) && (isBooked || booking.state === "completed");
 
   return (
     <div
@@ -205,9 +217,21 @@ export function BookingCard({
       <div className="p-4 flex flex-col gap-2.5">
         {/* Header */}
         <div className="flex justify-between items-start gap-2">
-          <h4 className="font-semibold text-base text-on-surface line-clamp-1 min-w-0">{booking.client_name}</h4>
+          <h4 className={`font-semibold text-base text-on-surface min-w-0 ${showDetails ? "break-words" : "line-clamp-1"}`}>{booking.client_name}</h4>
           <StateBadge state={booking.state} />
         </div>
+
+        {/* Multi-session indicator */}
+        {(booking.session_count ?? 1) > 1 && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-tertiary bg-tertiary/10 border border-tertiary/20 rounded-md px-2 py-1 self-start">
+            <span>
+              {(booking.session_count ?? 1)}-session booking
+              {typeof booking.completed_session_count === "number" && booking.completed_session_count > 0
+                ? ` · ${booking.completed_session_count}/${booking.session_count} done`
+                : ""}
+            </span>
+          </div>
+        )}
 
         {/* Contact */}
         <div className="space-y-1">
@@ -223,8 +247,49 @@ export function BookingCard({
           )}
         </div>
 
-        {/* Appointment date — prominent on booked/confirmed, subtle otherwise */}
-        {booking.appointment_date && (
+        {/* Per-session date list (multi-session bookings only) — shown above
+            the primary appointment date so the artist can see every session at
+            a glance. The next-up session has a "Mark done" affordance. */}
+        {(booking.session_count ?? 1) > 1 && (
+          <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low/50 px-2.5 py-2 space-y-1.5">
+            {Array.from({ length: booking.session_count ?? 1 }).map((_, idx) => {
+              const s = (booking.session_appointments ?? [])[idx];
+              const done = !!s?.completed_at;
+              return (
+                <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`font-medium ${done ? "text-on-surface-variant line-through" : "text-on-surface"}`}>Session {idx + 1}</span>
+                    <span className="text-on-surface-variant truncate">
+                      {s?.appointment_date
+                        ? new Date(s.appointment_date).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                        : "Not booked yet"}
+                    </span>
+                  </div>
+                  {done && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Guardrail: a booking in "booked" without a date is invalid — prompt
+            the artist to set one. Clicking opens the date picker. */}
+        {isBooked && !booking.appointment_date && (
+          <button type="button"
+            onClick={e => { e.stopPropagation(); onEditAppointment?.(booking.id); }}
+            className="flex items-center gap-1.5 w-full rounded-lg px-2.5 py-2 transition-colors text-left border border-amber-300 bg-amber-50 hover:bg-amber-100">
+            <CalendarDays className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-800">Date needed</p>
+              <p className="text-xs text-amber-700">Click to set the appointment time</p>
+            </div>
+          </button>
+        )}
+
+        {/* Appointment date — prominent on booked/confirmed, subtle otherwise.
+            For multi-session bookings, this reflects the NEXT upcoming session
+            so the artist always sees what's coming up next. */}
+        {displayAppointmentDate && (
           isBooked ? (
             <button type="button"
               onClick={e => { e.stopPropagation(); onEditAppointment?.(booking.id); }}
@@ -233,11 +298,12 @@ export function BookingCard({
               <CalendarDays className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${appointmentToday ? "text-amber-600" : "text-primary"}`} />
               <div className="flex-1 min-w-0">
                 <p className={`text-xs font-semibold leading-tight ${appointmentToday ? "text-amber-700" : "text-primary"}`}>
-                  {new Date(booking.appointment_date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                  {sessionTotal > 1 && <span className="font-normal opacity-80">Next up · Session {sessionDoneCount + 1} · </span>}
+                  {new Date(displayAppointmentDate).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
                   {appointmentToday && <span className="ml-1.5 font-bold">· Today</span>}
                 </p>
                 <p className={`text-xs leading-tight mt-0.5 ${appointmentToday ? "text-amber-600" : "text-primary/70"}`}>
-                  {new Date(booking.appointment_date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                  {new Date(displayAppointmentDate).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                 </p>
               </div>
             </button>
@@ -245,23 +311,39 @@ export function BookingCard({
             <div className="flex items-center gap-1.5 rounded-lg bg-surface-container-low border border-outline-variant/20 px-2.5 py-2">
               <CalendarDays className="w-3.5 h-3.5 text-on-surface-variant/50 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-on-surface-variant/70">{fmtShort(booking.appointment_date)}</p>
-                <p className="text-xs text-on-surface-variant/50">{new Date(booking.appointment_date).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</p>
+                <p className="text-sm text-on-surface-variant">{fmtShort(displayAppointmentDate)}</p>
+                <p className="text-sm text-on-surface-variant">{new Date(displayAppointmentDate).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</p>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
               <CalendarDays className="w-3 h-3 text-on-surface-variant/50 shrink-0" />
-              <p className="text-xs text-on-surface-variant/70">{fmtDateTime(booking.appointment_date)}</p>
+              <p className="text-sm text-on-surface-variant">{fmtDateTime(displayAppointmentDate)}</p>
             </div>
           )
         )}
 
-        {/* Deposit paid badge on sent_deposit/sent_calendar */}
+        {/* Deposit paid badge on sent_deposit/sent_calendar — clicking undoes. */}
         {(booking.state === "sent_deposit" || booking.state === "sent_calendar") && (depositPaid || booking.deposit_paid) && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5 self-start">
-            <Check className="w-3 h-3" /> Deposit paid
-          </span>
+          <button
+            type="button"
+            title="Click to undo deposit paid"
+            onClick={async () => {
+              if (!window.confirm("Mark this deposit as unpaid?")) return;
+              await fetch(`/api/bookings/${booking.id}`, {
+                method: "PATCH", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "unmark_deposit_paid" }),
+              });
+              setDepositPaid(false);
+              onDepositUnpaid?.(booking.id);
+            }}
+            className="group/deposit inline-flex items-center gap-1 text-xs font-semibold text-white bg-emerald-600 border border-emerald-700/20 rounded-full px-2 py-0.5 self-start hover:bg-emerald-700 transition-colors"
+          >
+            <Check className="w-3 h-3 group-hover/deposit:hidden" />
+            <X className="w-3 h-3 hidden group-hover/deposit:block" />
+            <span className="group-hover/deposit:hidden">Deposit paid</span>
+            <span className="hidden group-hover/deposit:inline">Undo deposit paid</span>
+          </button>
         )}
 
         {/* Auto-confirm email failed on submission — artist may need to follow up manually */}
@@ -339,12 +421,12 @@ export function BookingCard({
                 {(booking.sent_emails as SentEmailEntry[]).map((entry, i) => (
                   <div key={i} className="flex items-center justify-between gap-2">
                     <p className="text-xs text-on-surface truncate">{entry.label}</p>
-                    <p className="text-xs text-on-surface-variant/60 whitespace-nowrap shrink-0">{fmtShort(entry.sent_at)}</p>
+                    <p className="text-sm text-on-surface-variant whitespace-nowrap shrink-0">{fmtShort(entry.sent_at)}</p>
                   </div>
                 ))}
               </div>
             )}
-            <div className="pt-1 border-t border-outline-variant/10 text-xs text-on-surface-variant/60">
+            <div className="pt-1 border-t border-outline-variant/10 text-sm text-on-surface-variant">
               Submitted {fmtShort(booking.created_at)}
             </div>
             <div className="pt-1 border-t border-outline-variant/10 flex gap-3">
@@ -365,8 +447,36 @@ export function BookingCard({
 
       {/* Footer */}
       <div className="px-3 py-2.5 border-t border-outline-variant/20 bg-surface-container-lowest">
-        {/* Top row: primary action + overflow */}
-        <div className="flex items-center justify-end gap-1.5">
+        {/* Action row: when sent_deposit + unpaid, show the Mark-paid action /
+            auto-advance hint on the left. When paid, the body-level "Deposit
+            paid" badge above already conveys status, so we leave the slot empty
+            here to avoid showing the same tag twice. */}
+        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+          {(booking.state === "sent_deposit" || booking.state === "sent_calendar") && !(depositPaid || booking.deposit_paid) && (
+            <div className="mr-auto flex items-center">
+              {!paymentsConnected ? (
+                <button type="button" disabled={markingPaid}
+                  onClick={async () => {
+                    setMarkingPaid(true);
+                    await fetch(`/api/bookings/${booking.id}`, {
+                      method: "PATCH", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "mark_deposit_paid" }),
+                    });
+                    setDepositPaid(true);
+                    setMarkingPaid(false);
+                    onDepositPaid?.(booking.id);
+                  }}
+                  className="flex items-center gap-1 h-8 px-2.5 text-xs font-medium rounded-lg border border-emerald-300 bg-surface text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50">
+                  <Check className="w-3 h-3" /> {markingPaid ? "Saving…" : "Mark deposit paid"}
+                </button>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2 py-1">
+                  <Send className="w-3 h-3 shrink-0" />
+                  Auto-advances when paid
+                </span>
+              )}
+            </div>
+          )}
           {isInquiry ? (
             <>
               {onRejectInquiry && (
@@ -407,45 +517,6 @@ export function BookingCard({
             schedulingLinks={schedulingLinks}
           />
         </div>
-
-        {/* Bottom row: deposit status / auto-advance hint (sent_deposit only) */}
-        {booking.state === "sent_deposit" && (
-          <div className="mt-2 flex items-center">
-            {!paymentsConnected ? (
-              depositPaid || booking.deposit_paid ? (
-                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
-                  <Check className="w-3 h-3" /> Deposit paid
-                </span>
-              ) : (
-                <button type="button" disabled={markingPaid}
-                  onClick={async () => {
-                    setMarkingPaid(true);
-                    await fetch(`/api/bookings/${booking.id}`, {
-                      method: "PATCH", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "mark_deposit_paid" }),
-                    });
-                    setDepositPaid(true);
-                    setMarkingPaid(false);
-                    onDepositPaid?.(booking.id);
-                  }}
-                  className="flex items-center gap-1 h-7 px-2.5 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
-                  <Check className="w-3 h-3" /> {markingPaid ? "Saving…" : "Mark paid"}
-                </button>
-              )
-            ) : (
-              depositPaid || booking.deposit_paid ? (
-                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 rounded-full px-2 py-0.5">
-                  <Check className="w-3 h-3" /> Deposit paid
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-primary/70 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1">
-                  <Send className="w-3 h-3 shrink-0" />
-                  Stripe/Square auto-advances when paid
-                </span>
-              )
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

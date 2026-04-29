@@ -89,6 +89,10 @@ export default async function SettingsPage({
         schedulingLinks={normalizeSchedulingLinks((extData as Record<string, unknown>)?.scheduling_links)}
         reminderEnabled={extended.reminder_enabled ?? false}
         reminderHoursBefore={extended.reminder_hours_before ?? 24}
+        notifyNewSubmission={(extended as { notify_new_submission?: boolean | null }).notify_new_submission !== false}
+        notifyNewBooking={(extended as { notify_new_booking?: boolean | null }).notify_new_booking !== false}
+        notifyReschedule={(extended as { notify_reschedule?: boolean | null }).notify_reschedule !== false}
+        notifyContactForm={(extended as { notify_contact_form?: boolean | null }).notify_contact_form !== false}
         initialTab={initialTab}
       />
     </div>

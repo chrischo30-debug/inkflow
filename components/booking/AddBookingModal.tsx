@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, CalendarDays, AlertTriangle, Ban, Copy, Check, ChevronDown, Send, ExternalLink } from "lucide-react";
+import { SendDepositModal } from "./SendDepositModal";
+import { TimeSelect } from "@/components/ui/TimeSelect";
+import type { SchedulingLink } from "@/lib/pipeline-settings";
 
 const BOOKING_STATES = [
   { value: "inquiry",       label: "Submission" },
@@ -235,7 +238,7 @@ function AppointmentDatePicker({
             )}
           </p>
         ) : (
-          <p className="text-xs text-on-surface-variant/60 flex items-center gap-1.5">
+          <p className="text-sm text-on-surface-variant flex items-center gap-1.5">
             <CalendarDays className="w-3.5 h-3.5" />
             Pick a day
           </p>
@@ -262,7 +265,7 @@ function AppointmentDatePicker({
         )}
 
         {!calendarConnected && !loadingEvents && (
-          <p className="text-[10px] text-on-surface-variant/60">
+          <p className="text-sm text-on-surface-variant">
             Connect Google Calendar in Settings to see real-time conflicts.
           </p>
         )}
@@ -270,12 +273,7 @@ function AppointmentDatePicker({
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <label className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">Time</label>
-            <input
-              type="time"
-              value={time}
-              onChange={e => handleTimeChange(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-sm bg-surface-container-low border border-outline-variant/30 rounded-lg text-on-surface focus:outline-none focus:border-primary"
-            />
+            <TimeSelect value={time} onChange={handleTimeChange} className="w-full" />
           </div>
           <div className="flex-1">
             <label className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide block mb-1">Duration</label>
@@ -298,8 +296,6 @@ const BLANK = {
   description: "", size: "", placement: "", budget: "",
   state: "confirmed", appointment_date: "",
 };
-
-type PaymentLinkOption = { label: string; url: string };
 
 function SendFormOption({
   artistSlug, clientName, clientEmail, clientPhone,
@@ -327,7 +323,7 @@ function SendFormOption({
     <div className="px-6 pt-5 pb-4 space-y-4 border-b border-outline-variant/10">
       <div className="rounded-xl bg-primary/5 border border-primary/15 p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-on-surface">Send {firstName} the form</p>
+          <p className="text-base font-medium text-on-surface">Send {firstName} the form</p>
           <p className="text-xs text-on-surface-variant mt-0.5">Their name, email, and phone are pre-filled — they just fill in the tattoo details and submit.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -386,21 +382,20 @@ export function BookingFormModal({
   const [showManual, setShowManual] = useState(!hasClientContext);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
   const [formKey, setFormKey] = useState(0);
   const [sendPaymentLink, setSendPaymentLink] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Step 2 — email editor
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [emailSubject, setEmailSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
-  const [paymentLinks, setPaymentLinks] = useState<PaymentLinkOption[]>([]);
-  const [sendingEmail, setSendingEmail] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // After-save deposit modal context
+  const [depositCtx, setDepositCtx] = useState<{
+    bookingId: string;
+    clientName: string;
+    paymentsConnected: boolean;
+    paymentProvider: "stripe" | "square" | null;
+    schedulingLinks: SchedulingLink[];
+  } | null>(null);
 
   const router = useRouter();
 
@@ -410,16 +405,11 @@ export function BookingFormModal({
       setMode(hasCtx ? "send" : "manual");
       setShowManual(!hasCtx);
       setLinkCopied(false);
-      setStep(1);
       setForm({ ...BLANK, appointment_date: initialDateTime ?? "", ...(initialForm ?? {}) });
       setFormKey(k => k + 1);
       setError(null);
       setSendPaymentLink(false);
-      setCreatedId(null);
-      setEmailSubject("");
-      setEmailBody("");
-      setPaymentLinks([]);
-      setEmailError(null);
+      setDepositCtx(null);
     }
   // initialForm intentionally omitted — reset is driven by `open` transition
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -433,26 +423,32 @@ export function BookingFormModal({
     setSaving(true);
     setError(null);
     try {
+      // When sending a payment link, the booking is created in the
+      // deposit-sent stage so the email modal lands on the deposit template
+      // and the pipeline reflects where the booking actually sits even if
+      // the artist closes the email modal without sending.
+      const payload = sendPaymentLink ? { ...form, state: "sent_deposit" } : form;
       const res = await fetch("/api/bookings/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookings: [form] }),
+        body: JSON.stringify({ bookings: [payload] }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to save"); return; }
 
       const bookingId: string | undefined = data.ids?.[0];
       if (sendPaymentLink && bookingId) {
-        // Load email template context for the new booking
+        // Pull payment provider + scheduling-links context so the deposit
+        // modal can offer the provider link generator + automation picker.
         const emailRes = await fetch(`/api/bookings/${bookingId}/send-email`);
-        if (emailRes.ok) {
-          const emailData = await emailRes.json();
-          setEmailSubject(emailData.subject ?? "");
-          setEmailBody(emailData.body ?? "");
-          setPaymentLinks(emailData.paymentLinks ?? []);
-        }
-        setCreatedId(bookingId);
-        setStep(2);
+        const emailData = emailRes.ok ? await emailRes.json() : {};
+        setDepositCtx({
+          bookingId,
+          clientName: form.client_name,
+          paymentsConnected: Boolean(emailData.paymentsConnected),
+          paymentProvider: (emailData.paymentProvider as "stripe" | "square" | null) ?? null,
+          schedulingLinks: Array.isArray(emailData.schedulingLinksFull) ? emailData.schedulingLinksFull : [],
+        });
       } else {
         onClose();
         router.refresh();
@@ -462,54 +458,40 @@ export function BookingFormModal({
     }
   };
 
-  const insertLink = (url: string) => {
-    const ta = bodyRef.current;
-    if (!ta) { setEmailBody(b => b + "\n" + url); return; }
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const next = emailBody.slice(0, start) + url + emailBody.slice(end);
-    setEmailBody(next);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + url.length, start + url.length);
-    });
-  };
-
-  const handleSendEmail = async () => {
-    if (!createdId) return;
-    setSendingEmail(true);
-    setEmailError(null);
-    try {
-      const res = await fetch(`/api/bookings/${createdId}/send-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: emailSubject, body: emailBody }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        setEmailError(d.error ?? "Failed to send email");
-        return;
-      }
-      onClose();
-      router.refresh();
-    } finally {
-      setSendingEmail(false);
-    }
+  const closeDeposit = () => {
+    setDepositCtx(null);
+    onClose();
+    router.refresh();
   };
 
   if (!open) return null;
 
+  // After a "Save & compose email" submission we hand off to SendDepositModal
+  // (which has the variable picker + provider deposit-link generator + template
+  // selector). The booking is already saved at this point.
+  if (depositCtx) {
+    return (
+      <SendDepositModal
+        bookingId={depositCtx.bookingId}
+        clientName={depositCtx.clientName}
+        paymentsConnected={depositCtx.paymentsConnected}
+        paymentProvider={depositCtx.paymentProvider}
+        schedulingLinks={depositCtx.schedulingLinks}
+        artistId=""
+        onSent={closeDeposit}
+        onClose={closeDeposit}
+      />
+    );
+  }
+
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center sm:p-4 bg-black/40"
-      onClick={onClose}
     >
       <div
         className="bg-surface rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
       >
-        {step === 1 ? (
-          <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit}>
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
               <h2 className="text-base font-semibold text-on-surface">
                 {hasClientContext ? `New booking for ${initialForm?.client_name?.split(" ")[0] ?? "client"}` : "Add booking"}
@@ -576,82 +558,7 @@ export function BookingFormModal({
                 </button>
               </div>
             )}
-          </form>
-        ) : (
-          <div>
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-outline-variant/20 bg-surface">
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setStep(1)} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <h2 className="text-base font-semibold text-on-surface">Send payment link email</h2>
-              </div>
-              <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <p className="text-sm text-on-surface-variant">Booking saved. Compose an email to send your client a payment link.</p>
-
-              {paymentLinks.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-2">Insert payment link</p>
-                  <div className="flex flex-wrap gap-2">
-                    {paymentLinks.map((pl, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => insertLink(pl.url)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors"
-                      >
-                        <span className="text-primary">+</span> {pl.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Subject</label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={e => setEmailSubject(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary placeholder:text-[#888888]"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-1.5 block">Body</label>
-                <textarea
-                  ref={bodyRef}
-                  value={emailBody}
-                  onChange={e => setEmailBody(e.target.value)}
-                  rows={10}
-                  className="w-full px-3 py-2.5 text-sm text-on-surface bg-surface-container-low border border-outline-variant/30 rounded-lg focus:outline-none focus:border-primary resize-none font-mono placeholder:text-[#888888]"
-                />
-              </div>
-
-              {emailError && <p className="text-sm text-destructive">{emailError}</p>}
-            </div>
-            <div className="sticky bottom-0 flex justify-end gap-3 px-6 py-4 border-t border-outline-variant/20 bg-surface">
-              <button
-                type="button"
-                onClick={() => { onClose(); router.refresh(); }}
-                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
-              >
-                Skip, save only
-              </button>
-              <button
-                type="button"
-                onClick={handleSendEmail}
-                disabled={sendingEmail || !emailSubject.trim()}
-                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-on-surface text-surface hover:opacity-80 transition-opacity disabled:opacity-40"
-              >
-                {sendingEmail ? "Sending…" : "Send email"}
-              </button>
-            </div>
-          </div>
-        )}
+        </form>
       </div>
     </div>,
     document.body,

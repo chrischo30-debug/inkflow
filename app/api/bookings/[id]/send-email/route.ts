@@ -18,7 +18,7 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
   const [{ data: artistRaw }, { data: templateRows }] = await Promise.all([
     supabase
       .from('artists')
-      .select('name, studio_name, payment_links, gmail_address, email, calendar_links, scheduling_links, logo_url, email_logo_enabled, email_logo_bg, studio_address')
+      .select('name, studio_name, payment_links, gmail_address, email, calendar_links, scheduling_links, logo_url, email_logo_enabled, email_logo_bg, studio_address, payment_provider, stripe_api_key, square_access_token')
       .eq('id', userId)
       .single(),
     supabase
@@ -32,6 +32,9 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
     calendar_links?: CalendarLink[]; scheduling_links?: SchedulingLink[];
     logo_url?: string | null; email_logo_enabled?: boolean | null; email_logo_bg?: "light" | "dark" | null;
     studio_address?: string | null;
+    payment_provider?: "stripe" | "square" | null;
+    stripe_api_key?: string | null;
+    square_access_token?: string | null;
   };
   const a = artistRaw as ArtistRow | null;
   const artist = a ? {
@@ -46,6 +49,11 @@ async function loadContext(supabase: Awaited<ReturnType<typeof createClient>>, b
     email_logo_enabled: a.email_logo_enabled !== false,
     email_logo_bg: (a.email_logo_bg ?? "light") as "light" | "dark",
     studio_address: a.studio_address ?? '',
+    payment_provider: a.payment_provider ?? null,
+    payments_connected: Boolean(
+      (a.payment_provider === 'stripe' && a.stripe_api_key) ||
+      (a.payment_provider === 'square' && a.square_access_token)
+    ),
   } : null;
 
   return { booking, artist, templateRows: templateRows ?? [] };
@@ -61,7 +69,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!ctx) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
   const { booking, artist, templateRows } = ctx;
-  if (booking.state === 'cancelled' || booking.state === 'rejected') return NextResponse.json({ error: 'No email for cancelled/rejected bookings' }, { status: 400 });
 
   const paymentLinksList = normalizePaymentLinks(artist?.payment_links);
   const calendarLinksList = (artist?.calendar_links ?? []) as CalendarLink[];
@@ -96,6 +103,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // State-linked templates (one per emailable state, in pipeline order). Includes
   // auto_send so the frontend can decide whether to auto-fire or pop the modal.
+  // `accepted` is the "Deposit Request" template; reused for both initial
+  // deposit ask and any follow-up reminder, so `sent_deposit` is intentionally
+  // omitted (the dedicated reminder template was retired).
   const STATE_ORDER = ['inquiry', 'follow_up', 'accepted', 'sent_calendar', 'booked', 'completed', 'rejected'];
   const stateTemplates = STATE_ORDER
     .filter(state => savedByState.has(state) || !!stateDefaults[state])
@@ -130,9 +140,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const allTemplates = [...stateTemplates, ...custom];
 
-  // Default selection: match current booking state
+  // Default selection: match current booking state. `sent_deposit` bookings
+  // share the "Deposit Request" (accepted) template since the reminder
+  // template was retired.
   const currentState = booking.state as string;
-  const defaultTemplate = allTemplates.find(t => t.state === currentState) ?? allTemplates[0];
+  const lookupState = currentState === 'sent_deposit' ? 'accepted' : currentState;
+  const defaultTemplate = allTemplates.find(t => t.state === lookupState) ?? allTemplates[0];
 
   return NextResponse.json({
     subject: defaultTemplate?.subject ?? '',
@@ -142,6 +155,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     paymentLinks: paymentLinksList,
     calendarLinks: calendarLinksList,
     schedulingLinks: allSchedulingLinks.map(l => ({ id: l.id, label: l.label })),
+    schedulingLinksFull: allSchedulingLinks,
+    paymentsConnected: artist?.payments_connected ?? false,
+    paymentProvider: artist?.payment_provider ?? null,
     previewVars: vars as unknown as Record<string, string>,
   });
 }

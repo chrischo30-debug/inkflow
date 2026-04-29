@@ -163,11 +163,13 @@ function BodyPreview({ text, artistName, paymentLinks, calendarLinks, studioAddr
   );
 }
 
-const STATE_LABELS: Record<Exclude<BookingState, "cancelled">, string> = {
+// `sent_deposit` intentionally omitted — booking-pipeline state, but the
+// editable template is "Deposit Request" (accepted) which is reused for both
+// the initial deposit ask and any follow-up reminders.
+const STATE_LABELS: Partial<Record<Exclude<BookingState, "cancelled">, string>> = {
   inquiry:       "Submission Received",
   follow_up:     "Follow Up",
   accepted:      "Deposit Request",
-  sent_deposit:  "Sent Deposit",
   sent_calendar: "Calendar Link (after deposit)",
   booked:        "Appointment Booked",
   confirmed:     "Appointment Booked",
@@ -589,7 +591,7 @@ export function EmailTemplatesSettings({ paymentLinks, calendarLinks, scheduling
       <CoachmarkSequence tips={tips} />
 
       {/* State-linked templates */}
-      <div className="space-y-2">
+      <div className="space-y-2 pt-4">
         <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wide mb-3">Stage templates</p>
         {templates.map((t, idx) => {
           const state = t.state as Exclude<BookingState, "cancelled">;

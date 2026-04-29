@@ -151,12 +151,13 @@ export function PipelineView({
   // ── Inquiry phase ──────────────────────────────────────────────────────────
   const handleAcceptInquiry = (bookingId: string) => setAcceptModal({ bookingId });
 
-  const handleAcceptSent = (bookingId: string) => {
-    // AcceptModal now collects scheduling link + deposit upfront and moves directly
-    // to sent_deposit; the rest is automatic via the active payment provider's
-    // webhook + the scheduling page.
+  const handleAcceptSent = (bookingId: string, targetState: BookingState = "sent_deposit") => {
+    // AcceptModal collects scheduling link + deposit upfront. With a deposit,
+    // it lands in sent_deposit (auto-advances to sent_calendar on webhook payment).
+    // Without a deposit, it lands directly in sent_calendar — the email already
+    // carries the scheduling link.
     setBookings(prev => prev.map(b =>
-      b.id === bookingId ? { ...b, state: "sent_deposit", last_email_sent_at: new Date().toISOString() } : b
+      b.id === bookingId ? { ...b, state: targetState, last_email_sent_at: new Date().toISOString() } : b
     ));
     setAcceptModal(null);
   };
@@ -202,6 +203,10 @@ export function PipelineView({
     if (currentState === "sent_deposit") { handleSendCalendar(bookingId); return; }
     if (currentState === "sent_calendar") { handleMarkBooked(bookingId); return; }
     if (currentState === "booked" || currentState === "confirmed") {
+      // Always open the completion modal so the artist can record per-session
+      // totals / tip / notes. The handler routes intermediate sessions to the
+      // complete_session API (booking stays in "booked") and the last session
+      // to the regular complete API (booking moves to "completed").
       setCompletionData({ total_amount: "", tip_amount: "", payment_source: "", notes: "" });
       setCompletionModal({ bookingId });
       return;
@@ -211,26 +216,67 @@ export function PipelineView({
   const handleComplete = async () => {
     if (!completionModal) return;
     const { bookingId } = completionModal;
+    const booking = bookings.find(b => b.id === bookingId);
+    const sessionCount = booking?.session_count ?? 1;
+    const done = booking?.completed_session_count ?? 0;
+    const isMultiIntermediate = sessionCount > 1 && done < sessionCount - 1;
+    const totalAmount = completionData.total_amount ? parseFloat(completionData.total_amount) : null;
+    const tipAmount = completionData.tip_amount ? parseFloat(completionData.tip_amount) : null;
+    const paymentSource = completionData.payment_source || null;
+    const notes = completionData.notes || null;
+
     try {
-      const res = await fetch(`/api/bookings/${bookingId}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "complete",
-          total_amount: completionData.total_amount ? parseFloat(completionData.total_amount) : null,
-          tip_amount: completionData.tip_amount ? parseFloat(completionData.tip_amount) : null,
-          payment_source: completionData.payment_source || null,
-          completion_notes: completionData.notes || null,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setBookings(prev => prev.map(b => b.id === bookingId ? {
-        ...b,
-        state: "completed",
-        total_amount: completionData.total_amount ? parseFloat(completionData.total_amount) : undefined,
-        tip_amount: completionData.tip_amount ? parseFloat(completionData.tip_amount) : undefined,
-        payment_source: completionData.payment_source || undefined,
-        completion_notes: completionData.notes || undefined,
-      } : b));
+      if (isMultiIntermediate) {
+        // Multi-session, not yet on the last session — record per-session
+        // totals / tip / notes, bump completed_session_count, keep booking in
+        // "booked" until the final session triggers the regular complete flow.
+        const res = await fetch(`/api/bookings/${bookingId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "complete_session",
+            total_amount: totalAmount,
+            tip_amount: tipAmount,
+            payment_source: paymentSource,
+            notes,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        setBookings(prev => prev.map(b => {
+          if (b.id !== bookingId) return b;
+          const idx = b.completed_session_count ?? 0;
+          const apps = [...(b.session_appointments ?? [])];
+          while (apps.length <= idx) apps.push({});
+          apps[idx] = {
+            ...apps[idx],
+            completed_at: new Date().toISOString(),
+            ...(totalAmount != null ? { total_amount: totalAmount } : {}),
+            ...(tipAmount != null ? { tip_amount: tipAmount } : {}),
+            ...(paymentSource ? { payment_source: paymentSource } : {}),
+            ...(notes ? { notes } : {}),
+          };
+          return { ...b, session_appointments: apps, completed_session_count: idx + 1 };
+        }));
+      } else {
+        const res = await fetch(`/api/bookings/${bookingId}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "complete",
+            total_amount: totalAmount,
+            tip_amount: tipAmount,
+            payment_source: paymentSource,
+            completion_notes: notes,
+          }),
+        });
+        if (!res.ok) throw new Error();
+        setBookings(prev => prev.map(b => b.id === bookingId ? {
+          ...b,
+          state: "completed",
+          total_amount: totalAmount ?? undefined,
+          tip_amount: tipAmount ?? undefined,
+          payment_source: paymentSource ?? undefined,
+          completion_notes: notes ?? undefined,
+        } : b));
+      }
       completionDraft.clear();
       setCompletionModal(null);
     } catch { alert("Failed to complete booking"); }
@@ -287,6 +333,12 @@ export function PipelineView({
     if (targetState === "follow_up") { await handleFollowUpInquiry(bookingId); return; }
     if (targetState === "sent_deposit") { handleSendDeposit(bookingId); return; }
     if (targetState === "sent_calendar") { handleSendCalendar(bookingId); return; }
+    // Guardrail: a "booked" booking always needs an appointment date.
+    // Open the date picker first instead of doing a bare state move.
+    if (targetState === "booked" || targetState === "confirmed") {
+      const booking = bookings.find(b => b.id === bookingId);
+      if (!booking?.appointment_date) { handleMarkBooked(bookingId); return; }
+    }
     try { await moveTo(bookingId, targetState); }
     catch { alert("Failed to update booking status"); }
   };
@@ -302,7 +354,11 @@ export function PipelineView({
     if (targetState === "follow_up") { handleFollowUpInquiry(bookingId); return; }
     if (targetState === "sent_deposit") { handleSendDeposit(bookingId); return; }
     if (targetState === "sent_calendar") { handleSendCalendar(bookingId); return; }
-    if (targetState === "booked" && booking.state === "sent_calendar") { handleMarkBooked(bookingId); return; }
+    // Guardrail: a booking always needs an appointment date when entering "booked".
+    if ((targetState === "booked" || targetState === "confirmed") && !booking.appointment_date) {
+      handleMarkBooked(bookingId);
+      return;
+    }
     if (targetState === "completed") {
       setCompletionData({ total_amount: "", tip_amount: "", payment_source: "", notes: "" });
       setCompletionModal({ bookingId });
@@ -387,21 +443,45 @@ export function PipelineView({
     }
   };
 
-  const nextActionLabel = (state: BookingState): string | null => {
+  const nextActionLabel = (state: BookingState, booking?: Booking): string | null => {
     if (state === "sent_deposit") return "Send Calendar";
     if (state === "sent_calendar") return "Mark Booked";
-    if (state === "booked" || state === "confirmed") return "Complete";
+    if (state === "booked" || state === "confirmed") {
+      const total = booking?.session_count ?? 1;
+      const done = booking?.completed_session_count ?? 0;
+      if (total > 1 && done < total - 1) return `Complete session ${done + 1}`;
+      return "Complete";
+    }
     return null;
   };
 
-  // "booked" column shows both booked + legacy confirmed bookings, ordered by columnOrder
+  // For booked bookings, the "next upcoming" date drives sort order so the
+  // soonest appointment surfaces first. Multi-session bookings use the next
+  // un-completed session's date — so once a session is marked done, the card
+  // re-sorts by the following session's date.
+  const nextUpcomingDate = (b: Booking): number => {
+    const sessionCount = b.session_count ?? 1;
+    if (sessionCount > 1) {
+      const idx = b.completed_session_count ?? 0;
+      const next = (b.session_appointments ?? [])[idx]?.appointment_date;
+      if (next) return new Date(next).getTime();
+    }
+    return b.appointment_date ? new Date(b.appointment_date).getTime() : Number.POSITIVE_INFINITY;
+  };
+
+  // "booked" column shows both booked + legacy confirmed bookings, sorted by
+  // upcoming appointment. Other columns keep manual columnOrder for drag UX.
   const columnBookings = (colId: BookingState) => {
+    if (colId === "booked") {
+      return bookings
+        .filter(b => b.state === "booked" || b.state === "confirmed")
+        .slice()
+        .sort((a, b) => nextUpcomingDate(a) - nextUpcomingDate(b));
+    }
     const order = columnOrder[colId] ?? [];
-    const all = colId === "booked"
-      ? bookings.filter(b => b.state === "booked" || b.state === "confirmed")
-      : colId === "sent_deposit"
-        ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
-        : bookings.filter(b => b.state === colId);
+    const all = colId === "sent_deposit"
+      ? bookings.filter(b => b.state === "sent_deposit" || b.state === "accepted")
+      : bookings.filter(b => b.state === colId);
     const ordered = order.map(id => all.find(b => b.id === id)).filter((b): b is Booking => b != null);
     const unordered = all.filter(b => !order.includes(b.id));
     return [...ordered, ...unordered];
@@ -456,6 +536,7 @@ export function PipelineView({
         },
       ]} />
       <DndContext
+        id="pipeline-dnd"
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragOver={handleDndOver}
@@ -485,7 +566,7 @@ export function PipelineView({
                       key={booking.id}
                       booking={booking}
                       fieldLabelMap={fieldLabelMap}
-                      nextActionLabel={nextActionLabel(booking.state)}
+                      nextActionLabel={nextActionLabel(booking.state, booking)}
                       onAdvanceState={handleAdvanceState}
                       onAcceptInquiry={handleAcceptInquiry}
                       onRejectInquiry={handleRejectInquiry}
@@ -495,6 +576,17 @@ export function PipelineView({
                       onMoveState={handleMoveState}
                       onEditAppointment={bid => setBookModal({ bookingId: bid, initialAppointmentDate: bookings.find(b => b.id === bid)?.appointment_date })}
                       onDepositPaid={bid => setBookings(prev => prev.map(b => b.id === bid ? { ...b, deposit_paid: true } : b))}
+                      onDepositUnpaid={bid => setBookings(prev => prev.map(b => b.id === bid ? { ...b, deposit_paid: false } : b))}
+                      onCompleteSession={bid => setBookings(prev => prev.map(b => {
+                        if (b.id !== bid) return b;
+                        const total = b.session_count ?? 1;
+                        const idx = b.completed_session_count ?? 0;
+                        const apps = [...(b.session_appointments ?? [])];
+                        while (apps.length <= idx) apps.push({});
+                        apps[idx] = { ...apps[idx], completed_at: new Date().toISOString() };
+                        const next = idx + 1;
+                        return { ...b, session_appointments: apps, completed_session_count: next, ...(next >= total ? { state: "completed" as BookingState } : {}) };
+                      }))}
                       paymentsConnected={paymentsConnected}
                       artistId={artistId}
                       schedulingLinks={schedulingLinks}
@@ -502,7 +594,7 @@ export function PipelineView({
                   ))}
                 </SortableContext>
                 {colBookings.length === 0 && (
-                  <div className={`text-center p-4 border border-dashed rounded-xl text-xs text-on-surface-variant/60 mt-2 transition-colors ${isDropTarget ? "border-primary/40 text-primary/60" : "border-outline-variant/40"}`}>
+                  <div className={`text-center p-4 border border-dashed rounded-xl text-sm text-on-surface-variant mt-2 transition-colors ${isDropTarget ? "border-primary/40 text-primary/60" : "border-outline-variant/40"}`}>
                     {isDropTarget ? "Drop here" : "No bookings"}
                   </div>
                 )}
@@ -522,7 +614,7 @@ export function PipelineView({
           schedulingLinks={schedulingLinks}
           artistId={artistId ?? ""}
           isCalendarConnected={calendarSyncEnabled}
-          onSent={() => handleAcceptSent(acceptModal.bookingId)}
+          onSent={(_threadId, targetState) => handleAcceptSent(acceptModal.bookingId, targetState)}
           onClose={() => setAcceptModal(null)}
         />
       )}
@@ -575,8 +667,8 @@ export function PipelineView({
 
       {/* Completion modal */}
       {completionModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setCompletionModal(null)}>
-          <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
+          <div className="bg-surface border border-outline-variant/20 rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-base font-semibold text-on-surface mb-1">Complete booking</h2>
             <p className="text-sm text-on-surface-variant mb-5">Optionally record the final details.</p>
             <div className="flex flex-col gap-3 mb-5">
@@ -614,7 +706,7 @@ export function PipelineView({
             <div className="flex items-center justify-between">
               <button type="button"
                 onClick={async () => { await moveTo(completionModal.bookingId, "completed"); completionDraft.clear(); setCompletionModal(null); }}
-                className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2">
+                className="text-sm text-on-surface-variant hover:text-on-surface-variant transition-colors underline underline-offset-2">
                 skip
               </button>
               <div className="flex gap-3">
@@ -675,9 +767,9 @@ function PipelineColumn({
       {...(isFirstDrop ? { "data-coachmark-drop": "true" } : {})}
       className={`min-w-[260px] w-[260px] md:min-w-[280px] md:w-[280px] xl:min-w-[300px] xl:w-[300px] max-w-[300px] shrink-0 snap-start flex flex-col h-full rounded-xl pb-4 transition-colors ${isDropTarget ? "bg-primary/5 ring-2 ring-primary/30" : "bg-surface-container-low/50"}`}
     >
-      <div className={`flex items-center justify-between px-3 py-3 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
-        <h3 className="font-heading font-semibold text-base text-foreground">{title}</h3>
-        <span className="text-sm bg-surface-container-high text-on-surface-variant px-2.5 py-0.5 rounded-full font-mono">{count}</span>
+      <div className={`flex items-center justify-between gap-2 px-3 py-3 border-b border-outline-variant/20 rounded-t-xl mb-3 transition-colors ${isDropTarget ? "bg-primary/10" : "bg-surface-container-low"}`}>
+        <h3 className="font-heading font-semibold text-base text-foreground whitespace-nowrap min-w-0 truncate">{title}</h3>
+        <span className="text-sm bg-surface-container-high text-on-surface-variant px-2.5 py-0.5 rounded-full font-mono shrink-0">{count}</span>
       </div>
       <div ref={setNodeRef} className="flex flex-col gap-3 px-2 overflow-y-auto flex-1">
         {children}

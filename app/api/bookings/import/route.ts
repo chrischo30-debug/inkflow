@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { BookingState } from "@/lib/types";
 
 const VALID_STATES: BookingState[] = [
-  "inquiry", "follow_up", "accepted", "confirmed", "completed", "rejected", "cancelled",
+  "inquiry", "follow_up", "sent_deposit", "sent_calendar", "booked", "completed", "rejected", "cancelled",
 ];
 
 interface ImportRow {

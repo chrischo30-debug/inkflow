@@ -160,7 +160,12 @@ export async function GET(
 
   // If no calendar connected, only DB bookings + buffer block slots
   if (!artist.google_refresh_token || !artist.calendar_sync_enabled) {
-    const inflated = bookingBusy.map(b => ({ start: b.start, end: new Date(b.end.getTime() + buffer * 60000) }));
+    // Inflate both ends of every busy block by buffer_minutes so a client
+    // can't sandwich a session right before OR right after an existing one.
+    const inflated = bookingBusy.map(b => ({
+      start: new Date(b.start.getTime() - buffer * 60000),
+      end: new Date(b.end.getTime() + buffer * 60000),
+    }));
     const available = candidates.filter(c => {
       const slotStart = toUTCDate(date, Math.floor(c.minute / 60), c.minute % 60, link.timezone);
       const slotEnd = new Date(slotStart.getTime() + c.duration * 60000);
@@ -211,12 +216,16 @@ export async function GET(
     return NextResponse.json({ slots: [], calendar_error: true });
   }
 
-  // Combine Google freeBusy + FlashBooker DB bookings, then inflate the end
-  // of each busy block by buffer_minutes so subsequent slots get a gap after.
+  // Combine Google freeBusy + FlashBooker DB bookings, then inflate BOTH ends
+  // of each busy block by buffer_minutes so a client can't book a session
+  // that starts immediately after OR ends immediately before an existing one.
   const busy = [
     ...busyPeriods.map(b => ({ start: new Date(b.start), end: new Date(b.end) })),
     ...bookingBusy,
-  ].map(b => ({ start: b.start, end: new Date(b.end.getTime() + buffer * 60000) }));
+  ].map(b => ({
+    start: new Date(b.start.getTime() - buffer * 60000),
+    end: new Date(b.end.getTime() + buffer * 60000),
+  }));
 
   const available = candidates.filter(c => {
     const slotStart = toUTCDate(date, Math.floor(c.minute / 60), c.minute % 60, link.timezone);

@@ -10,6 +10,7 @@ import { Mail, ChevronDown, ChevronRight, DollarSign, Check, Copy, CalendarDays,
 import { EmailComposeModal, type ResolvedTemplate, type InsertLink } from "./EmailComposeModal";
 import { AcceptModal } from "./AcceptModal";
 import { ConfirmAppointmentModal } from "./ConfirmAppointmentModal";
+import { SendCalendarModal } from "./SendCalendarModal";
 import { useLocalDraft } from "@/lib/use-local-draft";
 import type { SchedulingLink } from "@/lib/pipeline-settings";
 
@@ -215,6 +216,7 @@ export function BookingsTable({
   });
   const [acceptModal, setAcceptModal] = useState<{ bookingId: string } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{ bookingId: string; initialAppointmentDate?: string } | null>(null);
+  const [sendCalendarModal, setSendCalendarModal] = useState<{ bookingId: string } | null>(null);
   const [depositModal, setDepositModal] = useState<{ bookingId: string; amount: string } | null>(null);
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState("");
@@ -316,43 +318,20 @@ export function BookingsTable({
     setOpenDropdown(null);
   };
 
+  // Mirror the dashboard's handleAdvanceState — each "next action" pops the
+  // appropriate modal instead of silently advancing the booking. Keeps the
+  // bookings view's button behavior consistent with the pipeline cards.
   const advance = async (id: string, currentState: BookingState) => {
-    if (currentState === "confirmed" || currentState === "booked") {
+    if (currentState === "sent_deposit") { setSendCalendarModal({ bookingId: id }); return; }
+    if (currentState === "sent_calendar") { setConfirmModal({ bookingId: id }); return; }
+    if (currentState === "booked" || currentState === "confirmed") {
       setCompletionData({ total_amount: "", tip_amount: "", notes: "" });
       setCompletionModal({ bookingId: id, images: [] });
       return;
     }
-    // For other transitions (sent_deposit → sent_calendar, sent_calendar → booked):
-    // check the next stage's template. If off → advance silently with no email.
-    // If on but auto_send=false → pop the compose modal so the artist can edit + send.
-    // If auto_send=true → server PATCH advance handles the silent send.
-    const nextState = NEXT_STATE[currentState];
-    if (nextState) {
-      const tplRes = await fetch(`/api/bookings/${id}/send-email`);
-      if (tplRes.ok) {
-        const data = await tplRes.json();
-        const tpl = (data.templates ?? []).find((t: ResolvedTemplate) => t.state === nextState);
-        // Template fully off → just advance, no modal, no email
-        if (tpl && tpl.enabled === false) {
-          // fall through to PATCH advance below
-        } else if (tpl && tpl.auto_send === false) {
-          setEmailCompose({
-            bookingId: id,
-            subject: tpl.subject,
-            body: tpl.body,
-            templates: data.templates ?? [],
-            defaultTemplateState: nextState,
-            afterSendState: nextState,
-            paymentLinks: data.paymentLinks ?? [],
-            calendarLinks: data.calendarLinks ?? [],
-            schedulingLinks: data.schedulingLinks ?? [],
-            previewVars: data.previewVars,
-          });
-          return;
-        }
-      }
-    }
 
+    // Fallback: if any state slips through, fall back to the legacy
+    // server-side advance path so nothing is silently broken.
     const res = await fetch(`/api/bookings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -363,13 +342,22 @@ export function BookingsTable({
     setBookings(prev => prev.map(b => b.id === id ? { ...b, state: newState } : b));
   };
 
-  const handleAcceptSent = (bookingId: string) => {
+  const handleCalendarSent = (bookingId: string) => {
+    setBookings(prev => prev.map(b =>
+      b.id === bookingId
+        ? { ...b, state: "sent_calendar" as BookingState, last_email_sent_at: new Date().toISOString() }
+        : b,
+    ));
+    setSendCalendarModal(null);
+  };
+
+  const handleAcceptSent = (bookingId: string, targetState: BookingState = "sent_deposit") => {
     const nowIso = new Date().toISOString();
     setBookings(prev => prev.map(b =>
       b.id === bookingId
         ? {
             ...b,
-            state: "sent_deposit",
+            state: targetState,
             last_email_sent_at: nowIso,
             sent_emails: [...(b.sent_emails ?? []), { label: "Save your spot — deposit to book", sent_at: nowIso }],
           }
@@ -396,6 +384,44 @@ export function BookingsTable({
   const handleComplete = async () => {
     if (!completionModal) return;
     const { bookingId, images } = completionModal;
+    const booking = bookings.find(b => b.id === bookingId);
+    const sessionCount = booking?.session_count ?? 1;
+    const done = booking?.completed_session_count ?? 0;
+    const isMultiIntermediate = sessionCount > 1 && done < sessionCount - 1;
+    const totalAmount = completionData.total_amount ? parseFloat(completionData.total_amount) : null;
+    const tipAmount = completionData.tip_amount ? parseFloat(completionData.tip_amount) : null;
+    const notes = completionData.notes || null;
+
+    if (isMultiIntermediate) {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete_session",
+          total_amount: totalAmount,
+          tip_amount: tipAmount,
+          notes,
+        }),
+      });
+      if (!res.ok) return;
+      setBookings(prev => prev.map(b => {
+        if (b.id !== bookingId) return b;
+        const idx = b.completed_session_count ?? 0;
+        const apps = [...(b.session_appointments ?? [])];
+        while (apps.length <= idx) apps.push({});
+        apps[idx] = {
+          ...apps[idx],
+          completed_at: new Date().toISOString(),
+          ...(totalAmount != null ? { total_amount: totalAmount } : {}),
+          ...(tipAmount != null ? { tip_amount: tipAmount } : {}),
+          ...(notes ? { notes } : {}),
+        };
+        return { ...b, session_appointments: apps, completed_session_count: idx + 1 };
+      }));
+      completionDraft.clear();
+      setCompletionModal(null);
+      return;
+    }
+
     setCompletionUploading(true);
     let uploadedUrls: string[] = [];
     for (const img of images.slice(0, 2)) {
@@ -413,18 +439,18 @@ export function BookingsTable({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "complete",
-        total_amount: completionData.total_amount ? parseFloat(completionData.total_amount) : null,
-        tip_amount: completionData.tip_amount ? parseFloat(completionData.tip_amount) : null,
-        completion_notes: completionData.notes || null,
+        total_amount: totalAmount,
+        tip_amount: tipAmount,
+        completion_notes: notes,
       }),
     });
     if (!res.ok) return;
     setBookings(prev => prev.map(b => b.id === bookingId ? {
       ...b,
       state: "completed",
-      total_amount: completionData.total_amount ? parseFloat(completionData.total_amount) : undefined,
-      tip_amount: completionData.tip_amount ? parseFloat(completionData.tip_amount) : undefined,
-      completion_notes: completionData.notes || undefined,
+      total_amount: totalAmount ?? undefined,
+      tip_amount: tipAmount ?? undefined,
+      completion_notes: notes ?? undefined,
       completion_image_urls: uploadedUrls.length > 0 ? uploadedUrls : b.completion_image_urls,
     } : b));
     completionDraft.clear();
@@ -523,6 +549,14 @@ export function BookingsTable({
           <td className="px-2 sm:px-4 py-4 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium text-on-surface">{booking.client_name}</p>
+              {(booking.session_count ?? 1) > 1 && (
+                <span className="text-xs font-medium text-tertiary bg-tertiary/10 border border-tertiary/20 px-1.5 py-0.5 rounded-md shrink-0">
+                  {(booking.session_count ?? 1)} sessions
+                  {typeof booking.completed_session_count === "number" && booking.completed_session_count > 0
+                    ? ` · ${booking.completed_session_count}/${booking.session_count} done`
+                    : ""}
+                </span>
+              )}
               {booking.deposit_paid && (
                 <span className="text-xs font-medium text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md shrink-0">Deposit paid</span>
               )}
@@ -613,18 +647,25 @@ export function BookingsTable({
                 {openDropdown === booking.id && (
                   <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-outline-variant/30 rounded-xl shadow-lg py-1 min-w-[180px]">
                     {MOVE_STATES.filter(s => s.value !== booking.state).map(s => (
-                      <button key={s.value} type="button" className="w-full text-left px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" onClick={() => moveTo(booking.id, s.value)}>
+                      <button key={s.value} type="button" className="w-full text-left px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" onClick={() => {
+                        // Guardrail: "booked" requires a date — open the picker
+                        // first so the API doesn't reject the move.
+                        if ((s.value === "booked" || s.value === "confirmed") && !booking.appointment_date) {
+                          setOpenDropdown(null);
+                          setConfirmModal({ bookingId: booking.id });
+                          return;
+                        }
+                        moveTo(booking.id, s.value);
+                      }}>
                         Move to {s.label}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-              {booking.state !== "completed" && booking.state !== "cancelled" && booking.state !== "rejected" && (
-                <button type="button" onClick={() => openEmailCompose(booking.id, undefined, true)} title="Send email" disabled={emailLoadingId === booking.id} className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors disabled:opacity-40">
-                  <Mail className="w-4 h-4" />
-                </button>
-              )}
+              <button type="button" onClick={() => openEmailCompose(booking.id, undefined, true)} title="Send email" disabled={emailLoadingId === booking.id} className="p-2.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors disabled:opacity-40">
+                <Mail className="w-4 h-4" />
+              </button>
             </div>
           </td>
         </tr>
@@ -637,7 +678,7 @@ export function BookingsTable({
                 <div className="flex items-center gap-3 px-4 py-3 bg-surface-container-low/50 border-b border-outline-variant/10">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-semibold text-on-surface">{booking.client_name}</span>
+                      <span className="text-base font-medium text-on-surface">{booking.client_name}</span>
                       <span className="text-on-surface-variant/60">·</span>
                       <span className="text-sm text-on-surface-variant">{booking.client_email}</span>
                       <InlineCopyButton value={booking.client_email} />
@@ -665,6 +706,54 @@ export function BookingsTable({
                 </div>
 
                 <div className="p-4 space-y-4">
+
+                  {/* Per-session breakdown for multi-session bookings */}
+                  {(booking.session_count ?? 1) > 1 && (
+                    <div className="rounded-lg border border-outline-variant/20 bg-surface-container-low/50 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                          {(booking.session_count ?? 1)}-session booking
+                        </p>
+                        <p className="text-[11px] text-on-surface-variant">
+                          {booking.completed_session_count ?? 0}/{booking.session_count} done
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {Array.from({ length: booking.session_count ?? 1 }).map((_, idx) => {
+                          const s = (booking.session_appointments ?? [])[idx];
+                          const done = !!s?.completed_at;
+                          const hasDetails = done && (s?.total_amount != null || s?.tip_amount != null || s?.notes || s?.payment_source);
+                          return (
+                            <div key={idx} className="rounded-md bg-surface px-2.5 py-2 border border-outline-variant/10">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`font-medium ${done ? "text-on-surface-variant line-through" : "text-on-surface"}`}>Session {idx + 1}</span>
+                                  <span className="text-on-surface-variant truncate">
+                                    {s?.appointment_date
+                                      ? new Date(s.appointment_date).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+                                      : "Not booked yet"}
+                                  </span>
+                                </div>
+                                {done && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                              </div>
+                              {hasDetails && (
+                                <div className="mt-1.5 pt-1.5 border-t border-outline-variant/10 space-y-0.5 text-xs text-on-surface-variant">
+                                  {(s?.total_amount != null || s?.tip_amount != null) && (
+                                    <p>
+                                      {s?.total_amount != null && <>Total: <span className="text-on-surface font-medium">${s.total_amount}</span></>}
+                                      {s?.tip_amount != null && <> · Tip: <span className="text-on-surface font-medium">${s.tip_amount}</span></>}
+                                      {s?.payment_source && <> · {s.payment_source}</>}
+                                    </p>
+                                  )}
+                                  {s?.notes && <p className="text-on-surface whitespace-pre-wrap">{s.notes}</p>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Description */}
                   {booking.description && (
@@ -767,50 +856,19 @@ export function BookingsTable({
                   {/* Email history */}
                   {(booking.sent_emails ?? []).length > 0 ? (
                     <div className="border-t border-outline-variant/10 pt-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Emails sent</p>
-                        <button
-                          type="button"
-                          onClick={() => openEmailCompose(booking.id, undefined, true)}
-                          disabled={emailLoadingId === booking.id}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
-                        >
-                          <Send className="w-3 h-3" />
-                          {emailLoadingId === booking.id ? "Loading…" : "Send another"}
-                        </button>
-                      </div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant mb-2">Emails sent</p>
                       <div className="space-y-1.5">
                         {(booking.sent_emails ?? []).map((email, i) => (
-                          <div key={i} className="flex items-center justify-between gap-3 group">
+                          <div key={i} className="flex items-center justify-between gap-3">
                             <span className="text-sm text-on-surface truncate">{resolveEmailLabel(email.label, booking, artistName)}</span>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs text-on-surface-variant">{fmtDate(email.sent_at)}</span>
-                              <button
-                                type="button"
-                                title="Resend"
-                                onClick={() => openEmailCompose(booking.id, undefined, true)}
-                                disabled={emailLoadingId === booking.id}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-on-surface-variant hover:bg-surface-container-high hover:text-primary disabled:opacity-30"
-                              >
-                                <Send className="w-3 h-3" />
-                              </button>
-                            </div>
+                            <span className="text-xs text-on-surface-variant shrink-0">{fmtDate(email.sent_at)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : booking.last_email_sent_at ? (
-                    <div className="border-t border-outline-variant/10 pt-4 flex items-center justify-between gap-3 text-xs text-on-surface-variant">
-                      <span>Last emailed {fmtDate(booking.last_email_sent_at)}</span>
-                      <button
-                        type="button"
-                        onClick={() => openEmailCompose(booking.id, undefined, true)}
-                        disabled={emailLoadingId === booking.id}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
-                      >
-                        <Send className="w-3 h-3" />
-                        Resend
-                      </button>
+                    <div className="border-t border-outline-variant/10 pt-4 text-xs text-on-surface-variant">
+                      Last emailed {fmtDate(booking.last_email_sent_at)}
                     </div>
                   ) : null}
 
@@ -915,8 +973,8 @@ export function BookingsTable({
 
       {/* Completion modal */}
       {completionModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/40" onClick={() => setCompletionModal(null)}>
-          <div className="bg-surface border border-outline-variant/20 rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full max-w-sm mx-0 sm:mx-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/40">
+          <div className="bg-surface border border-outline-variant/20 rounded-t-2xl sm:rounded-2xl shadow-xl p-6 w-full max-w-sm mx-0 sm:mx-4">
             <h2 className="text-base font-semibold text-on-surface mb-1">Complete booking</h2>
             <p className="text-sm text-on-surface-variant mb-5">Optionally record the final details for this appointment.</p>
             <div className="flex flex-col gap-3 mb-5">
@@ -995,7 +1053,7 @@ export function BookingsTable({
               <button
                 type="button"
                 onClick={async () => { await moveTo(completionModal.bookingId, "completed"); completionDraft.clear(); setCompletionModal(null); }}
-                className="text-xs text-on-surface-variant/60 hover:text-on-surface-variant transition-colors underline underline-offset-2"
+                className="text-sm text-on-surface-variant hover:text-on-surface-variant transition-colors underline underline-offset-2"
               >
                 skip
               </button>
@@ -1031,7 +1089,7 @@ export function BookingsTable({
           schedulingLinks={schedulingLinks}
           artistId={artistId}
           isCalendarConnected={calendarSyncEnabled}
-          onSent={() => handleAcceptSent(acceptModal.bookingId)}
+          onSent={(_threadId, targetState) => handleAcceptSent(acceptModal.bookingId, targetState)}
           onClose={() => setAcceptModal(null)}
         />
       )}
@@ -1046,10 +1104,21 @@ export function BookingsTable({
             .map(b => ({ appointment_date: b.appointment_date!, client_name: b.client_name }))}
           onConfirmed={(date, eventId) => handleAppointmentConfirmed(confirmModal.bookingId, date, eventId)}
           onSkip={confirmModal.initialAppointmentDate ? undefined : async () => {
-            await moveTo(confirmModal.bookingId, "confirmed");
+            await moveTo(confirmModal.bookingId, "booked");
             setConfirmModal(null);
           }}
           onClose={() => setConfirmModal(null)}
+        />
+      )}
+
+      {sendCalendarModal && (
+        <SendCalendarModal
+          bookingId={sendCalendarModal.bookingId}
+          clientName={bookings.find(b => b.id === sendCalendarModal.bookingId)?.client_name ?? ""}
+          schedulingLinks={schedulingLinks}
+          artistId={artistId}
+          onSent={() => handleCalendarSent(sendCalendarModal.bookingId)}
+          onClose={() => setSendCalendarModal(null)}
         />
       )}
 
@@ -1076,10 +1145,10 @@ export function BookingsTable({
 
       {/* Deposit link modal */}
       {depositModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setDepositModal(null)}>
-          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-xl p-6 w-80 space-y-4">
             <div>
-              <p className="text-sm font-semibold text-on-surface">Generate deposit link</p>
+              <p className="text-base font-medium text-on-surface">Generate deposit link</p>
               <p className="text-xs text-on-surface-variant mt-0.5">
                 Creates a {providerLabel} payment link for {bookings.find(b => b.id === depositModal.bookingId)?.client_name}.
               </p>

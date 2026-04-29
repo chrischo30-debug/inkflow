@@ -90,7 +90,7 @@ function PaymentLinksSection({ initialLinks, externalAdd }: { initialLinks: Paym
 
       <div className="space-y-2">
         {links.length === 0 && !adding && (
-          <p className="text-xs text-on-surface-variant/60 py-1">No payment links yet.</p>
+          <p className="text-sm text-on-surface-variant py-1">No payment links yet.</p>
         )}
         {links.map((link, i) => (
           <div key={i} className="flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3">
@@ -175,7 +175,7 @@ function PaymentLinkGeneratorSection({ provider, onLinkGenerated }: { provider: 
     <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Zap className="w-3.5 h-3.5 text-on-surface-variant shrink-0" />
-        <p className="text-sm font-semibold text-on-surface">Generate {providerLabel} link</p>
+        <p className="text-base font-medium text-on-surface">Generate {providerLabel} link</p>
       </div>
       {!generatedUrl ? (
         <div className="space-y-2">
@@ -291,7 +291,7 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 space-y-4" data-coachmark="scheduling-links-section">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-on-surface">Scheduling Links</p>
+        <p className="text-base font-medium text-on-surface">Scheduling Links</p>
         <StatusBadge status={status} />
       </div>
 
@@ -303,7 +303,7 @@ function NativeSchedulingSection({ initialLinks, artistId, isCalendarConnected }
 
       <div className="space-y-2">
         {links.length === 0 && !adding && (
-          <p className="text-xs text-on-surface-variant/60 py-1">No scheduling links yet.</p>
+          <p className="text-sm text-on-surface-variant py-1">No scheduling links yet.</p>
         )}
         {links.map(link => {
           const url = `${origin}/schedule/${artistId}/${link.id}`;
@@ -421,7 +421,7 @@ function BlockedDatesSection({ initialDates }: { initialDates: string[] }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BanIcon className="w-4 h-4 text-on-surface-variant shrink-0" />
-          <p className="text-sm font-semibold text-on-surface">Blocked Dates</p>
+          <p className="text-base font-medium text-on-surface">Blocked Dates</p>
         </div>
         <StatusBadge status={status} />
       </div>

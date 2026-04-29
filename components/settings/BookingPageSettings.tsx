@@ -357,7 +357,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Logo */}
       <section className="space-y-3" data-coachmark="booking-page-design">
-        <h4 className="text-sm font-semibold text-on-surface">Logo</h4>
+        <h4 className="text-base font-medium text-on-surface">Logo</h4>
         <div className="flex items-center gap-4">
           {logoUrl && (
             <div className="relative group">
@@ -380,7 +380,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Layout */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Layout</h4>
+        <h4 className="text-base font-medium text-on-surface">Layout</h4>
         <div className="grid grid-cols-3 gap-3">
           {LAYOUTS.map(l => {
             const isSelected = layout === l.id;
@@ -428,7 +428,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Font */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Font</h4>
+        <h4 className="text-base font-medium text-on-surface">Font</h4>
         <button type="button" onClick={() => { setFontPickerOpen(v => !v); setFontSearch(""); }}
           className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
             fontPickerOpen ? "border-primary/60 bg-primary/5" : "border-outline-variant/30 hover:border-primary/40"
@@ -475,7 +475,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Header Size */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Header Size</h4>
+        <h4 className="text-base font-medium text-on-surface">Header Size</h4>
         <div className="rounded-xl border border-outline-variant/20 p-4 space-y-3">
           <div className="overflow-hidden h-12 flex items-center">
             <span className="font-bold leading-none text-on-surface truncate"
@@ -499,7 +499,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Form Text Size */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Form Text Size</h4>
+        <h4 className="text-base font-medium text-on-surface">Form Text Size</h4>
         <div className="rounded-xl border border-outline-variant/20 p-4 space-y-3">
           <div className="flex items-baseline gap-4">
             <span className="font-semibold text-on-surface leading-none" style={{ fontSize: formSizePx + "px" }}>Field label</span>
@@ -521,7 +521,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Colors */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Colors</h4>
+        <h4 className="text-base font-medium text-on-surface">Colors</h4>
         <div className="rounded-xl border border-outline-variant/20 divide-y divide-outline-variant/20 overflow-hidden">
 
           {/* Background */}
@@ -634,7 +634,7 @@ export function BookingPageSettings({ initial, onPreviewReady }: { initial: Book
 
       {/* Links */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Links</h4>
+        <h4 className="text-base font-medium text-on-surface">Links</h4>
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Website</p>
           <input className="w-full rounded-lg border border-outline-variant/40 bg-surface px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary"

@@ -30,8 +30,14 @@ export const STAGE_AUTOSEND_DEFAULTS: Record<Exclude<BookingState, 'cancelled'>,
   sent_calendar: true,   // calendar link — sent automatically when Stripe deposit clears
   booked:        true,
   confirmed:     true,
-  completed:     true,
+  completed:     false,  // off by default
   rejected:      false,
+};
+
+// Per-stage default for the `enabled` toggle when the artist has not saved a
+// template row. `false` means the stage is fully off until the artist opts in.
+export const STAGE_ENABLED_DEFAULTS: Partial<Record<Exclude<BookingState, 'cancelled'>, boolean>> = {
+  completed: false,  // post-appointment thank-you is opt-in
 };
 
 // Stages that the artist must edit before sending (REPLACE THIS markers, etc).
@@ -54,9 +60,12 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<Exclude<BookingState, 'cancelled'>,
     subject: `Save your spot — deposit to book`,
     body: `Hi {clientFirstName},\n\nI'd love to do this tattoo. To save your spot, send the deposit here:\n{paymentLink}\n\nOnce the deposit is in, you'll get a link to pick your appointment time.\n\n{artistName}`,
   },
+  // Aliased to the `accepted` ("Deposit Request") template. The dedicated
+  // deposit-reminder template was removed — every deposit email uses the
+  // same Deposit Request copy.
   sent_deposit: {
-    subject: `Deposit reminder`,
-    body: `Hi {clientFirstName},\n\nQuick reminder to send the deposit so I can lock in your spot:\n{paymentLink}\n\n{artistName}`,
+    subject: `Save your spot — deposit to book`,
+    body: `Hi {clientFirstName},\n\nI'd love to do this tattoo. To save your spot, send the deposit here:\n{paymentLink}\n\nOnce the deposit is in, you'll get a link to pick your appointment time.\n\n{artistName}`,
   },
   sent_calendar: {
     subject: `Pick your appointment time`,

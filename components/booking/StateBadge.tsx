@@ -17,7 +17,7 @@ export function StateBadge({ state }: { state: BookingState }) {
   const config = stateConfig[state] ?? stateConfig.inquiry;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.colorClass}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap ${config.colorClass}`}>
       {config.label}
     </span>
   );

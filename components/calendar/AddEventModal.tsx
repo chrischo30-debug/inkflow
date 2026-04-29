@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TimeSelect } from "@/components/ui/TimeSelect";
 
 interface AddEventModalProps {
   initialDate?: string; // "YYYY-MM-DD"
@@ -71,7 +72,7 @@ export function AddEventModal({ initialDate, onClose, onCreated }: AddEventModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative w-full max-w-md bg-surface rounded-2xl border border-outline-variant/20 shadow-2xl p-6 space-y-5">
 
         <div className="flex items-center justify-between">
@@ -106,21 +107,11 @@ export function AddEventModal({ initialDate, onClose, onCreated }: AddEventModal
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-on-surface-variant">Start time</label>
-              <Input
-                type="time"
-                value={startTime}
-                onChange={e => handleStartChange(e.target.value)}
-                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 focus-visible:ring-0 focus-visible:border-primary shadow-none"
-              />
+              <TimeSelect value={startTime} onChange={handleStartChange} className="w-full" />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-on-surface-variant">End time</label>
-              <Input
-                type="time"
-                value={endTime}
-                onChange={e => setEndTime(e.target.value)}
-                className="border-0 border-b border-outline-variant bg-surface-container-high/40 rounded-t-lg rounded-b-none px-4 py-5 focus-visible:ring-0 focus-visible:border-primary shadow-none"
-              />
+              <TimeSelect value={endTime} onChange={setEndTime} className="w-full" />
             </div>
           </div>
 

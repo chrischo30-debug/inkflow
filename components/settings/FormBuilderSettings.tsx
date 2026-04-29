@@ -855,7 +855,7 @@ export function FormBuilderSettings({
 
       {/* Form Appearance */}
       <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-on-surface">Form Appearance</h4>
+        <h4 className="text-base font-medium text-on-surface">Form Appearance</h4>
         <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low overflow-hidden divide-y divide-outline-variant/15">
           <div className="p-4 space-y-1.5">
             <label className={labelHeadingCls}>Header</label>
@@ -872,7 +872,7 @@ export function FormBuilderSettings({
           <div className="p-4 space-y-1.5">
             <label className={labelHeadingCls}>Submit Button Text</label>
             <input className={inputCls} value={formButtonText} onChange={(e) => setFormButtonText(e.target.value)}
-              placeholder="Submit Inquiry" />
+              placeholder="Submit" />
           </div>
           <div className="p-4 space-y-3">
             <p className={labelHeadingCls}>After Submission</p>
@@ -900,6 +900,7 @@ export function FormBuilderSettings({
 
       {/* Active Fields */}
       <DndContext
+        id="form-builder-dnd"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
@@ -907,7 +908,7 @@ export function FormBuilderSettings({
         <SortableContext items={fieldOrder} strategy={verticalListSortingStrategy}>
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-on-surface">Active Fields</h4>
+              <h4 className="text-base font-medium text-on-surface">Active Fields</h4>
               <span className="text-xs text-on-surface-variant">{activeRefs.length} field{activeRefs.length !== 1 ? "s" : ""}</span>
             </div>
             <div className="space-y-2 min-h-[48px]">
@@ -932,7 +933,7 @@ export function FormBuilderSettings({
       ) : (
         <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15">
-            <p className="text-sm font-semibold text-on-surface">New Custom Field</p>
+            <p className="text-base font-medium text-on-surface">New Custom Field</p>
             <button type="button" onClick={() => { setShowAddComposer(false); resetDraftField(); }}
               className="p-1 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors">
               <X className="w-4 h-4" />
@@ -1016,7 +1017,7 @@ export function FormBuilderSettings({
       {inactiveRefs.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-on-surface-variant">Inactive Fields</h4>
+            <h4 className="text-base font-medium text-on-surface-variant">Inactive Fields</h4>
             <span className="text-xs text-on-surface-variant">{inactiveRefs.length} field{inactiveRefs.length !== 1 ? "s" : ""}</span>
           </div>
           <div className="space-y-2">

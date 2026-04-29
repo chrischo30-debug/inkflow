@@ -47,6 +47,7 @@ export function SchedulingPicker({
   blockedDates,
   link,
   bid,
+  session,
 }: {
   artistId: string;
   linkId: string;
@@ -56,6 +57,7 @@ export function SchedulingPicker({
   blockedDates: string[];
   link: SchedulingLink;
   bid?: string;
+  session?: number;
 }) {
   const mapsUrl = studioAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(studioAddress)}` : null;
   const blockedSet = new Set(blockedDates);
@@ -122,15 +124,22 @@ export function SchedulingPicker({
     fetchSlots(dateStr);
   };
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const confirmSlot = async () => {
     if (!selectedSlot || !selectedDate) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
-      await fetch(`/api/schedule/${artistId}/${linkId}/request`, {
+      const res = await fetch(`/api/schedule/${artistId}/${linkId}/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, start: selectedSlot.start, end: selectedSlot.end, ...(bid ? { bid } : {}) }),
+        body: JSON.stringify({ date: selectedDate, start: selectedSlot.start, end: selectedSlot.end, ...(bid ? { bid } : {}), ...(session ? { session } : {}) }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({} as { error?: string }));
+        setSubmitError(data?.error || "Couldn't schedule that time. Please try again.");
+        return;
+      }
       setView("done");
     } finally {
       setSubmitting(false);
@@ -304,14 +313,21 @@ export function SchedulingPicker({
                     )}
 
                     {selectedSlot && (
-                      <button
-                        type="button"
-                        onClick={confirmSlot}
-                        disabled={submitting}
-                        className="mt-4 w-full py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                      >
-                        {submitting ? "Confirming…" : `Confirm ${formatTime12(selectedSlot.start)}`}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={confirmSlot}
+                          disabled={submitting}
+                          className="mt-4 w-full py-3 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                        >
+                          {submitting ? "Confirming…" : `Confirm ${formatTime12(selectedSlot.start)}`}
+                        </button>
+                        {submitError && (
+                          <p className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                            {submitError}
+                          </p>
+                        )}
+                      </>
                     )}
                   </>
                 )}

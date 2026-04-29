@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { BookingState, EmailTemplate } from '@/lib/types';
-import { DEFAULT_EMAIL_TEMPLATES, STAGE_AUTOSEND_DEFAULTS, templateRequiresEdit } from '@/lib/email';
+import { DEFAULT_EMAIL_TEMPLATES, STAGE_AUTOSEND_DEFAULTS, STAGE_ENABLED_DEFAULTS, templateRequiresEdit } from '@/lib/email';
 
 const EMAILABLE_STATES: Exclude<BookingState, 'cancelled'>[] = [
   'inquiry', 'follow_up', 'accepted', 'sent_calendar', 'booked', 'completed', 'rejected',
@@ -23,7 +23,7 @@ export async function GET() {
     const row = saved.get(state);
     return row
       ? { id: row.id, artist_id: row.artist_id, state, name: row.name, subject: row.subject, body: row.body, auto_send: row.auto_send, enabled: row.enabled !== false }
-      : { state, subject: DEFAULT_EMAIL_TEMPLATES[state].subject, body: DEFAULT_EMAIL_TEMPLATES[state].body, auto_send: STAGE_AUTOSEND_DEFAULTS[state] ?? false, enabled: true };
+      : { state, subject: DEFAULT_EMAIL_TEMPLATES[state].subject, body: DEFAULT_EMAIL_TEMPLATES[state].body, auto_send: STAGE_AUTOSEND_DEFAULTS[state] ?? false, enabled: STAGE_ENABLED_DEFAULTS[state] ?? true };
   });
 
   const customTemplates: EmailTemplate[] = (rows ?? [])

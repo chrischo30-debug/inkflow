@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 
+// `passthrough()` keeps any future fields the client adds from being silently
+// stripped on save — root cause of the earlier "links seem to disappear after save"
+// bug where buffer_minutes / half_day_* were being dropped on round-trip.
 const linkSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
-  duration_minutes: z.number().int().min(60),
+  duration_minutes: z.number().int().min(30),
   days: z.array(z.number().int().min(0).max(6)),
   start_hour: z.number().int().min(0).max(23),
   end_hour: z.number().int().min(1).max(23),
@@ -13,7 +16,11 @@ const linkSchema = z.object({
   calendar_ids: z.array(z.string()).nullish(),
   block_full_day: z.boolean().nullish(),
   confirmation_message: z.string().nullish(),
-});
+  buffer_minutes: z.number().int().min(0).max(120).nullish(),
+  is_half_day: z.boolean().nullish(),
+  half_day_minutes: z.number().int().min(60).nullish(),
+  half_day_followup_minutes: z.array(z.number().int().min(30)).nullish(),
+}).passthrough();
 
 const bodySchema = z.object({
   links: z.array(linkSchema),

@@ -12,6 +12,10 @@ const DURATIONS = [
   { label: "3 hrs",    minutes: 180 },
   { label: "3.5 hrs",  minutes: 210 },
   { label: "4 hrs",    minutes: 240 },
+  { label: "4.5 hrs",  minutes: 270 },
+  { label: "5 hrs",    minutes: 300 },
+  { label: "5.5 hrs",  minutes: 330 },
+  { label: "6 hrs",    minutes: 360 },
 ];
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -195,9 +199,9 @@ function LinkForm({
             Check availability against
           </label>
           {calendarsLoading ? (
-            <p className="text-xs text-on-surface-variant/60 py-1">Loading calendars…</p>
+            <p className="text-sm text-on-surface-variant py-1">Loading calendars…</p>
           ) : calendarOptions.length === 0 ? (
-            <p className="text-xs text-on-surface-variant/60 py-1">No calendars found.</p>
+            <p className="text-sm text-on-surface-variant py-1">No calendars found.</p>
           ) : (
             <div className="space-y-2 mt-2">
               {/* All calendars option */}
@@ -385,7 +389,7 @@ export function SchedulingLinksSettings({
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 md:p-6 shadow-sm">
       <div className="flex items-start justify-between mb-1">
-        <h3 className="text-sm font-semibold text-on-surface">Scheduling Links</h3>
+        <h3 className="text-base font-medium text-on-surface">Scheduling Links</h3>
         {status === "saved" && (
           <span className="flex items-center gap-1 text-xs text-emerald-600">
             <Check className="w-3 h-3" /> Saved
@@ -399,7 +403,7 @@ export function SchedulingLinksSettings({
 
       <div className="space-y-2 mb-3">
         {links.length === 0 && !adding && (
-          <p className="text-xs text-on-surface-variant/60 py-2">No scheduling links yet.</p>
+          <p className="text-sm text-on-surface-variant py-2">No scheduling links yet.</p>
         )}
         {links.map(link => {
           const url = `${origin}/schedule/${artistId}/${link.id}`;
