@@ -39,6 +39,7 @@ export async function middleware(request: NextRequest) {
     '/forgot-password',
     '/reset-password',
     '/auth/callback',
+    '/auth/recover',
     '/admin/access-relay',
     // Public marketing / legal
     '/terms',
