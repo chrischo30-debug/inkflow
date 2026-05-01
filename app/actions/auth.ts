@@ -54,7 +54,7 @@ export async function resetPassword(formData: FormData) {
   const host = headersList.get('host') ?? 'localhost:3000'
   const proto = headersList.get('x-forwarded-proto') ?? 'http'
   const origin = `${proto}://${host}`
-  const redirectTo = `${origin}/auth/callback?next=/reset-password`
+  const redirectTo = `${origin}/auth/recover?next=/reset-password`
 
   // Always show the same message — don't leak which addresses have accounts.
   const successUrl = '/forgot-password?message=Check+your+email+for+a+password+reset+link.'
