@@ -1,6 +1,8 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { sendTransactionalEmail } from '@/lib/email'
 import { redirect } from 'next/navigation'
 
 export async function signUp(formData: FormData) {
@@ -43,10 +45,9 @@ export async function signOut() {
 }
 
 export async function resetPassword(formData: FormData) {
-  const email = formData.get('email') as string
+  const rawEmail = formData.get('email')
+  const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : ''
   if (!email) return redirect('/forgot-password?message=Email+is+required')
-
-  const supabase = await createClient()
 
   const { headers } = await import('next/headers')
   const headersList = await headers()
@@ -55,13 +56,49 @@ export async function resetPassword(formData: FormData) {
   const origin = `${proto}://${host}`
   const redirectTo = `${origin}/auth/callback?next=/reset-password`
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+  // Always show the same message — don't leak which addresses have accounts.
+  const successUrl = '/forgot-password?message=Check+your+email+for+a+password+reset+link.'
 
-  if (error) {
-    return redirect(`/forgot-password?message=${encodeURIComponent(error.message)}`)
+  const admin = createAdminClient()
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo },
+  })
+
+  if (error || !data?.properties?.action_link) {
+    return redirect(successUrl)
   }
 
-  return redirect('/forgot-password?message=Check+your+email+for+a+password+reset+link.')
+  const { data: artist } = await admin
+    .from('artists')
+    .select('name, email, logo_url, email_logo_enabled, email_logo_bg')
+    .eq('email', email)
+    .maybeSingle()
+
+  const artistName = (artist as { name?: string | null } | null)?.name ?? null
+  const greeting = artistName ? `Hi ${artistName.split(' ')[0]},` : 'Hi,'
+  const body = `${greeting}\n\nSomeone requested a password reset for your FlashBooker account. Click the link below to set a new password. The link expires in 1 hour.\n\n[Reset password](${data.properties.action_link})\n\nIf you didn't request this, you can safely ignore this email.`
+
+  await sendTransactionalEmail({
+    toEmail: email,
+    subject: 'Reset your FlashBooker password',
+    body,
+    fromName: artistName ?? 'FlashBooker',
+    branding: artist
+      ? {
+          logoUrl: (artist as { logo_url?: string | null }).logo_url ?? null,
+          logoEnabled:
+            (artist as { email_logo_enabled?: boolean | null }).email_logo_enabled !== false,
+          logoBg:
+            ((artist as { email_logo_bg?: 'light' | 'dark' | null }).email_logo_bg ?? 'light') as
+              | 'light'
+              | 'dark',
+        }
+      : undefined,
+  })
+
+  return redirect(successUrl)
 }
 
 export async function updatePassword(formData: FormData) {
