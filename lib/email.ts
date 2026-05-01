@@ -345,6 +345,48 @@ ${logoBlock}
 </body></html>`;
 }
 
+// Send a one-off transactional email (password reset, etc.) that doesn't go
+// through the templated booking pipeline. Body supports the same lightweight
+// markdown as state-transition emails.
+export async function sendTransactionalEmail(payload: {
+  toEmail: string;
+  subject: string;
+  body: string;
+  fromName?: string;
+  replyTo?: string | null;
+  branding?: EmailBranding;
+}): Promise<SendEmailResult> {
+  const { toEmail, subject, body, fromName, replyTo, branding } = payload;
+  const from = buildFromHeader(fromName ?? APP_NAME);
+  const html = buildHtmlEmail(body, branding);
+  const text = markdownLinksToText(body);
+  const messageId = generateMessageId();
+
+  if (!process.env.RESEND_API_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESEND_API_KEY is not set — refusing to send email in production');
+    }
+    console.log('[MOCK EMAIL SENT]', { from, to: toEmail, subject, replyTo, messageId, text });
+    return { subject, messageId };
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: [toEmail],
+      subject,
+      text,
+      html,
+      headers: { 'Message-ID': messageId },
+      ...(replyTo ? { replyTo } : {}),
+    });
+    return { subject, providerMessageId: result.data?.id, messageId };
+  } catch (error) {
+    console.error('Failed to send transactional email via Resend:', error);
+    return { subject, messageId };
+  }
+}
+
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
   const { toEmail, vars, template, artistReplyTo, branding, threadMessageId } = payload;
 
